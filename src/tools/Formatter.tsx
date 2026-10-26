@@ -75,6 +75,84 @@ function buildTree(v: unknown, lang: FmtLang, col: Record<string, boolean>, T: R
   return { rows, pv, capped: rows.length >= TREE_CAP };
 }
 
+const bareKey = (k: string) => (/^[A-Za-z0-9_-]+$/.test(k) ? k : JSON.stringify(k));
+const isAoT = (x: unknown): x is Record<string, unknown>[] => Array.isArray(x) && x.length > 0 && x.every(isObj);
+
+function tomlPrim(x: unknown): [string, string] {
+  if (x instanceof Date) return [x.toISOString().replace(/\.000(?=$|[Z+-])/, ''), 'var(--date)'];
+  if (typeof x === 'number' && !isFinite(x)) return [Number.isNaN(x) ? 'nan' : x > 0 ? 'inf' : '-inf', 'var(--num)'];
+  return prim(x);
+}
+
+function tomlInline(x: unknown): string {
+  if (Array.isArray(x)) return '[' + x.map(tomlInline).join(', ') + ']';
+  if (isObj(x)) {
+    const e = Object.entries(x);
+    return e.length ? '{ ' + e.map(([k, y]) => bareKey(k) + ' = ' + tomlInline(y)).join(', ') + ' }' : '{}';
+  }
+  return tomlPrim(x)[0];
+}
+
+/**
+ * Walk a TOML document the way it is written: plain keys first, then `[table]` and
+ * `[[array.of.tables]]` sections. `onHeader` returns false to skip a folded section.
+ */
+function walkToml(
+  v: Record<string, unknown>,
+  onKey: (k: string, y: unknown, path: string, depth: number) => void,
+  onHeader: (label: string, obj: Record<string, unknown>, path: string, depth: number) => boolean,
+) {
+  const table = (obj: Record<string, unknown>, path: string, depth: number, names: string[]) => {
+    const ents = Object.entries(obj);
+    ents.filter(([, y]) => !isObj(y) && !isAoT(y)).forEach(([k, y]) => onKey(k, y, cp(path, k, false), depth));
+    ents.filter(([, y]) => isObj(y) || isAoT(y)).forEach(([k, y]) => {
+      const nm = [...names, bareKey(k)];
+      const p = cp(path, k, false);
+      if (isObj(y)) {
+        if (onHeader('[' + nm.join('.') + ']', y, p, depth)) table(y, p, depth + 1, nm);
+      } else {
+        (y as Record<string, unknown>[]).forEach((el, i) => {
+          const ep = cp(p, i, true);
+          if (onHeader('[[' + nm.join('.') + ']]', el, ep, depth)) table(el, ep, depth + 1, nm);
+        });
+      }
+    });
+  };
+  table(v, '$', 0, []);
+}
+
+function buildTomlTree(v: Record<string, unknown>, col: Record<string, boolean>, T: ReturnType<typeof useApp>['T']) {
+  const rows: Row[] = [], pv: Record<string, unknown> = { $: v };
+  let n = 0;
+  const row = (r: Partial<Row> & Pick<Row, 'path'>) => {
+    if (rows.length >= TREE_CAP) return;
+    rows.push({ n: ++n, indent: 0, caret: '', keyText: '', keyColor: 'var(--ink)', colon: '', valText: '', valColor: 'var(--ink)', comma: '', meta: '', selectable: true, foldable: false, ...r });
+  };
+  walkToml(
+    v,
+    (k, y, path, depth) => {
+      pv[path] = y;
+      const [t, c] = isCont(y) ? [tomlInline(y), 'var(--ink)'] : tomlPrim(y);
+      row({ path, indent: depth * 18, keyText: bareKey(k), colon: ' = ', valText: t, valColor: c });
+    },
+    (label, obj, path, depth) => {
+      pv[path] = obj;
+      const cnt = Object.keys(obj).length;
+      const isC = cnt > 0 && !!col[path];
+      row({ path, indent: depth * 18, caret: cnt ? (isC ? '▶' : '▼') : '', foldable: cnt > 0, keyText: label, keyColor: 'var(--acc)', meta: isC ? f(T.keys, { n: cnt }) : '' });
+      return !isC && rows.length < TREE_CAP;
+    },
+  );
+  return { rows, pv, capped: rows.length >= TREE_CAP };
+}
+
+/** Fold TOML sections nested `level` deep or more (Infinity = expand all). */
+function tomlLevelMap(v: Record<string, unknown>, level: number) {
+  const out: Record<string, boolean> = {};
+  if (level < Infinity) walkToml(v, () => {}, (_l, _o, path, depth) => { if (depth + 1 >= level) out[path] = true; return true; });
+  return out;
+}
+
 /** Collapse every container at depth ≥ level (Infinity = expand all). */
 function levelMap(v: unknown, level: number) {
   const out: Record<string, boolean> = {};
@@ -97,7 +175,7 @@ export function Formatter({ lang }: { lang: FmtLang }) {
   const err = 'err' in r ? r.err : null;
   const isTree = !!ok && S.view === 'tree';
   const col = S.collapsed[lang];
-  const tree = useMemo(() => (isTree && ok ? buildTree(ok.v, lang, col, T) : null), [isTree, ok, lang, col, T]);
+  const tree = useMemo(() => (!isTree || !ok ? null : lang === 'toml' ? buildTomlTree(ok.v as Record<string, unknown>, col, T) : buildTree(ok.v, lang, col, T)), [isTree, ok, lang, col, T]);
   const sel = S.sel[lang];
   const hasSel = !!tree && !!sel && sel in tree.pv;
 
@@ -155,7 +233,7 @@ export function Formatter({ lang }: { lang: FmtLang }) {
             {isTree && ok && (
               <div style={{ display: 'flex', gap: 2 }}>
                 {([[T.expandAll, Infinity], [f(T.level, { n: 1 }), 1], [f(T.level, { n: 2 }), 2], [f(T.level, { n: 3 }), 3]] as [string, number][]).map(([label, lv]) => (
-                  <button key={label} className="ghost" onClick={() => set((s) => ({ collapsed: { ...s.collapsed, [lang]: levelMap(ok.v, lv) } }))}
+                  <button key={label} className="ghost" onClick={() => set((s) => ({ collapsed: { ...s.collapsed, [lang]: lang === 'toml' ? tomlLevelMap(ok.v as Record<string, unknown>, lv) : levelMap(ok.v, lv) } }))}
                     style={{ height: 28, padding: '0 9px', borderRadius: 6, fontSize: 12, color: 'var(--mut)' }}>{label}</button>
                 ))}
               </div>
