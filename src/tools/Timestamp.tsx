@@ -208,18 +208,19 @@ export function Timestamp() {
     requestAnimationFrame(() => { try { el.setSelectionRange(pos, pos); } catch { /* detached */ } });
   };
 
-  const nowS = String(Math.floor(now / 1000));
+  const nowS = String(Math.floor(now / 1000)), nowWall = fmtWall(now, tz);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '10px 14px' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--mut)' }}>
           <span style={{ marginRight: 2 }}>{T.now}</span>
-          {[nowS, String(now)].map((v, i) => (
+          {/* Text that changes every second can't be selected, so each value is a copy button. */}
+          {[nowS, String(now), nowWall].map((v, i) => (
             <button key={i} className="btn mono now-btn" title={T.copy} onClick={() => copy(v)}
               style={{ height: 30, padding: '0 10px', borderColor: 'var(--line)', color: 'var(--ink)' }}>{v}</button>
           ))}
-          <span>{fmtWall(now, tz) + ' ' + T.wd[np.wd]}</span>
+          <span>{T.wd[np.wd]}</span>
         </div>
         <TzPicker now={now} />
       </div>

@@ -1,5 +1,5 @@
 // Timestamp tool: exact precision, time zones, DST, input conveniences.
-import { expect, open, test, toast } from './helpers';
+import { clipboard, expect, open, test, toast } from './helpers';
 import type { Page } from '@playwright/test';
 
 const tsInput = (page: Page) => page.locator('input.field').nth(0);
@@ -125,4 +125,20 @@ test('historic local mean time: the offset keeps its seconds, so the ISO text na
   expect((await rowValues(page))[0]).toBe('0001-01-01T08:05:43.000+08:05:43');
   await tmInput(page).fill('0001-01-01T08:05:43+08:05:43');
   await expect(heroes(page).nth(1)).toContainText('-62135596800');
+});
+
+test('the current time: each value, the date-time too, copies exactly what is shown', async ({ page }) => {
+  await open(page, '时间戳转换');
+  const btns = page.locator('.now-btn');
+  await expect(btns).toHaveCount(3);
+  for (let i = 0; i < 3; i++) {
+    // The clock ticks every second: read the label and click in one step.
+    const label = await btns.nth(i).evaluate((b) => { (b as HTMLButtonElement).click(); return b.textContent; });
+    await expect.poll(() => clipboard(page)).toBe(label);
+  }
+  // The date-time reads back as the same second as the timestamp beside it.
+  const [sec, wall] = await btns.evaluateAll((bs) => [bs[0].textContent!, bs[2].textContent!]);
+  expect(wall).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+  await tmInput(page).fill(wall);
+  await expect(heroes(page).nth(1).locator('.hero-big')).toHaveText(sec);
 });

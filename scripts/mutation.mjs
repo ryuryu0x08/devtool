@@ -50,6 +50,7 @@ const M = [
   ['time: offset seconds rounded away', 'src/lib/time.ts', "(sec ? ':' + pad2(sec) : '')", "''", 'unit'],
   ['time: full-width digits not read', 'src/lib/time.ts', 'const s = halfWidth(String(raw)).trim()', 'const s = String(raw).trim()', 'unit'],
   // Input and output.
+  ['time: current date-time not copyable', 'src/tools/Timestamp.tsx', '{[nowS, String(now), nowWall].map(', '{[nowS, String(now)].map(', 'current time'],
   ['UTF-8: invalid bytes accepted', 'src/lib/data.ts', "new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })", "new TextDecoder('utf-8', { fatal: false, ignoreBOM: true })", 'unit'],
   ['clipboard: lone surrogates not detected', 'src/lib/data.ts', '      if (!(d >= 0xdc00 && d <= 0xdfff)) return false;', '', 'unit'],
   ['copy: failure reported as success', 'src/App.tsx', '      if (ok) done();\n      else toast(t.copyFail, 5000);', '      done();', 'clipboard refuses'],
