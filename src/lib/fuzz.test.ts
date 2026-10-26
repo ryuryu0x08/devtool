@@ -18,6 +18,7 @@ const picker = (r: () => number) => <T,>(a: readonly T[]) => a[Math.floor(r() * 
 // ---------- JSON ----------
 
 const KEYS = ['a', 'b', 'id', 'name', 'x y', 'a.b', '', 'constructor', '__proto__', 'toString', '中文', 'é', '"q"', 'tab\t', '0', '\ud800'];
+const RAW_KEYS = [...KEYS.map((k) => JSON.stringify(k)), '"\\u0061"', '"\\/x"', '"\\u4e2d\\u6587"', '"x\\u0020y"', '"\\uD83D\\uDE00"'];
 const STRS = ['"\\ud800"', '""', '"hello"', '"line\\nbreak"', '"quote\\"back\\\\slash"', '"\\u00e9"', '"é"', '"\\/"', '"\\uD83D\\uDE00"', '"😀"', '"\\u0000\\u001f"', '"中文"', '"\\u2028"'];
 const NUMS = ['0', '-0', '1', '-1', '1.5', '1.50', '1e3', '1E-7', '12345678901234567890', '-9007199254740993', '3.141592653589793238', '1e400', '0.1', '0.10000000000000000555', '42', '100'];
 
@@ -32,9 +33,10 @@ function genJson(r: () => number, depth = 0, dups = false): string {
   const n = Math.floor(r() * 5);
   const ws = () => pick(['', ' ', '\n  ', '\t', '\r\n']);
   if (k < 0.7) return '[' + Array.from({ length: n }, () => ws() + genJson(r, depth + 1, dups)).join(',') + ws() + ']';
-  let keys = Array.from({ length: n }, () => pick(KEYS));
-  if (!dups) keys = [...new Set(keys)];
-  return '{' + keys.map((key) => ws() + JSON.stringify(key) + ws() + ':' + genJson(r, depth + 1, dups)).join(',') + '}';
+  // Keys as raw tokens, including non-canonical escapes ("\u0061" is the key "a").
+  let keys = Array.from({ length: n }, () => pick(RAW_KEYS));
+  if (!dups) keys = keys.filter((k, i) => keys.findIndex((x) => JSON.parse(x) === JSON.parse(k)) === i);
+  return '{' + keys.map((key) => ws() + key + ws() + ':' + genJson(r, depth + 1, dups)).join(',') + '}';
 }
 const jv = (s: string) => jsonValue(parseJsonAst(s).ast);
 

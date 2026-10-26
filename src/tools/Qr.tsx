@@ -1,4 +1,5 @@
 import { useMemo, useRef } from 'react';
+import { Vis } from '../components/Vis';
 import { f } from '../i18n';
 import { useApp } from '../store';
 import { Seg } from '../components/Seg';
@@ -6,7 +7,7 @@ import { byteLen } from '../lib/data';
 import { qrCanvas, qrModel, type Ec, type QrModel } from '../lib/qr';
 
 export function QrGen() {
-  const { S, set, T, copy, toast } = useApp();
+  const { S, set, T, copy, toast, replace } = useApp();
   const m = useMemo(() => qrModel(S.qrText, S.qrEc), [S.qrText, S.qrEc]);
   const has = !!m && 'd' in m;
   const model = has ? (m as QrModel) : null;
@@ -37,7 +38,7 @@ export function QrGen() {
           <span style={{ fontWeight: 600 }}>{T.qrContent}</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span className="mono" style={{ fontSize: 12, color: 'var(--faint)' }}>{f(T.bytes, { n: byteLen(S.qrText) })}</span>
-            <button className="btn" onClick={() => set({ qrText: '' })} style={{ height: 28, padding: '0 10px', borderRadius: 7, fontSize: 12, fontWeight: 400, borderColor: 'var(--line)', background: 'transparent' }}>{T.clear}</button>
+            <button className="btn" onClick={() => replace({ qrText: '' })} style={{ height: 28, padding: '0 10px', borderRadius: 7, fontSize: 12, fontWeight: 400, borderColor: 'var(--line)', background: 'transparent' }}>{T.clear}</button>
           </span>
         </div>
         <textarea data-autofocus="1" className="area" value={S.qrText} onChange={(e) => set({ qrText: e.target.value })} spellCheck={false}
@@ -109,10 +110,10 @@ export function QrScan() {
           </section>
           <section style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, minHeight: 32 }}>
-              <span style={{ fontSize: 15, fontWeight: 600 }}>{sc.busy ? T.scanning : codes.length ? f(T.found, { n: codes.length }) : T.notFound}</span>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>{sc.busy ? T.scanning : sc.failed ? T.imgLoadFail : codes.length ? f(T.found, { n: codes.length }) : T.notFound}</span>
               {codes.length > 1 && <button className="btn" onClick={() => copy(codes.map((c) => c.text).join('\n'))} style={{ fontSize: 12.5 }}>{T.copyAll}</button>}
             </div>
-            {!sc.busy && !codes.length && (
+            {!sc.busy && !sc.failed && !codes.length && (
               <div className="card" style={{ padding: 18, borderRadius: 12, fontSize: 13, color: 'var(--mut)', lineHeight: 1.6 }}>{T.notFoundSub}</div>
             )}
             {codes.map((c, i) => {
@@ -124,7 +125,7 @@ export function QrScan() {
                     <span style={{ fontSize: 12, color: 'var(--mut)', padding: '2px 8px', borderRadius: 999, background: 'var(--seg)' }}>{T.kinds[k]}</span>
                     {c.enc && <span style={{ fontSize: 12, color: 'var(--chg)', padding: '2px 8px', borderRadius: 999, background: 'var(--chgBg)' }}>{c.enc === 'browser' ? T.decodedByBrowser : f(T.decodedAs, { e: c.enc })}</span>}
                   </div>
-                  <div style={{ font: "14px/1.55 'Geist Mono','PingFang SC',monospace", wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>{c.text}</div>
+                  <div style={{ font: "14px/1.55 'Geist Mono','PingFang SC',monospace", wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}><Vis text={c.text} /></div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button className="btn inv" onClick={() => copy(c.text)} style={{ padding: '0 14px', fontSize: 12.5 }}>{T.copy}</button>
                     {k === 'url' && (

@@ -3,6 +3,7 @@ import { SAMPLE_JSON, SAMPLE_TOML, f, type Dict } from '../i18n';
 import { useApp, type FmtLang } from '../store';
 import { Seg } from '../components/Seg';
 import { useSettled } from '../components/useSettled';
+import { Vis, countInvisible } from '../components/Vis';
 import { ConvertError, DateTime, Num, bytesLabel, byteLen, clipboardUnsafe, cp, errInfo, isCont, isObj, sortDeep, stats, type ErrInfo, type Obj } from '../lib/data';
 import { astEqual, dupKeys, jsonValue, parseJsonAst, printJson, sortAst, statsAst, toJsonText, type JNode } from '../lib/json';
 import { TomlMismatch, TomlSyntaxError, VerifyError, bareKey, formatToml, parseTomlDoc, toTomlText, tomlStr, tomlValue, verifyToml, walkToml, type TomlDoc } from '../lib/toml';
@@ -150,7 +151,7 @@ function tomlLevelMap(v: Obj, level: number) {
 }
 
 export function Formatter({ lang }: { lang: FmtLang }) {
-  const { S, set, T, copy, toast } = useApp();
+  const { S, set, T, copy, toast, replace } = useApp();
   const L = lang === 'json' ? 'JSON' : 'TOML';
   const src = S[lang];
   // Large inputs are processed when typing pauses; until then nothing can be copied or converted,
@@ -172,6 +173,8 @@ export function Formatter({ lang }: { lang: FmtLang }) {
   const notices: string[] = [];
   if (ok?.lang === 'json' && ok.dupes.length) notices.push(f(T.dupKeysKept, { n: ok.dupes.length, p: ok.dupes[0] }));
   if (ok?.bom) notices.push(T.bomRemoved);
+  const invisible = useMemo(() => (ok ? countInvisible(settled) : 0), [ok, settled]);
+  if (invisible) notices.push(f(T.invisibleChars, { n: invisible }));
   const status = pending ? T.processing : ok ? [f(T.valid, { L, n: ok.st.n, d: ok.st.d }), ...notices].join(' · ')
     : err ? (err.line ? f(T.errAt, { l: err.line, c: err.col ?? 1 }) : T.errNoPos) : T.empty;
   const statusColor = ok ? (notices.length ? 'var(--chg)' : 'var(--add)') : err ? 'var(--del)' : 'var(--faint)';
@@ -183,12 +186,11 @@ export function Formatter({ lang }: { lang: FmtLang }) {
       if (ok.lang === 'json') {
         const { v } = jsonValue(ok.ast);
         if (!isObj(v)) { toast(T.cvFail + T.tomlTop, 6000); return; }
-        set({ toml: toTomlText(v), tool: 'toml' });
+        replace({ toml: toTomlText(v), sel: { ...S.sel, toml: '' }, tool: 'toml' });
       } else {
         const dates: string[] = [];
         const text = toJsonText(ok.value, S.indent === 'tab' ? '\t' : +S.indent, dates);
-        set({ json: text, tool: 'json' });
-        if (dates.length) toast(f(T.datesToStr, { n: dates.length }), 6000);
+        replace({ json: text, sel: { ...S.sel, json: '' }, tool: 'json' }, dates.length ? f(T.datesToStr, { n: dates.length }) : undefined);
       }
     } catch (e) {
       toast(T.cvFail + convertMsg(e, T), 6000);
@@ -216,8 +218,8 @@ export function Formatter({ lang }: { lang: FmtLang }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-        <button className="btn" onClick={() => set({ [lang]: SAMPLE[lang] })}>{T.sample}</button>
-        <button className="btn" onClick={() => set((s) => ({ [lang]: '', sel: { ...s.sel, [lang]: '' } }))}>{T.clear}</button>
+        <button className="btn" onClick={() => replace({ [lang]: SAMPLE[lang], sel: { ...S.sel, [lang]: '' } })}>{T.sample}</button>
+        <button className="btn" onClick={() => replace({ [lang]: '', sel: { ...S.sel, [lang]: '' } })}>{T.clear}</button>
         <span className="sep" />
         {lang === 'json' && (
           <Seg value={S.indent} onChange={(k) => set({ indent: k })}
@@ -267,9 +269,9 @@ export function Formatter({ lang }: { lang: FmtLang }) {
                     <span className="gut">{row.n}</span>
                     <div className="body" style={{ paddingLeft: row.indent }}>
                       <span className="caret" onClick={row.foldable ? (e) => { e.stopPropagation(); toggleFold(row.id); } : undefined}>{row.caret}</span>
-                      <span style={{ color: row.keyColor, whiteSpace: 'pre' }}>{row.keyText}</span>
+                      <span style={{ color: row.keyColor, whiteSpace: 'pre' }}><Vis text={row.keyText} /></span>
                       <span style={{ color: 'var(--faint)', whiteSpace: 'pre' }}>{row.colon}</span>
-                      <span style={{ color: row.valColor, wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>{row.valText}</span>
+                      <span style={{ color: row.valColor, wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}><Vis text={row.valText} /></span>
                       <span style={{ color: 'var(--faint)' }}>{row.comma}</span>
                       <span className="meta">{row.meta}</span>
                     </div>
@@ -278,7 +280,7 @@ export function Formatter({ lang }: { lang: FmtLang }) {
                 {tree.capped && <div style={{ padding: '8px 16px', fontSize: 12, fontFamily: "'Geist Sans', 'Geist', sans-serif", color: 'var(--faint)' }}>{f(T.truncated, { n: tree.rows.length })}</div>}
               </>
             )}
-            {ok && S.view === 'text' && <pre style={{ margin: 0, padding: '4px 16px', font: 'inherit', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{ok.text}</pre>}
+            {ok && S.view === 'text' && <pre style={{ margin: 0, padding: '4px 16px', font: 'inherit', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}><Vis text={ok.text} /></pre>}
             {err && (
               <div style={{ margin: '6px 16px', padding: '14px 16px', borderRadius: 10, background: 'var(--delBg)', color: 'var(--del)', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <span style={{ fontWeight: 600, fontSize: 13, fontFamily: "'Geist Sans', 'Geist', sans-serif" }}>{status}</span>

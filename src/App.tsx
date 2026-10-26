@@ -31,11 +31,27 @@ export function App() {
   const dark = S.theme === 'dark' || (S.theme === 'auto' && S.sysDark);
 
   const toastTimer = useRef<number | undefined>(undefined);
-  const toast = useCallback((msg: string, ms = 1500) => {
+  const toast = useCallback((msg: string, ms = 1500, undo: Partial<State> | null = null) => {
     clearTimeout(toastTimer.current);
-    set({ toast: msg });
-    toastTimer.current = window.setTimeout(() => set({ toast: '' }), ms);
+    set({ toast: msg, undo });
+    toastTimer.current = window.setTimeout(() => set({ toast: '', undo: null }), ms);
   }, []);
+
+  // Sample / clear / convert / smart paste / file drop replace what the user typed: never without a way back.
+  const replace = useCallback((patch: Partial<State>, msg?: string) => {
+    const s = ref.current;
+    const prev: Partial<State> = { tool: s.tool };
+    let lost = false;
+    for (const k of INPUT_KEYS) {
+      if (!(k in patch)) continue;
+      (prev as Record<string, unknown>)[k] = s[k];
+      if (s[k].trim() && s[k] !== patch[k]) lost = true;
+    }
+    set(patch);
+    const t = dictFor(s.lang);
+    if (lost) toast((msg ? msg + ' · ' : '') + t.replacedOld, 8000, prev);
+    else if (msg) toast(msg, 4000);
+  }, [toast]);
 
   const copy = useCallback((text: string, msg?: string) => {
     const t = dictFor(ref.current.lang);
@@ -48,9 +64,12 @@ export function App() {
       ta.style.opacity = '0';
       document.body.appendChild(ta);
       ta.select();
-      try { document.execCommand('copy'); } catch { /* ignore */ }
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch { /* unsupported */ }
       ta.remove();
-      done();
+      // Never claim success when nothing was copied.
+      if (ok) done();
+      else toast(t.copyFail, 5000);
     };
     try { navigator.clipboard.writeText(String(text)).then(done, fallback); } catch { fallback(); }
   }, [toast]);
@@ -85,9 +104,8 @@ export function App() {
     else if (d === 'json') { tool = 'json'; patch = { json: s, sel: { ...ref.current.sel, json: '' } }; }
     else if (d === 'toml') { tool = 'toml'; patch = { toml: s, sel: { ...ref.current.sel, toml: '' } }; }
     else { tool = 'qrgen'; patch = { qrText: s }; }
-    set({ ...patch, tool, palette: false, pq: '' });
-    if (!silent) toast(f(dictFor(ref.current.lang).routed, { t: toolName(tool) }));
-  }, [detect, toast, toolName]);
+    replace({ ...patch, tool, palette: false, pq: '' }, silent ? undefined : f(dictFor(ref.current.lang).routed, { t: toolName(tool) }));
+  }, [detect, replace, toolName]);
 
   const decodeFile = useCallback(async (file: File, name?: string) => {
     const t = dictFor(ref.current.lang);
@@ -99,7 +117,8 @@ export function App() {
     set({ tool: 'qrscan', scan: { src, name: nm, busy: true, codes: [], w: 1, h: 1 }, palette: false });
     let img: HTMLImageElement;
     try { img = await loadImage(src); } catch {
-      if (ref.current.scan?.src === src) set({ scan: { src, name: nm, busy: false, codes: [], w: 1, h: 1 } });
+      // Unreadable (e.g. HEIC outside Safari): say so rather than "no QR code found".
+      if (ref.current.scan?.src === src) set({ scan: { src, name: nm, busy: false, codes: [], w: 1, h: 1, failed: true } });
       return;
     }
     const codes = await scanImage(img);
@@ -109,22 +128,25 @@ export function App() {
   }, [toast]);
 
   const handleFiles = useCallback((files: File[]) => {
-    const img = files.find((x) => /^image\//.test(x.type));
-    if (img) { decodeFile(img); return; }
-    const tx = files.find((x) => /\.(json|toml|txt)$/i.test(x.name));
-    if (tx) {
-      tx.arrayBuffer().then((buf) => {
-        // file.text() would silently turn invalid bytes into U+FFFD.
-        const s = decodeUtf8(buf);
-        if (s === null) { toast(dictFor(ref.current.lang).notUtf8, 5000); return; }
-        if (/\.toml$/i.test(tx.name)) set({ toml: s, tool: 'toml' });
-        else if (/\.json$/i.test(tx.name)) set({ json: s, tool: 'json' });
-        else routeText(s);
-      });
+    const t = dictFor(ref.current.lang);
+    const file = files.find((x) => /^image\//.test(x.type) || /\.(json|toml|txt)$/i.test(x.name));
+    if (!file) { toast(t.unsupportedFile, 5000); return; }
+    // Only one file is opened; say which when several were dropped.
+    const note = files.length > 1 ? f(t.onlyFirst, { n: file.name }) : undefined;
+    if (/^image\//.test(file.type)) {
+      decodeFile(file);
+      if (note) toast(note, 5000);
       return;
     }
-    toast(dictFor(ref.current.lang).notImage);
-  }, [decodeFile, routeText, toast]);
+    file.arrayBuffer().then((buf) => {
+      // file.text() would silently turn invalid bytes into U+FFFD.
+      const s = decodeUtf8(buf);
+      if (s === null) { toast(t.notUtf8, 5000); return; }
+      if (/\.toml$/i.test(file.name)) replace({ toml: s, sel: { ...ref.current.sel, toml: '' }, tool: 'toml' }, note);
+      else if (/\.json$/i.test(file.name)) replace({ json: s, sel: { ...ref.current.sel, json: '' }, tool: 'json' }, note);
+      else routeText(s);
+    });
+  }, [decodeFile, replace, routeText, toast]);
 
   // Global listeners: resize, system theme, shortcuts, smart paste, drag & drop.
   useEffect(() => {
@@ -137,6 +159,8 @@ export function App() {
     try { mq = matchMedia('(prefers-color-scheme: dark)'); mq.addEventListener('change', onMq); } catch { /* old browser */ }
 
     const onKey = (e: KeyboardEvent) => {
+      // Keys that confirm or cancel an IME composition (pinyin etc.) are not shortcuts.
+      if (e.isComposing || e.keyCode === 229) return;
       const s = ref.current;
       const mod = e.metaKey || e.ctrlKey;
       const k = e.key.toLowerCase();
@@ -151,16 +175,18 @@ export function App() {
     };
 
     const onPaste = (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items || [];
-      for (const it of Array.from(items)) {
-        if (it.type?.startsWith('image/')) {
-          const file = it.getAsFile();
-          if (file) { e.preventDefault(); decodeFile(file, dictFor(ref.current.lang).pasted); return; }
+      // Text wins: apps like Office put a picture of the selection next to the text.
+      const text = e.clipboardData?.getData('text') || '';
+      if (!text.trim()) {
+        for (const it of Array.from(e.clipboardData?.items || [])) {
+          if (it.type?.startsWith('image/')) {
+            const file = it.getAsFile();
+            if (file) { e.preventDefault(); decodeFile(file, dictFor(ref.current.lang).pasted); return; }
+          }
         }
+        return;
       }
       if (isField(e.target) || !CONFIG.smartPaste) return;
-      const text = e.clipboardData?.getData('text');
-      if (!text) return;
       e.preventDefault();
       routeText(text);
     };
@@ -245,8 +271,8 @@ export function App() {
     return () => clearTimeout(t);
   }, [S.tool]);
 
-  const ctx = useMemo<Ctx>(() => ({ S, set, T, lang, isMac, go, copy, toast, toolName, routeText, detect, decodeFile }),
-    [S, T, lang, isMac, go, copy, toast, toolName, routeText, detect, decodeFile]);
+  const ctx = useMemo<Ctx>(() => ({ S, set, T, lang, isMac, go, copy, toast, replace, toolName, routeText, detect, decodeFile }),
+    [S, T, lang, isMac, go, copy, toast, replace, toolName, routeText, detect, decodeFile]);
 
   return (
     <AppCtx.Provider value={ctx}>
@@ -269,7 +295,14 @@ export function App() {
             <span style={{ fontSize: 13, color: 'var(--mut)' }}>{T.dropHereSub}</span>
           </div>
         )}
-        {S.toast && <div className="toast">{S.toast}</div>}
+        {S.toast && (
+          <div className="toast">
+            {S.toast}
+            {S.undo && (
+              <button className="toast-undo" onClick={() => { clearTimeout(toastTimer.current); set({ ...S.undo!, toast: '', undo: null }); }}>{T.undo}</button>
+            )}
+          </div>
+        )}
       </div>
     </AppCtx.Provider>
   );

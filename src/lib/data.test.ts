@@ -28,6 +28,11 @@ describe('JSON formatting keeps every token', () => {
     expect(fmtJson(src)).toContain('"id": 1234567890123456789');
     expect(fmtJson(src)).toContain('"p": 3.141592653589793238462643');
   });
+  it('key escapes exactly as written', () => {
+    const src = '{"\\u0061":1,"\\/":2,"\\u4e2d":3}';
+    expect(fmtJson(src, '')).toBe(src);
+    expect(fmtJson(src, '', true)).toBe('{"\\/":2,"\\u0061":1,"\\u4e2d":3}');
+  });
   it('string escapes exactly as written', () => {
     const src = '["\\u00e9","é","\\/","\\uD83D\\uDE00","a\\nb","\\""]';
     expect(fmtJson(src, '')).toBe(src);

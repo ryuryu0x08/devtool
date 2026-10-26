@@ -12,7 +12,7 @@ export const WIDE_MIN = 880;
 export type Theme = 'light' | 'dark' | 'auto';
 export type FmtLang = 'json' | 'toml';
 
-export interface Scan { src: string; name: string; busy: boolean; codes: FoundCode[]; w: number; h: number }
+export interface Scan { src: string; name: string; busy: boolean; codes: FoundCode[]; w: number; h: number; failed?: boolean }
 
 export interface State {
   tool: ToolId;
@@ -25,6 +25,8 @@ export interface State {
   pq: string;
   pi: number;
   toast: string;
+  /** Inputs (and tool) to restore if the user undoes the last replacement. */
+  undo: Partial<State> | null;
   tz: string;
   tzRecent: string[];
   tzOpen: boolean;
@@ -104,7 +106,7 @@ export function initState(): State {
     lang: pr.lang || navLang,
     theme: pr.theme || 'auto',
     sysDark,
-    palette: false, pq: '', pi: 0, toast: '',
+    palette: false, pq: '', pi: 0, toast: '', undo: null,
     tz, tzRecent: ls<string[]>('tzRecent') || [], tzOpen: false, tzQ: '',
     tsIn: inp.tsIn ?? String(Math.floor(now / 1000)),
     tsUnit: 'auto',
@@ -136,6 +138,8 @@ export interface Ctx {
   go: (id: ToolId) => void;
   copy: (text: string, msg?: string) => void;
   toast: (msg: string, ms?: number) => void;
+  /** Apply a patch that replaces inputs; if non-empty input is lost, offer to undo it. */
+  replace: (patch: Partial<State>, msg?: string) => void;
   toolName: (id: ToolId) => string;
   routeText: (text: string, silent?: boolean) => void;
   detect: (text: string) => 'ts' | 'tm' | 'json' | 'toml' | null;

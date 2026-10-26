@@ -22,6 +22,8 @@ export function Palette() {
   const close = () => set({ palette: false });
 
   const onKey = (e: React.KeyboardEvent) => {
+    // Enter / arrows while an IME (pinyin…) is composing belong to the IME.
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (e.key === 'ArrowDown') { e.preventDefault(); set((s) => ({ pi: Math.min(items.length - 1, s.pi + 1) })); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); set((s) => ({ pi: Math.max(0, s.pi - 1) })); }
     else if (e.key === 'Enter') { e.preventDefault(); items[pi]?.run(); }

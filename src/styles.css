@@ -149,6 +149,11 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 }
 .list-item:hover { background: var(--sub); }
 .list-item.on { background: var(--accSoft); }
+/* Invisible / direction-control characters: the character stays (so copying is exact), the
+   label is a pseudo-element (never copied), and isolation stops it reordering nearby text. */
+.inv { unicode-bidi: isolate; background: var(--chgBg); border-radius: 3px; }
+.inv::before { content: attr(data-cp); font: 600 9px 'Geist Mono', monospace; color: var(--chg); padding: 0 2px; }
+.toast-undo { margin-left: 12px; border: 0; background: transparent; color: var(--invInk); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; padding: 0; }
 .toast {
   position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 80; background: var(--inv); color: var(--invInk);
   padding: 10px 18px; border-radius: 999px; font-size: 13px; font-weight: 500; box-shadow: 0 8px 24px var(--shadow); white-space: nowrap;

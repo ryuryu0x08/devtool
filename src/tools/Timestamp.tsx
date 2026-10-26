@@ -91,7 +91,7 @@ function TzPicker({ now }: { now: number }) {
             <div style={{ padding: 10, borderBottom: '1px solid var(--line)' }}>
               <input autoFocus value={S.tzQ} onChange={(e) => set({ tzQ: e.target.value })} placeholder={T.tzSearch}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) {
                     const it = rows.find((r) => 'id' in r) as { id: string } | undefined;
                     if (it) setTz(it.id);
                   }
@@ -183,6 +183,7 @@ export function Timestamp() {
   /** ↑ / ↓ adjusts the segment under the caret (canonical format) or minutes; ⇧ adjusts hours. */
   const onTmKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     e.preventDefault();
     const dir = e.key === 'ArrowUp' ? 1 : -1;
     const el = e.currentTarget;

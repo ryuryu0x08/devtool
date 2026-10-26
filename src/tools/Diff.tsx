@@ -3,6 +3,7 @@ import { SAMPLE_A, SAMPLE_B, f, type Dict } from '../i18n';
 import { useApp } from '../store';
 import { Seg, Toggle } from '../components/Seg';
 import { useSettled } from '../components/useSettled';
+import { Vis } from '../components/Vis';
 import { ConvertError, changePair, diffNode, errInfo, isCont, preview, prim, windowPair, type DiffNode, type ErrInfo } from '../lib/data';
 import { jsonValue, parseJsonAst } from '../lib/json';
 import { TomlMismatch, TomlSyntaxError, parseTomlDoc } from '../lib/toml';
@@ -40,6 +41,8 @@ function parseAny(src: string, T: Dict): Parsed {
     return { bad: at(t) > at(j) ? t : j };
   }
 }
+
+const DIFF_CAP = 4000;
 
 interface DRow {
   indent: number; keyText: string; keyColor: string; colon: string; mark: string; markColor: string; bg: string;
@@ -113,11 +116,13 @@ function buildDiff(root: DiffNode, col: Record<string, boolean>, onlyDiff: boole
     rows.push({ ...b, mark: '~', markColor: 'var(--chg)', bg: 'var(--chgBg)', valText: ta, valColor: 'var(--del)', deco: 'line-through', isChg: true, newText: tb });
   };
   walk(root, 0, false);
-  return { rows, list, nA, nD, nC, nF };
+  // Rendering is capped (a huge diff would freeze the page); the totals stay exact and are shown.
+  const total = { rows: rows.length, list: list.length };
+  return { rows: rows.slice(0, DIFF_CAP), list: list.slice(0, DIFF_CAP), total, nA, nD, nC, nF };
 }
 
 export function Diff() {
-  const { S, set, T, copy } = useApp();
+  const { S, set, T, copy, replace } = useApp();
   const [srcA, pendA] = useSettled(S.diffA);
   const [srcB, pendB] = useSettled(S.diffB);
   const pending = pendA || pendB;
@@ -159,8 +164,8 @@ export function Diff() {
         <Toggle on={S.onlyDiff} label={T.onlyDiff} onClick={() => set((s) => ({ onlyDiff: !s.onlyDiff }))} />
         <span className="sep" />
         <button className="btn" onClick={() => set((s) => ({ diffA: s.diffB, diffB: s.diffA }))}>⇄ {T.swap}</button>
-        <button className="btn" onClick={() => set({ diffA: SAMPLE_A, diffB: SAMPLE_B })}>{T.sample}</button>
-        <button className="btn" onClick={() => set({ diffA: '', diffB: '' })}>{T.clear}</button>
+        <button className="btn" onClick={() => replace({ diffA: SAMPLE_A, diffB: SAMPLE_B })}>{T.sample}</button>
+        <button className="btn" onClick={() => replace({ diffA: '', diffB: '' })}>{T.clear}</button>
       </div>
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 360px), 1fr))', alignItems: 'stretch' }}>
         {pane(T.a, aS, aC, aM, S.diffA, 'diffA', true)}
@@ -185,6 +190,11 @@ export function Diff() {
           {!ready && <span style={{ fontSize: 13, color: 'var(--faint)' }}>{pending ? T.processing : T.needBoth}</span>}
           {d && <Seg value={S.diffView} onChange={(k) => set({ diffView: k })} opts={[{ value: 'tree', label: T.diffTree }, { value: 'list', label: T.diffList }]} />}
         </div>
+        {d && (S.diffView === 'tree' ? d.total.rows : d.total.list) > DIFF_CAP && (
+          <div style={{ padding: '8px 16px', fontSize: 12.5, color: 'var(--chg)', background: 'var(--chgBg)' }}>
+            {f(T.diffTruncated, { n: DIFF_CAP, t: S.diffView === 'tree' ? d.total.rows : d.total.list })}
+          </div>
+        )}
         {d && S.diffView === 'tree' && (
           <div className="code" style={{ padding: '8px 0', lineHeight: '24px', maxHeight: '70vh', overflow: 'auto' }}>
             {d.rows.map((r, i) => (
@@ -192,13 +202,13 @@ export function Diff() {
                 <span style={{ width: 30, flex: 'none', textAlign: 'center', color: r.markColor, fontWeight: 700, userSelect: 'none' }}>{r.mark}</span>
                 <div className="body" style={{ flexWrap: 'wrap', paddingLeft: r.indent }}>
                   <span className="caret" onClick={r.togglePath ? () => { const p = r.togglePath!; set((s) => ({ dCol: { ...s.dCol, [p]: !s.dCol[p] } })); } : undefined}>{r.caret}</span>
-                  <span style={{ color: r.keyColor, whiteSpace: 'pre' }}>{r.keyText}</span>
+                  <span style={{ color: r.keyColor, whiteSpace: 'pre' }}><Vis text={r.keyText} /></span>
                   <span style={{ color: 'var(--faint)', whiteSpace: 'pre' }}>{r.colon}</span>
-                  <span style={{ color: r.valColor, wordBreak: 'break-all', textDecoration: r.deco }}>{r.valText}</span>
+                  <span style={{ color: r.valColor, wordBreak: 'break-all', textDecoration: r.deco }}><Vis text={r.valText} /></span>
                   {r.isChg && (
                     <>
                       <span style={{ color: 'var(--faint)', padding: '0 8px' }}>→</span>
-                      <span style={{ color: r.newColor, wordBreak: 'break-all', fontWeight: 500 }}>{r.newText}</span>
+                      <span style={{ color: r.newColor, wordBreak: 'break-all', fontWeight: 500 }}><Vis text={r.newText} /></span>
                     </>
                   )}
                   <span className="meta" style={{ lineHeight: '24px', whiteSpace: 'normal' }}>{r.meta}</span>
@@ -214,16 +224,16 @@ export function Diff() {
                 <span style={{ display: 'flex', alignItems: 'baseline', gap: 10, flex: '0 1 280px', minWidth: 0, flexWrap: 'wrap' }}>
                   <span className="mono" style={{ width: 14, flex: 'none', fontSize: 13, fontWeight: 700, color: it.color }}>{it.mark}</span>
                   <button className="mono path-btn" onClick={() => copy(it.path)} title={T.copyPath}
-                    style={{ border: 0, background: 'transparent', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 500, textAlign: 'left', wordBreak: 'break-all' }}>{it.path}</button>
+                    style={{ border: 0, background: 'transparent', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 500, textAlign: 'left', wordBreak: 'break-all' }}><Vis text={it.path} /></button>
                   {it.pathB && (
                     <button className="mono path-btn" onClick={() => copy(it.pathB!)} title={T.copyPath}
-                      style={{ border: 0, background: 'transparent', padding: 0, cursor: 'pointer', fontSize: 12, color: 'var(--faint)', textAlign: 'left', wordBreak: 'break-all' }}>→ {it.pathB}</button>
+                      style={{ border: 0, background: 'transparent', padding: 0, cursor: 'pointer', fontSize: 12, color: 'var(--faint)', textAlign: 'left', wordBreak: 'break-all' }}>→ <Vis text={it.pathB} /></button>
                   )}
                 </span>
                 <span className="mono" style={{ flex: '1 1 280px', minWidth: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '4px 8px', fontSize: 13 }}>
-                  {it.oldText != null && <span style={{ color: it.fmt ? 'var(--mut)' : 'var(--del)', textDecoration: it.fmt ? 'none' : 'line-through', wordBreak: 'break-all' }}>{it.oldText}</span>}
+                  {it.oldText != null && <span style={{ color: it.fmt ? 'var(--mut)' : 'var(--del)', textDecoration: it.fmt ? 'none' : 'line-through', wordBreak: 'break-all' }}><Vis text={it.oldText} /></span>}
                   {it.oldText != null && it.newText != null && <span style={{ color: 'var(--faint)' }}>→</span>}
-                  {it.newText != null && <span style={{ color: it.fmt ? 'var(--mut)' : 'var(--add)', wordBreak: 'break-all' }}>{it.newText}</span>}
+                  {it.newText != null && <span style={{ color: it.fmt ? 'var(--mut)' : 'var(--add)', wordBreak: 'break-all' }}><Vis text={it.newText} /></span>}
                   {it.fmt && <span style={{ color: 'var(--faint)', fontSize: 12, fontFamily: "'Geist Sans', 'Geist', sans-serif" }}>{it.fmt}</span>}
                 </span>
               </div>
