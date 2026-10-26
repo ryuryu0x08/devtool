@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet"><style>body{margin:0;background:#eceae5;font-family:'Geist','PingFang SC','Hiragino Sans GB','Microsoft YaHei',system-ui,sans-serif;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:oklch(0.52 0.2 262)}a:hover{color:oklch(0.42 0.2 262)}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 8px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.4 system-ui,sans-serif;color:rgba(0,0,0,.6)}.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}</style></helmet>
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">布局方向 · 以「时间戳转换」为样板屏（PC + Mobile）</span></div>
+<p style="margin:0 0 28px;max-width:820px;font-size:13px;line-height:1.6;color:rgba(0,0,0,.6)">共同假设：打开即回到上次使用的工具；输入即出结果、点击结果即复制；时区默认本机，改过后记住；在页面空白处粘贴时间戳 / JSON / 图片会自动跳转对应工具；中/EN 与浅/深/跟随系统在每个方向都常驻。三个方向主要差在<b style="color:#1b1b1d">导航结构</b>和<b style="color:#1b1b1d">时间输入方式</b>。</p>
+<div class="dv-opts">
+
+<div class="dv-opt" id="1a">
+<div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a><span><b style="color:#1b1b1d">经典侧栏</b> — 左侧一级/二级菜单 + ⌘K 搜索；两个方向并排卡片，各自独立输入。最熟悉、扩展工具最稳。</span></div>
+<div style="display:flex;gap:28px;align-items:flex-start">
+<div class="dv-card" style="width:1120px;height:700px;display:flex;background:#f6f6f4;color:#1b1b1d;font-size:14px">
+  <aside style="width:224px;flex:none;border-right:1px solid #e7e6e2;background:#fbfbfa;padding:16px 12px;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;gap:9px;padding:2px 8px 16px"><span style="width:26px;height:26px;border-radius:7px;background:#1b1b1d;color:#fff;display:flex;align-items:center;justify-content:center;font:600 11px 'Geist Mono',monospace">TB</span><span style="font-weight:600;font-size:15px">工具箱</span></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;height:36px;padding:0 8px 0 12px;border:1px solid #e3e2de;border-radius:9px;background:#fff;color:#8a8984;font-size:13px"><span>搜索工具…</span><span style="font:500 11px 'Geist Mono',monospace;padding:2px 6px;border:1px solid #e7e6e2;border-radius:5px;color:#6b6a66">⌘K</span></div>
+    <div style="padding:18px 10px 6px;font-size:11px;font-weight:500;color:#8a8984;letter-spacing:.04em">时间</div>
+    <div style="display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:8px;background:#ebeae6;font-weight:600"><span style="width:24px;height:24px;border-radius:6px;background:oklch(0.52 0.2 262);color:#fff;display:flex;align-items:center;justify-content:center;font:600 10px 'Geist Mono',monospace">01</span>时间戳转换</div>
+    <div style="padding:16px 10px 6px;font-size:11px;font-weight:500;color:#8a8984;letter-spacing:.04em">二维码</div>
+    <div style="display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:8px;color:#3a3936"><span style="width:24px;height:24px;border-radius:6px;background:#efeeea;color:#55544f;display:flex;align-items:center;justify-content:center;font:600 11px 'Geist Mono',monospace">▦</span>生成二维码</div>
+    <div style="display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:8px;color:#3a3936"><span style="width:24px;height:24px;border-radius:6px;background:#efeeea;color:#55544f;display:flex;align-items:center;justify-content:center;font:600 11px 'Geist Mono',monospace">⌖</span>识别二维码</div>
+    <div style="padding:16px 10px 6px;font-size:11px;font-weight:500;color:#8a8984;letter-spacing:.04em">格式化</div>
+    <div style="display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:8px;color:#3a3936"><span style="width:24px;height:24px;border-radius:6px;background:#efeeea;color:#55544f;display:flex;align-items:center;justify-content:center;font:600 10px 'Geist Mono',monospace">{}</span>JSON</div>
+    <div style="display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:8px;color:#3a3936"><span style="width:24px;height:24px;border-radius:6px;background:#efeeea;color:#55544f;display:flex;align-items:center;justify-content:center;font:600 10px 'Geist Mono',monospace">[]</span>TOML</div>
+    <div style="padding:16px 10px 6px;font-size:11px;font-weight:500;color:#8a8984;letter-spacing:.04em">对比</div>
+    <div style="display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:8px;color:#3a3936"><span style="width:24px;height:24px;border-radius:6px;background:#efeeea;color:#55544f;display:flex;align-items:center;justify-content:center;font:600 11px 'Geist Mono',monospace">≠</span>JSON 对比</div>
+    <div style="margin-top:auto;display:flex;gap:6px;padding:0 4px">
+      <div style="display:flex;padding:2px;background:#efeeea;border-radius:7px;font-size:12px;font-weight:500"><span style="padding:4px 9px;border-radius:5px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.08)">中</span><span style="padding:4px 9px;color:#6b6a66">EN</span></div>
+      <div style="display:flex;padding:2px;background:#efeeea;border-radius:7px;font-size:12px;font-weight:500"><span style="padding:4px 9px;color:#6b6a66">浅</span><span style="padding:4px 9px;color:#6b6a66">深</span><span style="padding:4px 9px;border-radius:5px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.08)">自动</span></div>
+    </div>
+  </aside>
+  <main style="flex:1;min-width:0;padding:26px 32px;display:flex;flex-direction:column;gap:18px">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px">
+      <div><div style="font-size:12px;color:#8a8984">时间 / 时间戳转换</div><div style="margin-top:4px;font-size:22px;font-weight:600;letter-spacing:-.01em">时间戳转换</div></div>
+      <div style="display:flex;align-items:center;gap:8px;height:36px;padding:0 14px;border:1px solid #e3e2de;border-radius:999px;background:#fff;font-size:13px"><span style="width:7px;height:7px;border-radius:50%;background:oklch(0.52 0.2 262)"></span><b style="font-weight:600">北京 / 上海</b><span style="font-family:'Geist Mono',monospace;color:#6b6a66">UTC+08:00</span><span style="color:#9a9994">▾</span></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#6b6a66"><span>现在</span><span style="font-family:'Geist Mono',monospace;padding:4px 9px;background:#fff;border:1px solid #e7e6e2;border-radius:7px;color:#1b1b1d">1793000000</span><span style="font-family:'Geist Mono',monospace;padding:4px 9px;background:#fff;border:1px solid #e7e6e2;border-radius:7px;color:#1b1b1d">1793000000412</span><span>2026-10-26 15:33:20 周一</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <section style="background:#fff;border:1px solid #e7e6e2;border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between"><div style="font-size:14px;font-weight:600">时间戳 <span style="color:#9a9994;font-weight:400">→</span> 时间</div><div style="display:flex;padding:2px;background:#efeeea;border-radius:7px;font-size:12px;font-weight:500"><span style="padding:4px 9px;border-radius:5px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.08)">自动</span><span style="padding:4px 9px;color:#6b6a66">秒</span><span style="padding:4px 9px;color:#6b6a66">毫秒</span></div></div>
+        <div style="height:52px;display:flex;align-items:center;padding:0 14px;border:1px solid oklch(0.52 0.2 262);border-radius:10px;box-shadow:0 0 0 3px oklch(0.52 0.2 262 / .12);font:500 20px 'Geist Mono',monospace">1793000000<span style="width:1.5px;height:22px;background:oklch(0.52 0.2 262);margin-left:2px"></span></div>
+        <div style="padding:14px;border-radius:10px;background:oklch(0.97 0.015 262);display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;color:#6b6a66">识别为秒 · 10 位 · 点击复制</span><span style="font:600 30px/1.15 'Geist Mono',monospace;letter-spacing:-.01em">2026-10-26 15:33:20</span><span style="font-size:13px;color:#6b6a66">周一 · 北京 / 上海 UTC+08:00</span></div>
+        <div style="display:flex;flex-direction:column;font-size:13px">
+          <div style="display:grid;grid-template-columns:72px 1fr auto;gap:12px;padding:8px 10px;border-radius:8px"><span style="color:#6b6a66">ISO 8601</span><span style="font-family:'Geist Mono',monospace">2026-10-26T15:33:20.000+08:00</span><span style="color:#b3b2ad;font-size:11px">复制</span></div>
+          <div style="display:grid;grid-template-columns:72px 1fr auto;gap:12px;padding:8px 10px;border-radius:8px;background:#f5f4f1"><span style="color:#6b6a66">UTC</span><span style="font-family:'Geist Mono',monospace">2026-10-26 07:33:20</span><span style="color:#6b6a66;font-size:11px">复制</span></div>
+          <div style="display:grid;grid-template-columns:72px 1fr auto;gap:12px;padding:8px 10px;border-radius:8px"><span style="color:#6b6a66">毫秒</span><span style="font-family:'Geist Mono',monospace">1793000000000</span><span style="color:#b3b2ad;font-size:11px">复制</span></div>
+          <div style="display:grid;grid-template-columns:72px 1fr auto;gap:12px;padding:8px 10px;border-radius:8px"><span style="color:#6b6a66">相对</span><span>现在</span><span style="color:#b3b2ad;font-size:11px">复制</span></div>
+        </div>
+      </section>
+      <section style="background:#fff;border:1px solid #e7e6e2;border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:14px">
+        <div style="font-size:14px;font-weight:600">时间 <span style="color:#9a9994;font-weight:400">→</span> 时间戳</div>
+        <div style="height:52px;display:flex;align-items:center;padding:0 14px;border:1px solid #e3e2de;border-radius:10px;background:#fbfbfa;font:500 20px 'Geist Mono','PingFang SC',monospace">明天 9点</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;font-size:12.5px;color:#3a3936"><span style="padding:5px 10px;border:1px solid #e7e6e2;border-radius:999px">现在</span><span style="padding:5px 10px;border:1px solid #e7e6e2;border-radius:999px">今天 0 点</span><span style="padding:5px 10px;border:1px solid #e7e6e2;border-radius:999px">明天 0 点</span><span style="padding:5px 10px;border:1px solid #e7e6e2;border-radius:999px">本月 1 日</span><span style="padding:5px 10px;border:1px solid #e7e6e2;border-radius:999px">−1 天</span><span style="padding:5px 10px;border:1px solid #e7e6e2;border-radius:999px">+1 时</span><span style="padding:5px 10px;border:1px solid #e7e6e2;border-radius:999px">+1 天</span></div>
+        <div style="padding:14px;border-radius:10px;background:oklch(0.97 0.015 262);display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;color:#6b6a66">解析为 2026-10-27 09:00:00 周二 · 点击复制</span><span style="font:600 30px/1.15 'Geist Mono',monospace;letter-spacing:-.01em">1793062800 <span style="font:500 14px 'Geist',sans-serif;color:#6b6a66">秒</span></span></div>
+        <div style="display:flex;flex-direction:column;font-size:13px">
+          <div style="display:grid;grid-template-columns:72px 1fr auto;gap:12px;padding:8px 10px"><span style="color:#6b6a66">毫秒</span><span style="font-family:'Geist Mono',monospace">1793062800000</span><span style="color:#b3b2ad;font-size:11px">复制</span></div>
+          <div style="display:grid;grid-template-columns:72px 1fr auto;gap:12px;padding:8px 10px"><span style="color:#6b6a66">ISO 8601</span><span style="font-family:'Geist Mono',monospace">2026-10-27T09:00:00.000+08:00</span><span style="color:#b3b2ad;font-size:11px">复制</span></div>
+        </div>
+        <div style="font-size:12px;color:#9a9994">支持 2026-10-27 09:00 · 10/27 9:00 · 明天 9点 · now；光标所在段按 ↑↓ 微调</div>
+      </section>
+    </div>
+  </main>
+</div>
+<div style="width:380px;padding:10px;background:#1b1b1d;border-radius:52px;box-shadow:0 10px 30px rgba(0,0,0,.18)">
+  <div style="height:760px;border-radius:42px;overflow:hidden;background:#f6f6f4;color:#1b1b1d;display:flex;flex-direction:column;font-size:14px">
+    <div style="height:44px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 28px;font:600 14px 'Geist',sans-serif"><span>9:41</span><span style="width:90px;height:26px;border-radius:14px;background:#1b1b1d"></span><span style="font-size:12px">5G ▮</span></div>
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 16px 10px"><span style="width:28px;height:28px;border-radius:8px;background:#1b1b1d;color:#fff;display:flex;align-items:center;justify-content:center;font:600 11px 'Geist Mono',monospace">TB</span><span style="font-weight:600;font-size:16px;flex:1">时间戳转换</span><span style="width:44px;height:44px;border-radius:12px;background:#fff;border:1px solid #e7e6e2;display:flex;align-items:center;justify-content:center;font-size:13px;color:#6b6a66">搜</span></div>
+    <div style="display:flex;gap:6px;padding:0 16px 12px;overflow:hidden;white-space:nowrap;font-size:13px;font-weight:500;border-bottom:1px solid #e7e6e2"><span style="padding:9px 14px;border-radius:999px;background:#1b1b1d;color:#fff">时间戳</span><span style="padding:9px 14px;border-radius:999px;background:#fff;border:1px solid #e7e6e2">生成二维码</span><span style="padding:9px 14px;border-radius:999px;background:#fff;border:1px solid #e7e6e2">识别二维码</span><span style="padding:9px 14px;border-radius:999px;background:#fff;border:1px solid #e7e6e2">JSON</span></div>
+    <div style="padding:14px;display:flex;flex-direction:column;gap:12px;overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;font-size:12.5px;color:#6b6a66"><span>现在 <span style="font-family:'Geist Mono',monospace;color:#1b1b1d">1793000000</span></span><span style="display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:1px solid #e3e2de;border-radius:999px;background:#fff;color:#1b1b1d"><span style="width:6px;height:6px;border-radius:50%;background:oklch(0.52 0.2 262)"></span>北京 <span style="font-family:'Geist Mono',monospace;color:#6b6a66">+08:00</span> ▾</span></div>
+      <section style="background:#fff;border:1px solid #e7e6e2;border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px">
+        <div style="font-size:14px;font-weight:600">时间戳 → 时间</div>
+        <div style="height:50px;display:flex;align-items:center;padding:0 12px;border:1px solid oklch(0.52 0.2 262);border-radius:10px;font:500 19px 'Geist Mono',monospace">1793000000</div>
+        <div style="padding:12px;border-radius:10px;background:oklch(0.97 0.015 262);display:flex;flex-direction:column;gap:4px"><span style="font-size:11.5px;color:#6b6a66">识别为秒 · 点击复制</span><span style="font:600 24px/1.2 'Geist Mono',monospace">2026-10-26 15:33:20</span><span style="font-size:12.5px;color:#6b6a66">周一 · UTC+08:00</span></div>
+        <div style="display:flex;flex-direction:column;gap:2px;font-size:12.5px"><div style="display:flex;justify-content:space-between;padding:7px 2px"><span style="color:#6b6a66">ISO</span><span style="font-family:'Geist Mono',monospace">2026-10-26T15:33:20+08:00</span></div><div style="display:flex;justify-content:space-between;padding:7px 2px"><span style="color:#6b6a66">毫秒</span><span style="font-family:'Geist Mono',monospace">1793000000000</span></div></div>
+      </section>
+      <section style="background:#fff;border:1px solid #e7e6e2;border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px">
+        <div style="font-size:14px;font-weight:600">时间 → 时间戳</div>
+        <div style="height:50px;display:flex;align-items:center;padding:0 12px;border:1px solid #e3e2de;border-radius:10px;background:#fbfbfa;font:500 19px 'Geist Mono','PingFang SC',monospace">明天 9点</div>
+        <div style="font:600 24px 'Geist Mono',monospace">1793062800</div>
+      </section>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<div class="dv-opt" id="1b">
+<div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a><span><b style="color:#1b1b1d">命令优先</b> — 顶部一个万能输入框（搜工具 / 直接粘贴内容）；时间戳只有<b style="color:#1b1b1d">一个双向输入</b>，自动判断方向，结果超大 + 多时区对照。路径最短。（此处以深色模式展示）</span></div>
+<div style="display:flex;gap:28px;align-items:flex-start">
+<div class="dv-card" style="width:1120px;height:700px;display:flex;flex-direction:column;background:#131312;color:#ededeb;font-size:14px;border-color:#000">
+  <div style="height:60px;flex:none;display:flex;align-items:center;gap:20px;padding:0 24px;border-bottom:1px solid #262624">
+    <div style="display:flex;align-items:center;gap:9px;width:180px"><span style="width:26px;height:26px;border-radius:7px;background:#ededeb;color:#131312;display:flex;align-items:center;justify-content:center;font:600 11px 'Geist Mono',monospace">TB</span><span style="font-weight:600;font-size:15px">工具箱</span></div>
+    <div style="flex:1;display:flex;justify-content:center"><div style="width:100%;max-width:560px;height:40px;display:flex;align-items:center;justify-content:space-between;padding:0 10px 0 14px;border:1px solid #2e2e2c;border-radius:10px;background:#1c1c1b;color:#8f8e89;font-size:13.5px"><span>搜索工具，或直接粘贴时间戳 / JSON / 图片…</span><span style="font:500 11px 'Geist Mono',monospace;padding:2px 6px;border:1px solid #33332f;border-radius:5px">⌘K</span></div></div>
+    <div style="width:180px;display:flex;justify-content:flex-end;gap:6px"><div style="display:flex;padding:2px;background:#222220;border-radius:7px;font-size:12px;font-weight:500"><span style="padding:4px 9px;border-radius:5px;background:#33332f">中</span><span style="padding:4px 9px;color:#8f8e89">EN</span></div><div style="display:flex;padding:2px;background:#222220;border-radius:7px;font-size:12px;font-weight:500"><span style="padding:4px 9px;color:#8f8e89">浅</span><span style="padding:4px 9px;border-radius:5px;background:#33332f">深</span><span style="padding:4px 9px;color:#8f8e89">自动</span></div></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:22px;padding:12px 24px;border-bottom:1px solid #262624;font-size:13px">
+    <div style="display:flex;align-items:center;gap:6px"><span style="color:#76756f;font-size:11.5px;margin-right:2px">时间</span><span style="padding:6px 12px;border-radius:999px;background:oklch(0.74 0.14 262);color:#0d0d14;font-weight:600">时间戳</span></div>
+    <div style="display:flex;align-items:center;gap:6px"><span style="color:#76756f;font-size:11.5px;margin-right:2px">二维码</span><span style="padding:6px 12px;border-radius:999px;color:#c9c8c3">生成</span><span style="padding:6px 12px;border-radius:999px;color:#c9c8c3">识别</span></div>
+    <div style="display:flex;align-items:center;gap:6px"><span style="color:#76756f;font-size:11.5px;margin-right:2px">格式化</span><span style="padding:6px 12px;border-radius:999px;color:#c9c8c3">JSON</span><span style="padding:6px 12px;border-radius:999px;color:#c9c8c3">TOML</span></div>
+    <div style="display:flex;align-items:center;gap:6px"><span style="color:#76756f;font-size:11.5px;margin-right:2px">对比</span><span style="padding:6px 12px;border-radius:999px;color:#c9c8c3">JSON 对比</span></div>
+  </div>
+  <div style="flex:1;display:flex;justify-content:center;padding:36px 24px">
+    <div style="width:100%;max-width:880px;display:flex;flex-direction:column;gap:22px">
+      <div style="display:flex;gap:10px">
+        <div style="flex:1;height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 12px 0 20px;border:1px solid oklch(0.74 0.14 262);border-radius:14px;background:#1a1a19;box-shadow:0 0 0 4px oklch(0.74 0.14 262 / .15)"><span style="font:500 26px 'Geist Mono',monospace">1793000000</span><span style="font-size:12px;padding:5px 10px;border-radius:999px;background:#262624;color:#c9c8c3">时间戳 · 秒 → 时间</span></div>
+        <div style="height:64px;display:flex;align-items:center;gap:8px;padding:0 16px;border:1px solid #2e2e2c;border-radius:14px;background:#1a1a19;font-size:13px"><span style="width:7px;height:7px;border-radius:50%;background:oklch(0.74 0.14 262)"></span><b style="font-weight:600">北京 / 上海</b><span style="font-family:'Geist Mono',monospace;color:#8f8e89">+08:00 ▾</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;padding:8px 4px">
+        <span style="font-size:12.5px;color:#8f8e89">点击复制</span>
+        <span style="font:600 60px/1 'Geist Mono',monospace;letter-spacing:-.025em">2026-10-26 <span style="color:oklch(0.74 0.14 262)">15:33:20</span></span>
+        <span style="font-size:14px;color:#a9a8a2">周一 · 现在 · 北京 / 上海 UTC+08:00</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+        <div style="padding:14px 16px;border:1px solid #262624;border-radius:12px;background:#1a1a19;display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;color:#8f8e89">ISO 8601</span><span style="font:500 14px 'Geist Mono',monospace">2026-10-26T15:33:20+08:00</span></div>
+        <div style="padding:14px 16px;border:1px solid #262624;border-radius:12px;background:#1a1a19;display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;color:#8f8e89">毫秒</span><span style="font:500 14px 'Geist Mono',monospace">1793000000000</span></div>
+        <div style="padding:14px 16px;border:1px solid #262624;border-radius:12px;background:#1a1a19;display:flex;flex-direction:column;gap:6px"><span style="font-size:12px;color:#8f8e89">UTC</span><span style="font:500 14px 'Geist Mono',monospace">2026-10-26 07:33:20</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;border-top:1px solid #262624">
+        <div style="display:grid;grid-template-columns:140px 1fr 120px;padding:11px 4px;border-bottom:1px solid #20201e;font-size:13px"><span style="color:#a9a8a2">东京</span><span style="font-family:'Geist Mono',monospace">2026-10-26 16:33:20</span><span style="font-family:'Geist Mono',monospace;color:#76756f;text-align:right">+09:00</span></div>
+        <div style="display:grid;grid-template-columns:140px 1fr 120px;padding:11px 4px;border-bottom:1px solid #20201e;font-size:13px"><span style="color:#a9a8a2">伦敦</span><span style="font-family:'Geist Mono',monospace">2026-10-26 07:33:20</span><span style="font-family:'Geist Mono',monospace;color:#76756f;text-align:right">+00:00</span></div>
+        <div style="display:grid;grid-template-columns:140px 1fr 120px;padding:11px 4px;border-bottom:1px solid #20201e;font-size:13px"><span style="color:#a9a8a2">纽约</span><span style="font-family:'Geist Mono',monospace">2026-10-26 03:33:20</span><span style="font-family:'Geist Mono',monospace;color:#76756f;text-align:right">−04:00</span></div>
+        <div style="padding:10px 4px;font-size:12.5px;color:oklch(0.74 0.14 262)">+ 添加对照时区</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div style="width:380px;padding:10px;background:#000;border-radius:52px;box-shadow:0 10px 30px rgba(0,0,0,.25)">
+  <div style="height:760px;border-radius:42px;overflow:hidden;background:#131312;color:#ededeb;display:flex;flex-direction:column;font-size:14px">
+    <div style="height:44px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 28px;font:600 14px 'Geist',sans-serif"><span>9:41</span><span style="width:90px;height:26px;border-radius:14px;background:#000"></span><span style="font-size:12px">5G ▮</span></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 12px 8px"><span style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:#8f8e89;font-size:13px">中</span><span style="font-weight:600;font-size:16px;padding:8px 14px;border-radius:999px;background:#1f1f1e">时间戳 ▾</span><span style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:#8f8e89;font-size:13px">搜</span></div>
+    <div style="flex:1;padding:22px 20px;display:flex;flex-direction:column;gap:18px">
+      <div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:12px;color:#8f8e89">秒 → 时间 · 点击复制</span><span style="font:600 34px/1.05 'Geist Mono',monospace;letter-spacing:-.02em">2026-10-26<br><span style="color:oklch(0.74 0.14 262)">15:33:20</span></span><span style="font-size:13px;color:#a9a8a2">周一 · 北京 UTC+08:00</span></div>
+      <div style="display:flex;flex-direction:column;border-top:1px solid #262624;font-size:13px">
+        <div style="display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #20201e"><span style="color:#8f8e89">ISO</span><span style="font-family:'Geist Mono',monospace">2026-10-26T15:33:20+08:00</span></div>
+        <div style="display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #20201e"><span style="color:#8f8e89">毫秒</span><span style="font-family:'Geist Mono',monospace">1793000000000</span></div>
+        <div style="display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #20201e"><span style="color:#8f8e89">东京</span><span style="font-family:'Geist Mono',monospace">16:33:20</span></div>
+        <div style="display:flex;justify-content:space-between;padding:12px 0"><span style="color:#8f8e89">纽约</span><span style="font-family:'Geist Mono',monospace">03:33:20</span></div>
+      </div>
+    </div>
+    <div style="padding:10px 12px 26px;background:#1a1a19;border-top:1px solid #262624;display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;gap:6px;font-size:12.5px;white-space:nowrap;overflow:hidden"><span style="padding:8px 12px;border-radius:999px;background:#262624">现在</span><span style="padding:8px 12px;border-radius:999px;background:#262624">今天 0 点</span><span style="padding:8px 12px;border-radius:999px;background:#262624">−1 时</span><span style="padding:8px 12px;border-radius:999px;background:#262624">+1 时</span><span style="padding:8px 12px;border-radius:999px;background:#262624">粘贴</span></div>
+      <div style="height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 8px 0 14px;border:1px solid oklch(0.74 0.14 262);border-radius:14px;background:#131312"><span style="font:500 19px 'Geist Mono',monospace">1793000000</span><span style="height:36px;padding:0 10px;display:flex;align-items:center;border-radius:10px;background:#262624;font-size:12px;color:#c9c8c3">+08:00 ▾</span></div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<div class="dv-opt" id="1c">
+<div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a><span><b style="color:#1b1b1d">图标轨 + 分段输入</b> — 一级分类做成窄图标轨（用汉字当图标），二级在旁栏；方向用分段切换；日期用<b style="color:#1b1b1d">分段数字框</b>（Tab 跳段、↑↓ 调整），不会输错格式。Mobile 用底部 Tab 承载一级。</span></div>
+<div style="display:flex;gap:28px;align-items:flex-start">
+<div class="dv-card" style="width:1120px;height:700px;display:flex;background:#f4f3ef;color:#1b1b1d;font-size:14px">
+  <div style="width:68px;flex:none;background:#1b1b1d;display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 0">
+    <span style="width:34px;height:34px;border-radius:9px;background:#f4f3ef;color:#1b1b1d;display:flex;align-items:center;justify-content:center;font:600 12px 'Geist Mono',monospace;margin-bottom:14px">TB</span>
+    <span style="width:44px;height:44px;border-radius:11px;background:oklch(0.55 0.14 160);color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600">时</span>
+    <span style="width:44px;height:44px;border-radius:11px;color:#b9b8b2;display:flex;align-items:center;justify-content:center;font-size:17px">码</span>
+    <span style="width:44px;height:44px;border-radius:11px;color:#b9b8b2;display:flex;align-items:center;justify-content:center;font-size:17px">格</span>
+    <span style="width:44px;height:44px;border-radius:11px;color:#b9b8b2;display:flex;align-items:center;justify-content:center;font-size:17px">比</span>
+    <span style="margin-top:auto;width:44px;height:32px;border-radius:8px;color:#b9b8b2;display:flex;align-items:center;justify-content:center;font-size:12px;border:1px solid #33332f">EN</span>
+    <span style="width:44px;height:32px;border-radius:8px;color:#b9b8b2;display:flex;align-items:center;justify-content:center;font-size:12px;border:1px solid #33332f">自动</span>
+  </div>
+  <div style="width:212px;flex:none;border-right:1px solid #e2e1dc;padding:18px 12px;display:flex;flex-direction:column;gap:4px">
+    <div style="padding:0 8px 12px;font-size:18px;font-weight:600">时间</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;height:34px;padding:0 8px 0 10px;border:1px solid #e2e1dc;border-radius:8px;background:#fff;color:#8a8984;font-size:12.5px;margin-bottom:8px"><span>搜索全部工具</span><span style="font:500 10.5px 'Geist Mono',monospace">⌘K</span></div>
+    <div style="height:36px;display:flex;align-items:center;padding:0 10px;border-radius:8px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.06);font-weight:600;border-left:0">时间戳转换</div>
+    <div style="padding:18px 10px 6px;font-size:11px;font-weight:500;color:#8a8984;letter-spacing:.04em">最近使用</div>
+    <div style="height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;color:#3a3936;font-size:13px"><span>JSON 格式化</span><span style="color:#a3a29d;font-size:11px">格式化</span></div>
+    <div style="height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;color:#3a3936;font-size:13px"><span>识别二维码</span><span style="color:#a3a29d;font-size:11px">二维码</span></div>
+    <div style="height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;color:#3a3936;font-size:13px"><span>JSON 对比</span><span style="color:#a3a29d;font-size:11px">对比</span></div>
+  </div>
+  <main style="flex:1;min-width:0;padding:26px 34px;display:flex;flex-direction:column;gap:22px">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;padding:3px;background:#e8e7e2;border-radius:10px;font-size:13.5px;font-weight:500"><span style="padding:8px 16px;color:#6b6a66">时间戳 → 时间</span><span style="padding:8px 16px;border-radius:8px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.08)">时间 → 时间戳</span></div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#6b6a66">时区 <span style="display:flex;align-items:center;gap:8px;height:36px;padding:0 14px;border:1px solid #e2e1dc;border-radius:9px;background:#fff;color:#1b1b1d"><b style="font-weight:600">北京 / 上海</b><span style="font-family:'Geist Mono',monospace;color:#6b6a66">UTC+08:00</span>▾</span></div>
+    </div>
+    <div style="background:#fff;border:1px solid #e2e1dc;border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;align-items:flex-end;gap:10px;font-family:'Geist Mono',monospace">
+        <div style="display:flex;flex-direction:column;gap:6px"><span style="font:500 11px 'Geist',sans-serif;color:#8a8984">年</span><span style="width:104px;height:64px;display:flex;align-items:center;justify-content:center;border:1px solid #e2e1dc;border-radius:10px;font-size:28px;font-weight:500">2026</span></div>
+        <span style="font-size:26px;color:#c2c1bc;padding-bottom:14px">-</span>
+        <div style="display:flex;flex-direction:column;gap:6px"><span style="font:500 11px 'Geist',sans-serif;color:#8a8984">月</span><span style="width:64px;height:64px;display:flex;align-items:center;justify-content:center;border:1px solid #e2e1dc;border-radius:10px;font-size:28px;font-weight:500">10</span></div>
+        <span style="font-size:26px;color:#c2c1bc;padding-bottom:14px">-</span>
+        <div style="display:flex;flex-direction:column;gap:6px"><span style="font:500 11px 'Geist',sans-serif;color:#8a8984">日</span><span style="width:64px;height:64px;display:flex;align-items:center;justify-content:center;border:1px solid #e2e1dc;border-radius:10px;font-size:28px;font-weight:500">27</span></div>
+        <span style="width:22px"></span>
+        <div style="display:flex;flex-direction:column;gap:6px"><span style="font:500 11px 'Geist',sans-serif;color:oklch(0.48 0.14 160)">时 ↑↓</span><span style="width:64px;height:64px;display:flex;align-items:center;justify-content:center;border:1.5px solid oklch(0.55 0.14 160);box-shadow:0 0 0 3px oklch(0.55 0.14 160 / .14);border-radius:10px;font-size:28px;font-weight:500">09</span></div>
+        <span style="font-size:26px;color:#c2c1bc;padding-bottom:14px">:</span>
+        <div style="display:flex;flex-direction:column;gap:6px"><span style="font:500 11px 'Geist',sans-serif;color:#8a8984">分</span><span style="width:64px;height:64px;display:flex;align-items:center;justify-content:center;border:1px solid #e2e1dc;border-radius:10px;font-size:28px;font-weight:500">00</span></div>
+        <span style="font-size:26px;color:#c2c1bc;padding-bottom:14px">:</span>
+        <div style="display:flex;flex-direction:column;gap:6px"><span style="font:500 11px 'Geist',sans-serif;color:#8a8984">秒</span><span style="width:64px;height:64px;display:flex;align-items:center;justify-content:center;border:1px solid #e2e1dc;border-radius:10px;font-size:28px;font-weight:500">00</span></div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12.5px"><span style="padding:6px 11px;border-radius:8px;background:#f1f0ec">现在</span><span style="padding:6px 11px;border-radius:8px;background:#f1f0ec">今天 0 点</span><span style="padding:6px 11px;border-radius:8px;background:#f1f0ec">明天 0 点</span><span style="padding:6px 11px;border-radius:8px;background:#f1f0ec">本周一</span><span style="padding:6px 11px;border-radius:8px;background:#f1f0ec">本月 1 日</span><span style="margin-left:auto;color:#8a8984">也可直接粘贴整段日期，如 2026/10/27 09:00</span></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:16px">
+      <div style="background:#1b1b1d;color:#f4f3ef;border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:10px"><span style="font-size:12.5px;color:#a9a8a2">秒级时间戳 · 点击复制</span><span style="font:600 52px/1 'Geist Mono',monospace;letter-spacing:-.02em">1793062800</span><span style="font-size:13px;color:#a9a8a2">2026-10-27 09:00:00 周二 · 距现在 17 小时后</span></div>
+      <div style="background:#fff;border:1px solid #e2e1dc;border-radius:16px;padding:8px 18px;display:flex;flex-direction:column;justify-content:center;font-size:13px">
+        <div style="display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid #f0efeb"><span style="color:#6b6a66">毫秒</span><span style="font-family:'Geist Mono',monospace">1793062800000</span></div>
+        <div style="display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid #f0efeb"><span style="color:#6b6a66">ISO</span><span style="font-family:'Geist Mono',monospace">2026-10-27T09:00:00+08:00</span></div>
+        <div style="display:flex;justify-content:space-between;gap:12px;padding:11px 0"><span style="color:#6b6a66">UTC</span><span style="font-family:'Geist Mono',monospace">2026-10-27 01:00:00</span></div>
+      </div>
+    </div>
+  </main>
+</div>
+<div style="width:380px;padding:10px;background:#1b1b1d;border-radius:52px;box-shadow:0 10px 30px rgba(0,0,0,.18)">
+  <div style="height:760px;border-radius:42px;overflow:hidden;background:#f4f3ef;color:#1b1b1d;display:flex;flex-direction:column;font-size:14px">
+    <div style="height:44px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 28px;font:600 14px 'Geist',sans-serif"><span>9:41</span><span style="width:90px;height:26px;border-radius:14px;background:#1b1b1d"></span><span style="font-size:12px">5G ▮</span></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 16px 12px"><span style="font-size:20px;font-weight:600">时间戳</span><span style="display:flex;align-items:center;gap:6px;height:36px;padding:0 12px;border:1px solid #e2e1dc;border-radius:9px;background:#fff;font-size:12.5px">北京 <span style="font-family:'Geist Mono',monospace;color:#6b6a66">+08:00</span>▾</span></div>
+    <div style="flex:1;padding:0 16px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;padding:3px;background:#e8e7e2;border-radius:10px;font-size:13px;font-weight:500"><span style="flex:1;text-align:center;padding:9px 0;color:#6b6a66">时间戳 → 时间</span><span style="flex:1;text-align:center;padding:9px 0;border-radius:8px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.08)">时间 → 时间戳</span></div>
+      <div style="background:#fff;border:1px solid #e2e1dc;border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px;font-family:'Geist Mono',monospace">
+        <div style="display:flex;align-items:center;gap:6px"><span style="flex:1.6;height:52px;display:flex;align-items:center;justify-content:center;border:1px solid #e2e1dc;border-radius:10px;font-size:22px">2026</span><span style="flex:1;height:52px;display:flex;align-items:center;justify-content:center;border:1px solid #e2e1dc;border-radius:10px;font-size:22px">10</span><span style="flex:1;height:52px;display:flex;align-items:center;justify-content:center;border:1px solid #e2e1dc;border-radius:10px;font-size:22px">27</span></div>
+        <div style="display:flex;align-items:center;gap:6px"><span style="flex:1;height:52px;display:flex;align-items:center;justify-content:center;border:1.5px solid oklch(0.55 0.14 160);border-radius:10px;font-size:22px">09</span><span style="color:#c2c1bc">:</span><span style="flex:1;height:52px;display:flex;align-items:center;justify-content:center;border:1px solid #e2e1dc;border-radius:10px;font-size:22px">00</span><span style="color:#c2c1bc">:</span><span style="flex:1;height:52px;display:flex;align-items:center;justify-content:center;border:1px solid #e2e1dc;border-radius:10px;font-size:22px">00</span></div>
+        <div style="display:flex;gap:6px;font:500 12.5px 'Geist','PingFang SC',sans-serif"><span style="flex:1;text-align:center;padding:10px 0;border-radius:8px;background:#f1f0ec">现在</span><span style="flex:1;text-align:center;padding:10px 0;border-radius:8px;background:#f1f0ec">今天 0 点</span><span style="flex:1;text-align:center;padding:10px 0;border-radius:8px;background:#f1f0ec">粘贴</span></div>
+      </div>
+      <div style="background:#1b1b1d;color:#f4f3ef;border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:6px"><span style="font-size:11.5px;color:#a9a8a2">秒 · 点击复制</span><span style="font:600 32px/1 'Geist Mono',monospace">1793062800</span><span style="font-size:12px;color:#a9a8a2;font-family:'Geist Mono',monospace">ms 1793062800000</span></div>
+    </div>
+    <div style="height:84px;flex:none;display:flex;padding:6px 8px 22px;background:#fff;border-top:1px solid #e2e1dc">
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:oklch(0.48 0.14 160);font-weight:600"><span style="font-size:18px">时</span><span style="font-size:10.5px">时间</span></div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#8a8984"><span style="font-size:18px">码</span><span style="font-size:10.5px">二维码</span></div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#8a8984"><span style="font-size:18px">格</span><span style="font-size:10.5px">格式化</span></div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#8a8984"><span style="font-size:18px">比</span><span style="font-size:10.5px">对比</span></div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+</div>
+<p class="dv-next">可以这样回复："用 <a class="dv-oid" href="#1b">1b</a> 的万能输入框 + <a class="dv-oid" href="#1a">1a</a> 的侧栏" · "<a class="dv-oid" href="#1c">1c</a> 的分段日期输入放进 <a class="dv-oid" href="#1a">1a</a>" · "选 <a class="dv-oid" href="#1b">1b</a>，直接做完整原型"</p>
+</section>
+</x-dc>
+</body>
+</html>

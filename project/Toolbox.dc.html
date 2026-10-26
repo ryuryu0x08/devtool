@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<style>
+html,body{margin:0;background:#f6f6f4}
+body{font-family:'Geist','PingFang SC','Hiragino Sans GB','Microsoft YaHei',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+button,input,textarea{font:inherit;color:inherit}
+:root,[data-theme=light]{--bg:#f6f6f4;--side:#fbfbfa;--card:#ffffff;--sub:#f5f4f1;--sel:#ebeae6;--seg:#efeeea;--segOn:#ffffff;--line:#e7e6e2;--line2:#e1e0db;--ink:#1b1b1d;--mut:#6b6a66;--faint:#8f8e89;--gut:#c4c3be;--acc:oklch(0.52 0.2 262);--accInk:#ffffff;--accSoft:oklch(0.97 0.015 262);--accSoft2:oklch(0.94 0.035 262);--accRing:oklch(0.52 0.2 262 / .14);--inv:#1b1b1d;--invInk:#ffffff;--str:oklch(0.5 0.13 150);--num:oklch(0.5 0.19 262);--bool:oklch(0.56 0.15 50);--date:oklch(0.5 0.15 320);--add:oklch(0.48 0.13 150);--addBg:oklch(0.96 0.04 150);--del:oklch(0.52 0.18 25);--delBg:oklch(0.96 0.03 25);--chg:oklch(0.52 0.12 70);--chgBg:oklch(0.97 0.05 90);--shadow:rgba(20,20,15,.14);--scrim:rgba(24,24,20,.28);color-scheme:light}
+[data-theme=dark]{--bg:#121211;--side:#161615;--card:#1b1b1a;--sub:#222220;--sel:#2a2a27;--seg:#262624;--segOn:#3a3a36;--line:#2a2a28;--line2:#33332f;--ink:#ededeb;--mut:#a5a49e;--faint:#7c7b76;--gut:#4a4a46;--acc:oklch(0.72 0.15 262);--accInk:#0d0d14;--accSoft:oklch(0.24 0.035 262);--accSoft2:oklch(0.29 0.05 262);--accRing:oklch(0.72 0.15 262 / .2);--inv:#ededeb;--invInk:#121211;--str:oklch(0.8 0.13 150);--num:oklch(0.78 0.12 262);--bool:oklch(0.8 0.12 60);--date:oklch(0.8 0.11 320);--add:oklch(0.8 0.13 150);--addBg:oklch(0.27 0.05 150);--del:oklch(0.76 0.13 25);--delBg:oklch(0.28 0.05 25);--chg:oklch(0.82 0.12 85);--chgBg:oklch(0.29 0.05 80);--shadow:rgba(0,0,0,.5);--scrim:rgba(0,0,0,.5);color-scheme:dark}
+a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
+input::placeholder,textarea::placeholder{color:var(--faint)}
+</style>
+</helmet>
+<div data-theme="{{ themeAttr }}" style="display:flex;min-height:100vh;width:100%;background:var(--bg);color:var(--ink);font-size:14px">
+
+<sc-if value="{{ wide }}" hint-placeholder-val="{{ true }}">
+<aside style="width:{{ sideW }}px;flex:none;position:sticky;top:0;height:100vh;border-right:1px solid var(--line);background:var(--side);padding:14px 10px;transition:width .18s ease;overflow:hidden">
+<sc-if value="{{ sideOpen }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;height:100%;width:211px">
+  <div style="display:flex;align-items:center;gap:9px;padding:2px 2px 14px 8px">
+    <span style="width:26px;height:26px;flex:none;border-radius:7px;background:var(--inv);color:var(--invInk);display:flex;align-items:center;justify-content:center;font:600 11px 'Geist Mono',monospace">TB</span>
+    <span style="font-weight:600;font-size:15px;flex:1">{{ t.brand }}</span>
+    <button onClick="{{ toggleSide }}" title="{{ t.collapse }}" style="width:30px;height:30px;border:0;border-radius:7px;background:transparent;color:var(--faint);cursor:pointer;font-size:16px;line-height:1" style-hover="background:var(--sel);color:var(--ink)">«</button>
+  </div>
+  <button onClick="{{ openPalette }}" style="display:flex;align-items:center;justify-content:space-between;width:100%;height:36px;padding:0 8px 0 12px;border:1px solid var(--line2);border-radius:9px;background:var(--card);color:var(--faint);font-size:13px;cursor:pointer" style-hover="border-color:var(--faint)"><span>{{ t.search }}</span><span style="font:500 11px 'Geist Mono',monospace;padding:2px 6px;border:1px solid var(--line);border-radius:5px;color:var(--mut)">{{ kbdK }}</span></button>
+  <nav style="display:flex;flex-direction:column;flex:1;overflow:auto;margin:0 -4px;padding:0 4px">
+    <sc-for list="{{ nav }}" as="cat" hint-placeholder-count="4">
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <div style="padding:16px 10px 6px;font-size:11px;font-weight:500;color:var(--faint);letter-spacing:.04em">{{ cat.name }}</div>
+        <sc-for list="{{ cat.items }}" as="it" hint-placeholder-count="2">
+          <button onClick="{{ it.go }}" style="display:flex;align-items:center;gap:10px;width:100%;height:36px;padding:0 10px;border:0;border-radius:8px;background:{{ it.bg }};cursor:pointer;text-align:left;font-size:14px;font-weight:{{ it.weight }}" style-hover="background:var(--sel)">
+            <span style="width:24px;height:24px;flex:none;border-radius:6px;display:flex;align-items:center;justify-content:center;background:{{ it.iconBg }};color:{{ it.iconColor }};font:600 10.5px 'Geist Mono',monospace">{{ it.icon }}</span>
+            <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ it.name }}</span>
+          </button>
+        </sc-for>
+      </div>
+    </sc-for>
+  </nav>
+  <div style="display:flex;flex-direction:column;gap:10px;padding-top:12px">
+    <div style="padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:12px;line-height:1.55;color:var(--mut)"><div style="font-weight:600;color:var(--ink);margin-bottom:2px">{{ t.smartTitle }}</div>{{ smartBody }}</div>
+    <div style="display:flex;gap:6px">
+      <div style="display:flex;padding:2px;gap:2px;background:var(--seg);border-radius:8px">
+        <sc-for list="{{ langSeg }}" as="o" hint-placeholder-count="2"><button onClick="{{ o.onClick }}" style="height:26px;padding:0 9px;border:0;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;background:{{ o.bg }};color:{{ o.color }};box-shadow:{{ o.sh }}">{{ o.label }}</button></sc-for>
+      </div>
+      <div style="display:flex;padding:2px;gap:2px;background:var(--seg);border-radius:8px">
+        <sc-for list="{{ themeSeg }}" as="o" hint-placeholder-count="3"><button onClick="{{ o.onClick }}" style="height:26px;padding:0 9px;border:0;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;background:{{ o.bg }};color:{{ o.color }};box-shadow:{{ o.sh }}">{{ o.label }}</button></sc-for>
+      </div>
+    </div>
+  </div>
+</div>
+</sc-if>
+<sc-if value="{{ sideClosed }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;align-items:center;height:100%;gap:6px;width:43px">
+  <button onClick="{{ toggleSide }}" title="{{ t.expand }}" style="width:32px;height:32px;border:0;border-radius:8px;background:var(--inv);color:var(--invInk);cursor:pointer;font:600 11px 'Geist Mono',monospace;margin:0 0 8px">TB</button>
+  <button onClick="{{ openPalette }}" title="{{ t.search }}" style="width:40px;height:34px;border:1px solid var(--line2);border-radius:9px;background:var(--card);color:var(--mut);cursor:pointer;font:500 10.5px 'Geist Mono',monospace" style-hover="border-color:var(--faint)">{{ kbdShort }}</button>
+  <sc-for list="{{ nav }}" as="cat" hint-placeholder-count="4">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:4px;width:40px;padding-top:8px;margin-top:4px;border-top:1px solid var(--line)">
+      <sc-for list="{{ cat.items }}" as="it" hint-placeholder-count="2">
+        <button onClick="{{ it.go }}" title="{{ it.name }}" style="width:40px;height:40px;border:0;border-radius:10px;background:{{ it.bg }};cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:var(--sel)"><span style="width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;background:{{ it.iconBg }};color:{{ it.iconColor }};font:600 10.5px 'Geist Mono',monospace">{{ it.icon }}</span></button>
+      </sc-for>
+    </div>
+  </sc-for>
+  <div style="margin-top:auto;display:flex;flex-direction:column;gap:6px;align-items:center">
+    <button onClick="{{ toggleLang }}" title="中 / EN" style="width:44px;height:30px;border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--mut);cursor:pointer;font-size:11.5px;font-weight:500" style-hover="color:var(--ink)">{{ langBtn }}</button>
+    <button onClick="{{ cycleTheme }}" title="{{ themeTitle }}" style="width:44px;height:30px;border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--mut);cursor:pointer;font-size:11.5px;font-weight:500" style-hover="color:var(--ink)">{{ themeShort }}</button>
+    <button onClick="{{ toggleSide }}" title="{{ t.expand }}" style="width:44px;height:30px;border:0;border-radius:8px;background:transparent;color:var(--faint);cursor:pointer;font-size:16px" style-hover="background:var(--sel);color:var(--ink)">»</button>
+  </div>
+</div>
+</sc-if>
+</aside>
+</sc-if>
+
+<main style="flex:1;min-width:0;display:flex;flex-direction:column">
+<sc-if value="{{ narrow }}" hint-placeholder-val="{{ false }}">
+  <div style="position:sticky;top:0;z-index:30;background:var(--bg);border-bottom:1px solid var(--line)">
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px 8px 14px">
+      <span style="width:28px;height:28px;flex:none;border-radius:8px;background:var(--inv);color:var(--invInk);display:flex;align-items:center;justify-content:center;font:600 11px 'Geist Mono',monospace">TB</span>
+      <span style="font-weight:600;font-size:16px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ curName }}</span>
+      <button onClick="{{ toggleLang }}" style="width:44px;height:44px;border:0;border-radius:10px;background:transparent;color:var(--mut);font-size:13px;font-weight:500;cursor:pointer">{{ langBtn }}</button>
+      <button onClick="{{ cycleTheme }}" style="min-width:44px;height:44px;padding:0 6px;border:0;border-radius:10px;background:transparent;color:var(--mut);font-size:13px;font-weight:500;cursor:pointer">{{ themeShort }}</button>
+      <button onClick="{{ openPalette }}" style="height:44px;padding:0 14px;border:1px solid var(--line2);border-radius:10px;background:var(--card);font-size:13px;font-weight:500;cursor:pointer">{{ t.searchShort }}</button>
+    </div>
+    <div style="display:flex;gap:6px;overflow-x:auto;padding:0 14px 10px;scrollbar-width:none">
+      <sc-for list="{{ mChips }}" as="c" hint-placeholder-count="6"><button onClick="{{ c.go }}" style="flex:none;height:40px;padding:0 14px;border:1px solid {{ c.bd }};border-radius:999px;background:{{ c.bg }};color:{{ c.color }};font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap">{{ c.label }}</button></sc-for>
+    </div>
+  </div>
+</sc-if>
+
+<div style="width:100%;max-width:1320px;margin:0 auto;padding:{{ pad }};display:flex;flex-direction:column;gap:18px">
+<sc-if value="{{ wide }}" hint-placeholder-val="{{ true }}">
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap">
+    <div><div style="font-size:12px;color:var(--faint)">{{ curCat }} / {{ curName }}</div><h1 style="margin:4px 0 0;font-size:22px;font-weight:600;letter-spacing:-.01em">{{ curName }}</h1></div>
+    <div style="font-size:13px;color:var(--mut)">{{ curDesc }}</div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ isTs }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 14px">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px;color:var(--mut)">
+      <span style="margin-right:2px">{{ t.now }}</span>
+      <button onClick="{{ copyNowS }}" title="{{ t.copy }}" style="height:30px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);font:500 13px 'Geist Mono',monospace;cursor:pointer" style-hover="border-color:var(--acc);color:var(--acc)">{{ nowS }}</button>
+      <button onClick="{{ copyNowMs }}" title="{{ t.copy }}" style="height:30px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);font:500 13px 'Geist Mono',monospace;cursor:pointer" style-hover="border-color:var(--acc);color:var(--acc)">{{ nowMs }}</button>
+      <span>{{ nowText }}</span>
+    </div>
+    <div style="position:relative">
+      <button onClick="{{ toggleTz }}" style="display:flex;align-items:center;gap:8px;height:38px;padding:0 12px 0 14px;border:1px solid var(--line2);border-radius:999px;background:var(--card);cursor:pointer;font-size:13px" style-hover="border-color:var(--faint)">
+        <span style="width:7px;height:7px;border-radius:50%;background:var(--acc)"></span>
+        <span style="font-weight:600">{{ tzLabel }}</span>
+        <span style="font-family:'Geist Mono',monospace;color:var(--mut)">{{ tzOff }}</span>
+        <span style="color:var(--faint)">▾</span>
+      </button>
+      <sc-if value="{{ tzOpen }}" hint-placeholder-val="{{ false }}">
+        <div onClick="{{ closeTz }}" style="position:fixed;inset:0;z-index:40"></div>
+        <div style="position:absolute;right:0;top:46px;z-index:41;width:340px;max-width:calc(100vw - 28px);background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 36px var(--shadow);overflow:hidden">
+          <div style="padding:10px;border-bottom:1px solid var(--line)"><input autoFocus="{{ true }}" value="{{ tzQ }}" onChange="{{ onTzQ }}" onKeyDown="{{ onTzKey }}" placeholder="{{ t.tzSearch }}" style="width:100%;height:36px;padding:0 12px;border:1px solid var(--line2);border-radius:8px;background:var(--bg);outline:none;font-size:13px"></div>
+          <div style="max-height:340px;overflow:auto;padding:6px">
+            <sc-for list="{{ tzItems }}" as="z" hint-placeholder-count="6">
+              <sc-if value="{{ z.header }}"><div style="padding:8px 10px 4px;font-size:11px;font-weight:500;color:var(--faint)">{{ z.title }}</div></sc-if>
+              <sc-if value="{{ z.item }}"><button onClick="{{ z.onClick }}" style="width:100%;display:flex;align-items:center;gap:10px;padding:8px 10px;border:0;border-radius:8px;background:{{ z.bg }};cursor:pointer;text-align:left" style-hover="background:var(--sub)">
+                <span style="display:flex;flex-direction:column;gap:1px;flex:1;min-width:0"><span style="font-size:13.5px;font-weight:500">{{ z.label }}</span><span style="font-size:11.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ z.sub }}</span></span>
+                <span style="font:500 12px 'Geist Mono',monospace;color:var(--mut)">{{ z.off }}</span>
+                <span style="width:14px;color:var(--acc);font-weight:600">{{ z.check }}</span>
+              </button></sc-if>
+            </sc-for>
+            <sc-if value="{{ tzNone }}"><div style="padding:18px 10px;text-align:center;font-size:13px;color:var(--faint)">{{ t.tzNone }}</div></sc-if>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,400px),1fr));gap:16px;align-items:start">
+    <section style="background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:14px;min-width:0">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <h2 style="margin:0;font-size:14px;font-weight:600">{{ t.ts2t }} <span style="color:var(--faint);font-weight:400">→</span> {{ t.t2ts }}</h2>
+        <div style="display:flex;padding:2px;gap:2px;background:var(--seg);border-radius:8px">
+          <sc-for list="{{ unitSeg }}" as="o" hint-placeholder-count="3"><button onClick="{{ o.onClick }}" style="height:26px;padding:0 10px;border:0;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;background:{{ o.bg }};color:{{ o.color }};box-shadow:{{ o.sh }}">{{ o.label }}</button></sc-for>
+        </div>
+      </div>
+      <input data-autofocus="1" value="{{ tsIn }}" onChange="{{ onTsIn }}" inputMode="numeric" spellCheck="false" placeholder="{{ t.tsPh }}" style="width:100%;height:52px;padding:0 14px;border:1px solid var(--line2);border-radius:10px;background:var(--bg);font:500 20px 'Geist Mono',monospace;outline:none" style-focus="border-color:var(--acc);background:var(--card);box-shadow:0 0 0 3px var(--accRing)">
+      <sc-if value="{{ tsOk }}">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <button onClick="{{ copyTsMain }}" style="display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:14px;border:0;border-radius:10px;background:var(--accSoft);cursor:pointer;text-align:left;margin-bottom:4px" style-hover="background:var(--accSoft2)">
+            <span style="font-size:12px;color:var(--mut)">{{ tsNote }}</span>
+            <span style="font:600 clamp(22px,3vw,30px)/1.15 'Geist Mono',monospace;letter-spacing:-.01em;word-break:break-all">{{ tsMain }}<span style="color:var(--faint);font-weight:500">{{ tsMainMs }}</span></span>
+            <span style="font-size:13px;color:var(--mut)">{{ tsSub }}</span>
+          </button>
+          <sc-for list="{{ tsRows }}" as="r" hint-placeholder-count="4">
+            <button onClick="{{ r.copy }}" style="display:grid;grid-template-columns:76px minmax(0,1fr) auto;align-items:center;gap:12px;width:100%;padding:8px 10px;border:0;border-radius:8px;background:transparent;cursor:pointer;text-align:left" style-hover="background:var(--sub)">
+              <span style="font-size:12.5px;color:var(--mut)">{{ r.label }}</span>
+              <span style="font:13.5px 'Geist Mono','PingFang SC',monospace;word-break:break-all">{{ r.value }}</span>
+              <span style="font-size:11px;color:var(--faint)">{{ t.copy }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ tsErr }}"><div style="font-size:13px;color:var(--del);padding:2px">{{ tsErrText }}</div></sc-if>
+      <sc-if value="{{ tsEmpty }}"><div style="font-size:13px;color:var(--faint);padding:2px">{{ t.tsEmpty }}</div></sc-if>
+    </section>
+
+    <section style="background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:14px;min-width:0">
+      <h2 style="margin:0;font-size:14px;font-weight:600;line-height:30px">{{ t.t2ts }} <span style="color:var(--faint);font-weight:400">→</span> {{ t.ts2t }}</h2>
+      <input value="{{ tmIn }}" onChange="{{ onTmIn }}" onKeyDown="{{ onTmKey }}" spellCheck="false" placeholder="{{ t.tmPh }}" style="width:100%;height:52px;padding:0 14px;border:1px solid var(--line2);border-radius:10px;background:var(--bg);font:500 20px 'Geist Mono','PingFang SC',monospace;outline:none" style-focus="border-color:var(--acc);background:var(--card);box-shadow:0 0 0 3px var(--accRing)">
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        <sc-for list="{{ tmQuick }}" as="q" hint-placeholder-count="8"><button onClick="{{ q.onClick }}" style="height:30px;padding:0 11px;border:1px solid var(--line);border-radius:999px;background:var(--card);font-size:12.5px;color:var(--ink);cursor:pointer" style-hover="background:var(--sub);border-color:var(--faint)">{{ q.label }}</button></sc-for>
+      </div>
+      <sc-if value="{{ tmOk }}">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <button onClick="{{ copyTmMain }}" style="display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:14px;border:0;border-radius:10px;background:var(--accSoft);cursor:pointer;text-align:left;margin-bottom:4px" style-hover="background:var(--accSoft2)">
+            <span style="font-size:12px;color:var(--mut)">{{ tmNote }}</span>
+            <span style="display:flex;align-items:baseline;gap:8px"><span style="font:600 clamp(22px,3vw,30px)/1.15 'Geist Mono',monospace;letter-spacing:-.01em">{{ tmSec }}</span><span style="font-size:13px;color:var(--mut)">{{ t.sec }}</span></span>
+            <span style="font-size:13px;color:var(--mut)">{{ tmSub }}</span>
+          </button>
+          <sc-for list="{{ tmRows }}" as="r" hint-placeholder-count="3">
+            <button onClick="{{ r.copy }}" style="display:grid;grid-template-columns:76px minmax(0,1fr) auto;align-items:center;gap:12px;width:100%;padding:8px 10px;border:0;border-radius:8px;background:transparent;cursor:pointer;text-align:left" style-hover="background:var(--sub)">
+              <span style="font-size:12.5px;color:var(--mut)">{{ r.label }}</span>
+              <span style="font:13.5px 'Geist Mono',monospace;word-break:break-all">{{ r.value }}</span>
+              <span style="font-size:11px;color:var(--faint)">{{ t.copy }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ tmErr }}"><div style="font-size:13px;color:var(--del);padding:2px;line-height:1.5">{{ t.tmErr }}</div></sc-if>
+      <div style="font-size:12px;color:var(--faint);line-height:1.5">{{ t.tmHint }}</div>
+    </section>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isQrGen }}" hint-placeholder-val="{{ false }}">
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:16px;align-items:start">
+  <section style="background:var(--card);border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;overflow:hidden;min-width:0">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line)"><span style="font-size:13px;font-weight:600">{{ t.qrContent }}</span><span style="display:flex;align-items:center;gap:10px"><span style="font:12px 'Geist Mono',monospace;color:var(--faint)">{{ qrBytes }}</span><button onClick="{{ clearQr }}" style="height:28px;padding:0 10px;border:1px solid var(--line);border-radius:7px;background:transparent;font-size:12px;cursor:pointer" style-hover="background:var(--sub)">{{ t.clear }}</button></span></div>
+    <textarea data-autofocus="1" value="{{ qrText }}" onChange="{{ onQrText }}" spellCheck="false" placeholder="{{ t.qrPh }}" style="width:100%;min-height:300px;padding:16px;border:0;outline:none;resize:vertical;background:transparent;font:14px/1.6 'Geist Mono','PingFang SC',monospace"></textarea>
+  </section>
+  <section style="background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;display:flex;flex-direction:column;align-items:center;gap:18px;min-width:0">
+    <div style="width:100%;max-width:300px;aspect-ratio:1;background:#ffffff;border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:center">
+      <sc-if value="{{ qrHas }}"><svg viewBox="{{ qrViewBox }}" shapeRendering="crispEdges" style="width:100%;height:100%;display:block"><path d="{{ qrPath }}" fill="#111111"></path></svg></sc-if>
+      <sc-if value="{{ qrEmpty }}"><span style="font-size:13px;color:#8f8e89;text-align:center">{{ qrEmptyText }}</span></sc-if>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center">
+      <span style="font-size:12.5px;color:var(--mut)">{{ t.ec }}</span>
+      <div style="display:flex;padding:2px;gap:2px;background:var(--seg);border-radius:8px">
+        <sc-for list="{{ ecSeg }}" as="o" hint-placeholder-count="4"><button onClick="{{ o.onClick }}" title="{{ o.title }}" style="height:28px;min-width:36px;padding:0 10px;border:0;border-radius:6px;font:500 12.5px 'Geist Mono',monospace;cursor:pointer;background:{{ o.bg }};color:{{ o.color }};box-shadow:{{ o.sh }}">{{ o.label }}</button></sc-for>
+      </div>
+      <span style="font:12px 'Geist Mono',monospace;color:var(--faint)">{{ qrInfo }}</span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+      <button onClick="{{ downloadQr }}" style="height:38px;padding:0 16px;border:1px solid var(--inv);border-radius:9px;background:var(--inv);color:var(--invInk);font-size:13px;font-weight:500;cursor:pointer" style-hover="opacity:.88">{{ t.dlPng }}</button>
+      <button onClick="{{ copyQrImg }}" style="height:38px;padding:0 16px;border:1px solid var(--line2);border-radius:9px;background:var(--card);font-size:13px;font-weight:500;cursor:pointer" style-hover="background:var(--sub)">{{ t.copyImg }}</button>
+      <button onClick="{{ copyQrText }}" style="height:38px;padding:0 16px;border:1px solid var(--line2);border-radius:9px;background:var(--card);font-size:13px;font-weight:500;cursor:pointer" style-hover="background:var(--sub)">{{ t.copyText }}</button>
+    </div>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isQrScan }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <sc-if value="{{ scanEmpty }}">
+    <button onClick="{{ pickFile }}" style="width:100%;min-height:340px;border:1.5px dashed var(--line2);border-radius:16px;background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;cursor:pointer;text-align:center;padding:32px" style-hover="border-color:var(--acc);background:var(--accSoft)">
+      <span style="font:600 22px 'Geist Mono',monospace;padding:10px 18px;border:1px solid var(--line2);border-radius:12px;background:var(--bg);box-shadow:0 2px 0 var(--line2)">{{ pasteKey }}</span>
+      <span style="font-size:17px;font-weight:600">{{ t.dropTitle }}</span>
+      <span style="font-size:13px;color:var(--mut)">{{ t.dropSub }}</span>
+    </button>
+  </sc-if>
+  <sc-if value="{{ scanHas }}">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:16px;align-items:start">
+      <section style="background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px;min-width:0">
+        <div style="position:relative;line-height:0;border-radius:8px;overflow:hidden;background:var(--sub)">
+          <img src="{{ scanSrc }}" alt="" style="width:100%;height:auto;display:block;max-height:560px;object-fit:contain">
+          <sc-for list="{{ codes }}" as="c" hint-placeholder-count="0">
+            <div style="position:absolute;left:{{ c.l }}%;top:{{ c.t }}%;width:{{ c.w }}%;height:{{ c.h }}%;border:2px solid oklch(0.6 0.2 262);border-radius:6px;background:oklch(0.6 0.2 262 / .12)"><span style="position:absolute;left:-2px;top:-2px;min-width:22px;height:22px;padding:0 6px;border-radius:6px 0 6px 0;background:oklch(0.52 0.2 262);color:#fff;font:600 12px/22px 'Geist Mono',monospace;text-align:center">{{ c.n }}</span></div>
+          </sc-for>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span style="font-size:12.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ scanName }}</span><button onClick="{{ pickFile }}" style="flex:none;height:32px;padding:0 12px;border:1px solid var(--line2);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:500;cursor:pointer" style-hover="background:var(--sub)">{{ t.another }}</button></div>
+      </section>
+      <section style="display:flex;flex-direction:column;gap:10px;min-width:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:32px"><span style="font-size:15px;font-weight:600">{{ scanTitle }}</span><sc-if value="{{ scanMulti }}"><button onClick="{{ copyAllCodes }}" style="height:32px;padding:0 12px;border:1px solid var(--line2);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:500;cursor:pointer" style-hover="background:var(--sub)">{{ t.copyAll }}</button></sc-if></div>
+        <sc-if value="{{ scanNone }}"><div style="padding:18px;border:1px solid var(--line);border-radius:12px;background:var(--card);font-size:13px;color:var(--mut);line-height:1.6">{{ t.notFoundSub }}</div></sc-if>
+        <sc-for list="{{ codes }}" as="c" hint-placeholder-count="1">
+          <div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:center;gap:8px"><span style="min-width:22px;height:22px;padding:0 6px;border-radius:6px;background:var(--acc);color:var(--accInk);font:600 12px/22px 'Geist Mono',monospace;text-align:center">{{ c.n }}</span><span style="font-size:12px;color:var(--mut);padding:2px 8px;border-radius:999px;background:var(--seg)">{{ c.kind }}</span></div>
+            <div style="font:14px/1.55 'Geist Mono','PingFang SC',monospace;word-break:break-all;white-space:pre-wrap">{{ c.text }}</div>
+            <div style="display:flex;gap:8px">
+              <button onClick="{{ c.copy }}" style="height:32px;padding:0 14px;border:1px solid var(--inv);border-radius:8px;background:var(--inv);color:var(--invInk);font-size:12.5px;font-weight:500;cursor:pointer">{{ t.copy }}</button>
+              <sc-if value="{{ c.isUrl }}"><a href="{{ c.text }}" target="_blank" rel="noopener" style="height:32px;padding:0 14px;border:1px solid var(--line2);border-radius:8px;display:inline-flex;align-items:center;font-size:12.5px;font-weight:500;color:var(--ink)">{{ t.open }} ↗</a></sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </section>
+    </div>
+  </sc-if>
+  <input type="file" accept="image/*" ref="{{ fileRef }}" onChange="{{ onFile }}" style="display:none">
+</div>
+</sc-if>
+
+<sc-if value="{{ isFmt }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:12px">
+  <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+    <button onClick="{{ fmtSample }}" style="height:32px;padding:0 12px;border:1px solid var(--line2);border-radius:8px;background:var(--card);font-size:13px;font-weight:500;cursor:pointer" style-hover="background:var(--sub)">{{ t.sample }}</button>
+    <button onClick="{{ fmtClear }}" style="height:32px;padding:0 12px;border:1px solid var(--line2);border-radius:8px;background:var(--card);font-size:13px;font-weight:500;cursor:pointer" style-hover="background:var(--sub)">{{ t.clear }}</button>
+    <span style="width:1px;height:20px;background:var(--line);margin:0 4px"></span>
+    <sc-if value="{{ isJson }}">
+      <div style="display:flex;padding:2px;gap:2px;background:var(--seg);border-radius:8px">
+        <sc-for list="{{ indentSeg }}" as="o" hint-placeholder-count="3"><button onClick="{{ o.onClick }}" style="height:28px;padding:0 10px;border:0;border-radius:6px;font-size:12.5px;font-weight:500;cursor:pointer;background:{{ o.bg }};color:{{ o.color }};box-shadow:{{ o.sh }}">{{ o.label }}</button></sc-for>
+      </div>
+    </sc-if>
+    <button onClick="{{ toggleSort }}" style="height:32px;padding:0 12px;border:1px solid {{ sortBd }};border-radius:8px;background:{{ sortBg }};color:{{ sortColor }};font-size:13px;font-weight:500;cursor:pointer">{{ sortMark }} {{ t.sortKeys }}</button>
+    <sc-if value="{{ isJson }}"><button onClick="{{ copyMin }}" style="height:32px;padding:0 12px;border:1px solid var(--line2);border-radius:8px;background:var(--card);font-size:13px;font-weight:500;cursor:pointer" style-hover="background:var(--sub)">{{ t.minify }}</button></sc-if>
+    <button onClick="{{ convert }}" style="height:32px;padding:0 12px;border:1px solid var(--line2);border-radius:8px;background:var(--card);font-size:13px;font-weight:500;cursor:pointer" style-hover="background:var(--sub)">{{ convertLabel }}</button>
+    <span style="flex:1"></span>
+    <div style="display:flex;padding:2px;gap:2px;background:var(--seg);border-radius:8px">
+      <sc-for list="{{ viewSeg }}" as="o" hint-placeholder-count="2"><button onClick="{{ o.onClick }}" style="height:28px;padding:0 12px;border:0;border-radius:6px;font-size:12.5px;font-weight:500;cursor:pointer;background:{{ o.bg }};color:{{ o.color }};box-shadow:{{ o.sh }}">{{ o.label }}</button></sc-for>
+    </div>
+    <button onClick="{{ copyOut }}" style="height:32px;padding:0 14px;border:1px solid var(--inv);border-radius:8px;background:var(--inv);color:var(--invInk);font-size:13px;font-weight:500;cursor:pointer" style-hover="opacity:.88">{{ t.copyResult }}</button>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px;align-items:stretch">
+    <section style="background:var(--card);border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;overflow:hidden;min-width:0">
+      <div style="display:flex;align-items:center;justify-content:space-between;height:44px;padding:0 16px;border-bottom:1px solid var(--line)"><span style="font-size:13px;font-weight:600">{{ t.input }} {{ fmtLangName }}</span><span style="font:12px 'Geist Mono',monospace;color:var(--faint)">{{ inSize }}</span></div>
+      <textarea data-autofocus="1" value="{{ fmtInput }}" onChange="{{ onFmtInput }}" spellCheck="false" placeholder="{{ fmtPh }}" style="flex:1;width:100%;min-height:{{ taH }}px;padding:14px 16px;border:0;outline:none;resize:vertical;background:transparent;font:13px/1.65 'Geist Mono',monospace;white-space:pre;overflow:auto"></textarea>
+    </section>
+    <section style="background:var(--card);border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;overflow:hidden;min-width:0">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;padding:6px 10px 6px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap">
+        <span style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500"><span style="width:7px;height:7px;border-radius:50%;background:{{ statusColor }}"></span>{{ fmtStatus }}</span>
+        <sc-if value="{{ isTree }}"><div style="display:flex;gap:2px">
+          <sc-for list="{{ levelBtns }}" as="b" hint-placeholder-count="4"><button onClick="{{ b.onClick }}" style="height:28px;padding:0 9px;border:0;border-radius:6px;background:transparent;font-size:12px;color:var(--mut);cursor:pointer" style-hover="background:var(--sub);color:var(--ink)">{{ b.label }}</button></sc-for>
+        </div></sc-if>
+      </div>
+      <div style="flex:1;max-height:{{ outMaxH }};min-height:{{ taH }}px;overflow:auto;padding:10px 0;font:13px/22px 'Geist Mono',monospace">
+        <sc-if value="{{ isTree }}">
+          <sc-for list="{{ treeRows }}" as="r" hint-placeholder-count="10">
+            <div onClick="{{ r.select }}" style="display:flex;align-items:flex-start;background:{{ r.bg }}" style-hover="background:var(--sub)">
+              <span style="width:46px;flex:none;text-align:right;padding-right:12px;color:var(--gut);user-select:none;font-size:11.5px">{{ r.n }}</span>
+              <div style="display:flex;align-items:flex-start;padding-left:{{ r.indent }}px;min-width:0;flex:1;padding-right:14px">
+                <span onClick="{{ r.toggle }}" style="width:16px;flex:none;color:var(--faint);cursor:pointer;user-select:none;text-align:center;font-size:10px">{{ r.caret }}</span>
+                <span style="color:{{ r.keyColor }};white-space:pre">{{ r.keyText }}</span><span style="color:var(--faint);white-space:pre">{{ r.colon }}</span><span style="color:{{ r.valColor }};word-break:break-all;white-space:pre-wrap">{{ r.valText }}</span><span style="color:var(--faint)">{{ r.comma }}</span><span style="color:var(--faint);font:11.5px/22px 'Geist',sans-serif;padding-left:8px;white-space:nowrap">{{ r.meta }}</span>
+              </div>
+            </div>
+          </sc-for>
+          <sc-if value="{{ treeCapped }}"><div style="padding:8px 16px;font:12px 'Geist',sans-serif;color:var(--faint)">{{ treeCapText }}</div></sc-if>
+        </sc-if>
+        <sc-if value="{{ isText }}"><pre style="margin:0;padding:4px 16px;font:inherit;white-space:pre-wrap;word-break:break-all">{{ outText }}</pre></sc-if>
+        <sc-if value="{{ fmtErr }}">
+          <div style="margin:6px 16px;padding:14px 16px;border-radius:10px;background:var(--delBg);color:var(--del);display:flex;flex-direction:column;gap:8px">
+            <span style="font:600 13px 'Geist',sans-serif">{{ errWhere }}</span>
+            <span style="font:12.5px/1.5 'Geist Mono',monospace;color:var(--ink);opacity:.8;word-break:break-word">{{ errMsg }}</span>
+            <pre style="margin:0;font:12.5px/1.5 'Geist Mono',monospace;color:var(--ink);white-space:pre;overflow:auto">{{ errLine }}
+<span style="color:var(--del);font-weight:700">{{ errCaret }}</span></pre>
+          </div>
+        </sc-if>
+        <sc-if value="{{ fmtWait }}"><div style="padding:30px 16px;text-align:center;font:13px 'Geist',sans-serif;color:var(--faint)">{{ fmtWaitText }}</div></sc-if>
+      </div>
+      <sc-if value="{{ hasSel }}">
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 10px 8px 16px;border-top:1px solid var(--line);background:var(--sub);flex-wrap:wrap">
+          <span style="font:500 12.5px 'Geist Mono',monospace;color:var(--acc);word-break:break-all;flex:1;min-width:120px">{{ selPath }}</span>
+          <button onClick="{{ copySelPath }}" style="height:28px;padding:0 10px;border:1px solid var(--line2);border-radius:7px;background:var(--card);font-size:12px;cursor:pointer">{{ t.copyPath }}</button>
+          <button onClick="{{ copySelValue }}" style="height:28px;padding:0 10px;border:1px solid var(--line2);border-radius:7px;background:var(--card);font-size:12px;cursor:pointer">{{ t.copyValue }}</button>
+          <button onClick="{{ clearSel }}" style="width:28px;height:28px;border:0;border-radius:7px;background:transparent;color:var(--faint);cursor:pointer">×</button>
+        </div>
+      </sc-if>
+      <sc-if value="{{ noSel }}"><div style="padding:8px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--faint)">{{ t.pathHint }}</div></sc-if>
+    </section>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isDiff }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:12px">
+  <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+    <sc-for list="{{ diffToggles }}" as="o" hint-placeholder-count="2"><button onClick="{{ o.onClick }}" style="height:32px;padding:0 12px;border:1px solid {{ o.bd }};border-radius:8px;background:{{ o.bg }};color:{{ o.color }};font-size:13px;font-weight:500;cursor:pointer">{{ o.mark }} {{ o.label }}</button></sc-for>
+    <span style="width:1px;height:20px;background:var(--line);margin:0 4px"></span>
+    <button onClick="{{ swapAB }}" style="height:32px;padding:0 12px;border:1px solid var(--line2);border-radius:8px;background:var(--card);font-size:13px;font-weight:500;cursor:pointer" style-hover="background:var(--sub)">⇄ {{ t.swap }}</button>
+    <button onClick="{{ diffSample }}" style="height:32px;padding:0 12px;border:1px solid var(--line2);border-radius:8px;background:var(--card);font-size:13px;font-weight:500;cursor:pointer" style-hover="background:var(--sub)">{{ t.sample }}</button>
+    <button onClick="{{ diffClear }}" style="height:32px;padding:0 12px;border:1px solid var(--line2);border-radius:8px;background:var(--card);font-size:13px;font-weight:500;cursor:pointer" style-hover="background:var(--sub)">{{ t.clear }}</button>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:16px">
+    <section style="background:var(--card);border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;overflow:hidden;min-width:0">
+      <div style="display:flex;align-items:center;justify-content:space-between;height:42px;padding:0 16px;border-bottom:1px solid var(--line)"><span style="font-size:13px;font-weight:600">{{ t.a }}</span><span style="font-size:12px;color:{{ aColor }}">{{ aStatus }}</span></div>
+      <textarea data-autofocus="1" value="{{ diffA }}" onChange="{{ onDiffA }}" spellCheck="false" placeholder="JSON / TOML" style="width:100%;min-height:200px;padding:12px 16px;border:0;outline:none;resize:vertical;background:transparent;font:13px/1.6 'Geist Mono',monospace;white-space:pre;overflow:auto"></textarea>
+    </section>
+    <section style="background:var(--card);border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;overflow:hidden;min-width:0">
+      <div style="display:flex;align-items:center;justify-content:space-between;height:42px;padding:0 16px;border-bottom:1px solid var(--line)"><span style="font-size:13px;font-weight:600">{{ t.b }}</span><span style="font-size:12px;color:{{ bColor }}">{{ bStatus }}</span></div>
+      <textarea value="{{ diffB }}" onChange="{{ onDiffB }}" spellCheck="false" placeholder="JSON / TOML" style="width:100%;min-height:200px;padding:12px 16px;border:0;outline:none;resize:vertical;background:transparent;font:13px/1.6 'Geist Mono',monospace;white-space:pre;overflow:auto"></textarea>
+    </section>
+  </div>
+  <section style="background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 10px 10px 16px;border-bottom:1px solid var(--line)">
+      <sc-if value="{{ diffHas }}"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <span style="padding:4px 10px;border-radius:999px;background:var(--addBg);color:var(--add);font-size:12.5px;font-weight:600">+ {{ nAdd }} {{ t.added }}</span>
+        <span style="padding:4px 10px;border-radius:999px;background:var(--delBg);color:var(--del);font-size:12.5px;font-weight:600">− {{ nDel }} {{ t.removed }}</span>
+        <span style="padding:4px 10px;border-radius:999px;background:var(--chgBg);color:var(--chg);font-size:12.5px;font-weight:600">~ {{ nChg }} {{ t.changed }}</span>
+      </div></sc-if>
+      <sc-if value="{{ diffSame }}"><div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:15px;font-weight:600;color:var(--add)">✓ {{ t.same }}</span><span style="font-size:12.5px;color:var(--mut)">{{ t.sameSub }}</span></div></sc-if>
+      <sc-if value="{{ diffNeed }}"><span style="font-size:13px;color:var(--faint)">{{ t.needBoth }}</span></sc-if>
+      <sc-if value="{{ diffHas }}"><div style="display:flex;padding:2px;gap:2px;background:var(--seg);border-radius:8px">
+        <sc-for list="{{ diffViewSeg }}" as="o" hint-placeholder-count="2"><button onClick="{{ o.onClick }}" style="height:28px;padding:0 12px;border:0;border-radius:6px;font-size:12.5px;font-weight:500;cursor:pointer;background:{{ o.bg }};color:{{ o.color }};box-shadow:{{ o.sh }}">{{ o.label }}</button></sc-for>
+      </div></sc-if>
+    </div>
+    <sc-if value="{{ diffShowTree }}">
+      <div style="padding:8px 0;font:13px/24px 'Geist Mono',monospace;max-height:70vh;overflow:auto">
+        <sc-for list="{{ dRows }}" as="r" hint-placeholder-count="8">
+          <div style="display:flex;align-items:flex-start;background:{{ r.bg }}">
+            <span style="width:30px;flex:none;text-align:center;color:{{ r.markColor }};font-weight:700;user-select:none">{{ r.mark }}</span>
+            <div style="display:flex;align-items:flex-start;flex-wrap:wrap;padding-left:{{ r.indent }}px;min-width:0;flex:1;padding-right:14px">
+              <span onClick="{{ r.toggle }}" style="width:16px;flex:none;color:var(--faint);cursor:pointer;user-select:none;text-align:center;font-size:10px">{{ r.caret }}</span>
+              <span style="color:{{ r.keyColor }};white-space:pre">{{ r.keyText }}</span><span style="color:var(--faint);white-space:pre">{{ r.colon }}</span><span style="color:{{ r.valColor }};word-break:break-all;text-decoration:{{ r.deco }}">{{ r.valText }}</span>
+              <sc-if value="{{ r.isChg }}"><span style="color:var(--faint);padding:0 8px">→</span><span style="color:var(--add);word-break:break-all;font-weight:500">{{ r.newText }}</span></sc-if>
+              <span style="color:var(--faint);font:11.5px/24px 'Geist',sans-serif;padding-left:8px">{{ r.meta }}</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+    <sc-if value="{{ diffShowList }}">
+      <div style="max-height:70vh;overflow:auto">
+        <sc-for list="{{ dList }}" as="d" hint-placeholder-count="5">
+          <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;padding:10px 16px;border-bottom:1px solid var(--line)">
+            <span style="display:flex;align-items:baseline;gap:10px;flex:0 1 280px;min-width:0">
+              <span style="width:14px;flex:none;font:700 13px 'Geist Mono',monospace;color:{{ d.color }}">{{ d.mark }}</span>
+              <button onClick="{{ d.copyPath }}" title="{{ t.copyPath }}" style="border:0;background:transparent;padding:0;cursor:pointer;font:500 13px 'Geist Mono',monospace;text-align:left;word-break:break-all" style-hover="color:var(--acc)">{{ d.path }}</button>
+            </span>
+            <span style="flex:1 1 280px;min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;font:13px 'Geist Mono',monospace">
+              <sc-if value="{{ d.hasOld }}"><span style="color:var(--del);text-decoration:line-through;word-break:break-all">{{ d.oldText }}</span></sc-if>
+              <sc-if value="{{ d.isChg }}"><span style="color:var(--faint)">→</span></sc-if>
+              <sc-if value="{{ d.hasNew }}"><span style="color:var(--add);word-break:break-all">{{ d.newText }}</span></sc-if>
+            </span>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+  </section>
+</div>
+</sc-if>
+</div>
+</main>
+
+<sc-if value="{{ palette }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closePalette }}" style="position:fixed;inset:0;z-index:60;background:var(--scrim);display:flex;justify-content:center;align-items:flex-start;padding:12vh 14px 14px">
+    <div onClick="{{ stop }}" style="width:100%;max-width:580px;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 24px 64px var(--shadow);overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;padding:0 14px 0 18px;border-bottom:1px solid var(--line)">
+        <input autoFocus="{{ true }}" value="{{ pq }}" onChange="{{ onPq }}" onKeyDown="{{ onPKey }}" placeholder="{{ t.pal }}" style="flex:1;min-width:0;height:56px;border:0;outline:none;background:transparent;font-size:16px">
+        <span style="font:500 11px 'Geist Mono',monospace;padding:3px 7px;border:1px solid var(--line);border-radius:5px;color:var(--mut)">esc</span>
+      </div>
+      <div style="max-height:min(420px,60vh);overflow:auto;padding:6px">
+        <sc-for list="{{ pItems }}" as="it" hint-placeholder-count="6">
+          <button onClick="{{ it.run }}" onMouseEnter="{{ it.hover }}" style="width:100%;display:flex;align-items:center;gap:12px;padding:9px 12px;border:0;border-radius:10px;background:{{ it.bg }};cursor:pointer;text-align:left">
+            <span style="width:30px;height:30px;flex:none;border-radius:8px;display:flex;align-items:center;justify-content:center;background:{{ it.iconBg }};color:{{ it.iconColor }};font:600 11.5px 'Geist Mono',monospace">{{ it.icon }}</span>
+            <span style="display:flex;flex-direction:column;gap:2px;min-width:0;flex:1"><span style="font-size:14px;font-weight:500">{{ it.name }}</span><span style="font-size:12px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ it.crumb }}</span></span>
+            <span style="font-size:13px;color:var(--mut)">{{ it.enter }}</span>
+          </button>
+        </sc-for>
+        <sc-if value="{{ pNone }}"><div style="padding:24px;text-align:center;font-size:13px;color:var(--faint)">{{ t.palNone }}</div></sc-if>
+      </div>
+      <div style="padding:9px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--faint)">{{ t.palFoot }}</div>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ dragOver }}" hint-placeholder-val="{{ false }}">
+  <div style="position:fixed;inset:12px;z-index:70;border:2px dashed var(--acc);border-radius:18px;background:var(--accSoft);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;pointer-events:none">
+    <span style="font-size:20px;font-weight:600;color:var(--acc)">{{ t.dropHere }}</span>
+    <span style="font-size:13px;color:var(--mut)">{{ t.dropHereSub }}</span>
+  </div>
+</sc-if>
+
+<sc-if value="{{ hasToast }}" hint-placeholder-val="{{ false }}">
+  <div style="position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:80;background:var(--inv);color:var(--invInk);padding:10px 18px;border-radius:999px;font-size:13px;font-weight:500;box-shadow:0 8px 24px var(--shadow);white-space:nowrap">{{ toast }}</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;smartPaste&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;行为&quot;},&quot;rememberInputs&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;行为&quot;},&quot;defaultView&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;tree&quot;,&quot;text&quot;],&quot;default&quot;:&quot;tree&quot;,&quot;tsType&quot;:&quot;'tree' | 'text'&quot;,&quot;section&quot;:&quot;格式化&quot;}}">
+const TOOLS=[
+ {id:'ts',cat:'time',icon:'01',zh:['时间戳转换','时间戳','时间戳 ⇄ 日期，按所选时区'],en:['Timestamp','Timestamp','Unix time ⇄ date, in any time zone'],kw:'timestamp unix epoch sjc shijianchuo 时间 日期 date time 时区 timezone'},
+ {id:'qrgen',cat:'qr',icon:'▦',zh:['生成二维码','生成二维码','文本 / 链接 → 二维码'],en:['QR Generator','QR Generate','Text or link → QR code'],kw:'qrcode qr ewm erweima 二维码 生成 generate scsc'},
+ {id:'qrscan',cat:'qr',icon:'⌖',zh:['识别二维码','识别二维码','粘贴或拖入图片，支持一图多码'],en:['QR Scanner','QR Scan','Paste or drop an image — finds every code'],kw:'qr scan decode read 识别 解码 扫码 ewm shibie'},
+ {id:'json',cat:'fmt',icon:'{}',zh:['JSON 格式化','JSON','格式化 · 折叠 · 路径'],en:['JSON Formatter','JSON','Format · fold · copy path'],kw:'json format pretty geshihua gsh 格式化 美化 压缩 minify tree'},
+ {id:'toml',cat:'fmt',icon:'[]',zh:['TOML 格式化','TOML','格式化 · 折叠 · 转 JSON'],en:['TOML Formatter','TOML','Format · fold · to JSON'],kw:'toml format geshihua gsh 格式化 config'},
+ {id:'diff',cat:'diff',icon:'≠',zh:['JSON 对比','JSON 对比','语义对比：忽略 key 顺序与空白'],en:['JSON Diff','JSON Diff','Semantic diff — key order & whitespace ignored'],kw:'diff compare json duibi db 对比 比较 差异'}
+];
+const CATS={time:{zh:'时间',en:'Time'},qr:{zh:'二维码',en:'QR code'},fmt:{zh:'格式化',en:'Format'},diff:{zh:'对比',en:'Compare'}};
+const CAT_ORDER=['time','qr','fmt','diff'];
+const TZ_ZH={'UTC':'协调世界时','Asia/Shanghai':'北京 / 上海','Asia/Hong_Kong':'香港','Asia/Taipei':'台北','Asia/Tokyo':'东京','Asia/Seoul':'首尔','Asia/Singapore':'新加坡','Asia/Kolkata':'印度','Asia/Dubai':'迪拜','Europe/London':'伦敦','Europe/Paris':'巴黎','Europe/Berlin':'柏林','Europe/Moscow':'莫斯科','America/New_York':'纽约','America/Chicago':'芝加哥','America/Denver':'丹佛','America/Los_Angeles':'洛杉矶','America/Sao_Paulo':'圣保罗','Australia/Sydney':'悉尼','Pacific/Auckland':'奥克兰'};
+const COMMON_TZ=['UTC','Asia/Shanghai','Asia/Tokyo','Asia/Singapore','Europe/London','Europe/Berlin','America/New_York','America/Los_Angeles'];
+const DICT={
+zh:{brand:'工具箱',search:'搜索工具…',searchShort:'搜索',collapse:'收起侧栏  ⌘B',expand:'展开侧栏  ⌘B',smartTitle:'智能粘贴',smartBody:'在空白处按 {k}：时间戳、JSON、TOML、图片会自动打开对应工具',
+now:'现在',tzSearch:'搜索城市或时区，如 tokyo / 东京 / +9',tzLocal:'本机',tzRecent:'最近使用',tzCommon:'常用',tzNone:'没有匹配的时区',tzLocalTag:' · 本机',
+ts2t:'时间戳',t2ts:'时间',auto:'自动',units:{s:'秒',ms:'毫秒',us:'微秒',ns:'纳秒'},tsPh:'粘贴时间戳，如 1793000000',detected:'识别为{u} · {d} 位 · 点击复制',forced:'按{u}解析 · 点击复制',
+rowISO:'ISO 8601',rowUTC:'UTC',rowRel:'相对',copy:'复制',copyText:'复制文本',tsErr:'请输入数字时间戳',tsRange:'超出可表示的时间范围',tsEmpty:'输入时间戳，结果实时显示',
+tmPh:'2026-10-26 14:30 · 明天 9点 · now',parsedAs:'解析为 {v} · 点击复制',tmErr:'无法识别。试试 2026-10-26 14:30、10/26 9:00、明天 9点、14:30 或 now',tmHint:'支持多种写法；光标放在年 / 月 / 日 / 时 / 分 / 秒上按 ↑ ↓ 逐段调整，⇧ 调整小时',sec:'秒',
+q:{now:'现在',today:'今天 0 点',tomorrow:'明天 0 点',month:'本月 1 日',m1d:'−1 天',m1h:'−1 时',p1h:'+1 时',p1d:'+1 天'},wd:['周日','周一','周二','周三','周四','周五','周六'],
+copied:'已复制',qrContent:'内容',qrPh:'输入文本或链接，二维码实时生成',bytes:'{n} 字节',qrEmpty:'输入内容即时生成',qrLoading:'加载中…',qrTooLong:'内容过长，无法生成',ec:'容错',dlPng:'下载 PNG',copyImg:'复制图片',clear:'清空',sample:'示例',imgCopied:'图片已复制',imgCopyFail:'当前浏览器不支持复制图片',ecT:{L:'约 7%',M:'约 15%',Q:'约 25%',H:'约 30%'},
+dropTitle:'粘贴、拖入或点击选择图片',dropSub:'自动识别图中所有二维码 · 图片仅在本地处理',scanning:'识别中…',found:'识别到 {n} 个二维码',notFound:'未识别到二维码',notFoundSub:'换一张更清晰、二维码更完整的图片试试。',another:'换一张',copyAll:'复制全部',open:'打开',pasted:'粘贴的图片',
+kinds:{url:'链接',wifi:'Wi-Fi',mail:'邮箱',tel:'电话',text:'文本'},
+input:'输入',indent2:'2 空格',indent4:'4 空格',sortKeys:'按 key 排序',minify:'压缩复制',toToml:'转为 TOML',toJson:'转为 JSON',viewTree:'结构',viewText:'文本',copyResult:'复制结果',expandAll:'全部展开',level:'{n} 层',
+valid:'有效 {L} · {n} 个节点 · 深度 {d}',waiting:'在左侧输入或粘贴 {L}',loadingToml:'正在加载 TOML 解析器…',errAt:'第 {l} 行，第 {c} 列',errNoPos:'解析失败',items:'{n} 项',keys:'{n} 个键',copyPath:'复制路径',copyValue:'复制值',pathHint:'点击任一行查看并复制它的路径',truncated:'仅显示前 {n} 行，切换到「文本」查看全部',tomlTop:'TOML 顶层必须是对象',minCopied:'已复制压缩后的 JSON',fmtPh:'粘贴 {L}…',
+ignoreOrder:'忽略数组顺序',onlyDiff:'仅显示差异',swap:'交换',a:'A · 原始',b:'B · 修改后',diffTree:'合并视图',diffList:'差异清单',same:'语义完全一致',sameSub:'key 顺序、缩进、空白不影响结果',added:'新增',removed:'删除',changed:'修改',unchanged:'… {n} 项未变化',diffs:'{n} 处差异',needBoth:'两侧都填入有效的 JSON / TOML 后显示差异',invalid:'无效',empty:'空',
+pal:'搜索工具，或直接粘贴内容…',palNone:'没有匹配的工具',palFoot:'↑↓ 选择 · ↵ 打开 · 也可直接粘贴时间戳 / JSON 自动识别',palDetect:'用「{t}」处理输入的内容',
+routed:'已识别，打开「{t}」',dropHere:'松开即可识别',dropHereSub:'图片 → 识别二维码 · .json / .toml → 格式化',notImage:'请提供图片文件',
+theme:{light:'浅',dark:'深',auto:'自动'},themeLong:{light:'浅色',dark:'深色',auto:'跟随系统'},relLocale:'zh-CN'},
+en:{brand:'Toolbox',search:'Search tools…',searchShort:'Search',collapse:'Collapse sidebar  ⌘B',expand:'Expand sidebar  ⌘B',smartTitle:'Smart paste',smartBody:'Press {k} anywhere blank — timestamps, JSON, TOML and images open the right tool.',
+now:'Now',tzSearch:'Search city or zone — tokyo, +9…',tzLocal:'This device',tzRecent:'Recent',tzCommon:'Common',tzNone:'No matching time zone',tzLocalTag:' · this device',
+ts2t:'Timestamp',t2ts:'Date',auto:'Auto',units:{s:'seconds',ms:'milliseconds',us:'microseconds',ns:'nanoseconds'},tsPh:'Paste a timestamp, e.g. 1793000000',detected:'Detected {u} · {d} digits · click to copy',forced:'Read as {u} · click to copy',
+rowISO:'ISO 8601',rowUTC:'UTC',rowRel:'Relative',copy:'Copy',copyText:'Copy text',tsErr:'Enter a numeric timestamp',tsRange:'Out of representable range',tsEmpty:'Type a timestamp — results appear instantly',
+tmPh:'2026-10-26 14:30 · tomorrow 9:00 · now',parsedAs:'Parsed as {v} · click to copy',tmErr:'Not recognised. Try 2026-10-26 14:30, 10/26 9:00, tomorrow 9:00, 14:30 or now',tmHint:'Many formats accepted. Put the caret on any part and press ↑ ↓ to adjust it; ⇧ adjusts the hour.',sec:'sec',
+q:{now:'Now',today:'Today 00:00',tomorrow:'Tomorrow 00:00',month:'1st of month',m1d:'−1 d',m1h:'−1 h',p1h:'+1 h',p1d:'+1 d'},wd:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
+copied:'Copied',qrContent:'Content',qrPh:'Type text or a link — the code updates live',bytes:'{n} bytes',qrEmpty:'Start typing to generate',qrLoading:'Loading…',qrTooLong:'Too long for a QR code',ec:'Error correction',dlPng:'Download PNG',copyImg:'Copy image',clear:'Clear',sample:'Sample',imgCopied:'Image copied',imgCopyFail:'This browser can’t copy images',ecT:{L:'~7%',M:'~15%',Q:'~25%',H:'~30%'},
+dropTitle:'Paste, drop or click to choose an image',dropSub:'Finds every QR code in the image · processed locally',scanning:'Scanning…',found:'{n} QR code(s) found',notFound:'No QR code found',notFoundSub:'Try a sharper image where the whole code is visible.',another:'Another image',copyAll:'Copy all',open:'Open',pasted:'Pasted image',
+kinds:{url:'Link',wifi:'Wi-Fi',mail:'Email',tel:'Phone',text:'Text'},
+input:'Input',indent2:'2 spaces',indent4:'4 spaces',sortKeys:'Sort keys',minify:'Copy minified',toToml:'To TOML',toJson:'To JSON',viewTree:'Tree',viewText:'Text',copyResult:'Copy result',expandAll:'Expand all',level:'Level {n}',
+valid:'Valid {L} · {n} nodes · depth {d}',waiting:'Type or paste {L} on the left',loadingToml:'Loading TOML parser…',errAt:'Line {l}, column {c}',errNoPos:'Parse error',items:'{n} items',keys:'{n} keys',copyPath:'Copy path',copyValue:'Copy value',pathHint:'Click any row to see and copy its path',truncated:'Showing first {n} rows — switch to Text for everything',tomlTop:'TOML needs an object at the top level',minCopied:'Minified JSON copied',fmtPh:'Paste {L}…',
+ignoreOrder:'Ignore array order',onlyDiff:'Only differences',swap:'Swap',a:'A · original',b:'B · changed',diffTree:'Merged',diffList:'Change list',same:'Semantically identical',sameSub:'Key order, indentation and whitespace are ignored',added:'added',removed:'removed',changed:'changed',unchanged:'… {n} unchanged',diffs:'{n} differences',needBoth:'Enter valid JSON / TOML on both sides to compare',invalid:'Invalid',empty:'Empty',
+pal:'Search tools, or paste content…',palNone:'No matching tools',palFoot:'↑↓ select · ↵ open · paste a timestamp / JSON to auto-detect',palDetect:'Open with “{t}”',
+routed:'Detected — opened “{t}”',dropHere:'Drop to process',dropHereSub:'Image → QR scan · .json / .toml → formatter',notImage:'Please provide an image',
+theme:{light:'Light',dark:'Dark',auto:'Auto'},themeLong:{light:'Light',dark:'Dark',auto:'System'},relLocale:'en'}
+};
+const SAMPLE_JSON='{"name":"toolbox","version":"1.4.2","private":true,"features":["timestamp","qrcode","format","diff"],"server":{"host":"0.0.0.0","port":8080,"tls":null,"limits":{"rps":1200,"burst":200}},"owners":[{"id":1,"name":"Lin","active":true},{"id":2,"name":"Zhou","active":false}],"updatedAt":1793000000}';
+const SAMPLE_TOML='title="toolbox"\nversion  = "1.4.2"\nfeatures=["timestamp","qrcode",  "format"]\n[server]\nhost="0.0.0.0"\nport=8080\n  [server.limits]\n  rps = 1200\n  burst=200\n[[owners]]\nid=1\nname="Lin"\n[[owners]]\nid=2\nname="Zhou"\n';
+const SAMPLE_A='{"service":"gateway","port":8080,"debug":false,"tags":["api","edge"],"db":{"host":"10.0.0.5","pool":10,"timeout":30},"owners":[{"id":1,"name":"Lin"},{"id":2,"name":"Zhou"}]}';
+const SAMPLE_B=JSON.stringify({port:8443,service:'gateway',db:{timeout:30,pool:20,host:'10.0.0.5',ssl:true},tags:['edge','api'],owners:[{id:1,name:'Lin'},{id:2,name:'Zhou Wei'}]},null,2);
+
+const f=(s,o)=>String(s).replace(/\{(\w+)\}/g,(m,k)=>o&&o[k]!=null?o[k]:m);
+const pad2=n=>String(n).padStart(2,'0');
+const _fc={};
+function tzParts(ms,tz){let F=_fc[tz];if(!F)F=_fc[tz]=new Intl.DateTimeFormat('en-US',{timeZone:tz,hourCycle:'h23',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',weekday:'short'});const o={};for(const p of F.formatToParts(new Date(ms)))o[p.type]=p.value;return {y:+o.year,m:+o.month,d:+o.day,h:(+o.hour)%24,mi:+o.minute,s:+o.second,wd:{Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6}[o.weekday],ms:((ms%1000)+1000)%1000};}
+function tzOffset(ms,tz){const p=tzParts(ms,tz);return Date.UTC(p.y,p.m-1,p.d,p.h,p.mi,p.s)-(ms-p.ms);}
+function wallToMs(y,mo,d,h,mi,s,msp,tz){const g=Date.UTC(y,mo-1,d,h,mi,s,msp||0);const o1=tzOffset(g,tz);let r=g-o1;const o2=tzOffset(r,tz);if(o2!==o1)r=g-o2;return r;}
+function offLabel(off){const m=Math.round(off/60000),a=Math.abs(m);return 'UTC'+(m<0?'−':'+')+pad2(Math.floor(a/60))+':'+pad2(a%60);}
+function fmtWall(ms,tz,withMs){const p=tzParts(ms,tz);let s=p.y+'-'+pad2(p.m)+'-'+pad2(p.d)+' '+pad2(p.h)+':'+pad2(p.mi)+':'+pad2(p.s);if(withMs&&p.ms)s+='.'+String(p.ms).padStart(3,'0');return s;}
+function fmtISO(ms,tz){const p=tzParts(ms,tz);const m=Math.round(tzOffset(ms,tz)/60000),a=Math.abs(m);return p.y+'-'+pad2(p.m)+'-'+pad2(p.d)+'T'+pad2(p.h)+':'+pad2(p.mi)+':'+pad2(p.s)+'.'+String(p.ms).padStart(3,'0')+(m<0?'-':'+')+pad2(Math.floor(a/60))+':'+pad2(a%60);}
+function relTime(ms,now,loc){const rtf=new Intl.RelativeTimeFormat(loc,{numeric:'auto'});const d=(ms-now)/1000,a=Math.abs(d);const U=[[60,'second',1],[3600,'minute',60],[86400,'hour',3600],[86400*30,'day',86400],[86400*365,'month',86400*30],[Infinity,'year',86400*365]];for(const [lim,u,div] of U){if(a<lim)return rtf.format(Math.round(d/div),u);}}
+function parseTs(raw,unit){const s=String(raw).trim().replace(/[,_\s]/g,'');if(!s)return null;if(!/^-?\d+(\.\d+)?$/.test(s))return {err:'tsErr'};const dig=s.replace('-','').split('.')[0].length;let u=unit;if(u==='auto')u=dig<=11?'s':dig<=14?'ms':dig<=17?'us':'ns';const n=parseFloat(s);const ms=u==='s'?n*1000:u==='ms'?n:u==='us'?n/1000:n/1e6;if(!isFinite(ms)||Math.abs(ms)>8.64e15)return {err:'tsRange'};return {ms:Math.floor(ms),u,dig};}
+function parseClock(str,strict){let s=(str||'').trim().toLowerCase();if(!s)return strict?null:[0,0,0,0];let pm=0;const ap=s.match(/^(上午|早上|凌晨|中午|下午|晚上|傍晚)\s*/);if(ap){pm=/下午|晚上|傍晚/.test(ap[1])?1:ap[1]==='中午'?2:0;s=s.slice(ap[0].length);}const tp=s.match(/\s*(am|pm)$/);if(tp){pm=tp[1]==='pm'?1:3;s=s.slice(0,-tp[0].length);}if(strict&&!/[:：点时]/.test(s)&&!tp)return null;const m=s.match(/^(\d{1,2})(?:[:：点时](?:(\d{1,2}|半)分?)?(?:[:：](\d{1,2})秒?)?(?:\.(\d{1,3}))?)?$/);if(!m)return null;let h=+m[1];const mi=m[2]==='半'?30:+(m[2]||0),sec=+(m[3]||0),ms=+((m[4]||'0').padEnd(3,'0'));if(pm===1&&h<12)h+=12;if(pm===2&&h<11)h+=12;if(pm===3&&h===12)h=0;if(h>23||mi>59||sec>59)return null;return [h,mi,sec,ms];}
+function parseTime(raw,tz,now){const s=String(raw||'').trim();if(!s)return null;const low=s.toLowerCase();if(/^(now|现在|此刻)$/.test(low))return {ms:now};if(/^\d{9,19}$/.test(s))return {err:true};const td=tzParts(now,tz);const shift=n=>{const t=new Date(Date.UTC(td.y,td.m-1,td.d+n));return [t.getUTCFullYear(),t.getUTCMonth()+1,t.getUTCDate()];};const REL={today:0,'今天':0,'今日':0,tomorrow:1,'明天':1,'明日':1,yesterday:-1,'昨天':-1,'昨日':-1,'后天':2,'前天':-2};let m=low.match(/^(today|tomorrow|yesterday|今天|今日|明天|明日|昨天|昨日|后天|前天)\s*(.*)$/);if(m){const [y,mo,d]=shift(REL[m[1]]);const t=parseClock(m[2]);if(!t)return {err:true};return {ms:wallToMs(y,mo,d,t[0],t[1],t[2],t[3],tz)};}const tOnly=parseClock(low,true);if(tOnly)return {ms:wallToMs(td.y,td.m,td.d,tOnly[0],tOnly[1],tOnly[2],tOnly[3],tz)};m=s.match(/^(\d{4})[-\/.年]?(\d{1,2})[-\/.月]?(\d{1,2})日?(?:[T\s]*(.*))?$/i);if(m){let rest=(m[4]||'').trim();let off=null;const om=rest.match(/(z|utc|gmt|[+-]\d{2}:?\d{2})$/i);if(om){off=om[1];rest=rest.slice(0,-om[1].length).trim();}const t=parseClock(rest);if(!t)return {err:true};const y=+m[1],mo=+m[2],d=+m[3];if(mo<1||mo>12||d<1||d>31)return {err:true};if(off){let om2=0;if(!/^(z|utc|gmt)$/i.test(off)){const sg=off[0]==='-'?-1:1;const dg=off.slice(1).replace(':','');om2=sg*(+dg.slice(0,2)*60+ +dg.slice(2));}return {ms:Date.UTC(y,mo-1,d,t[0],t[1],t[2],t[3])-om2*60000,note:off};}return {ms:wallToMs(y,mo,d,t[0],t[1],t[2],t[3],tz)};}m=s.match(/^(\d{1,2})[-\/.月](\d{1,2})日?\s*(.*)$/);if(m){const t=parseClock(m[3]);if(t&&+m[1]>=1&&+m[1]<=12)return {ms:wallToMs(td.y,+m[1],+m[2],t[0],t[1],t[2],t[3],tz)};}if(/[a-z]/i.test(s)){const p=Date.parse(s);if(!isNaN(p))return {ms:p};}return {err:true};}
+
+const isObj=v=>v!==null&&typeof v==='object'&&!Array.isArray(v)&&!(v instanceof Date);
+const isCont=v=>Array.isArray(v)||isObj(v);
+function sortDeep(v){if(Array.isArray(v))return v.map(sortDeep);if(isObj(v)){const o={};Object.keys(v).sort().forEach(k=>o[k]=sortDeep(v[k]));return o;}return v;}
+const canon=v=>JSON.stringify(sortDeep(v));
+function cp(path,k,arr){return arr?path+'['+k+']':(/^[A-Za-z_$][\w$]*$/.test(k)?path+'.'+k:path+'['+JSON.stringify(k)+']');}
+function prim(v){if(v===null)return ['null','var(--faint)'];if(v instanceof Date)return [typeof v.toISOString==='function'?v.toISOString():String(v),'var(--date)'];switch(typeof v){case 'string':return [JSON.stringify(v),'var(--str)'];case 'number':case 'bigint':return [String(v),'var(--num)'];case 'boolean':return [String(v),'var(--bool)'];default:return [String(v),'var(--ink)'];}}
+function preview(v){let s;try{s=JSON.stringify(v);}catch(e){s=String(v);}if(s===undefined)s=String(v);return s.length>90?s.slice(0,88)+'…':s;}
+function stats(v){let n=0,d=0;const w=(x,dep)=>{n++;if(dep>d)d=dep;if(isCont(x))(Array.isArray(x)?x:Object.values(x)).forEach(y=>w(y,dep+1));};w(v,0);return {n,d};}
+function bytesLabel(n){return n<1024?n+' B':(n/1024).toFixed(1)+' KB';}
+function errInfo(e,src,lang){let line=null,col=null;const msg=String((e&&e.message)||e);if(lang==='toml'){line=e&&e.line||null;col=e&&e.column||null;if(!line){const m=msg.match(/line (\d+)\D+(\d+)/i);if(m){line=+m[1];col=+m[2];}}}else{let m=msg.match(/line (\d+) column (\d+)/i);if(m){line=+m[1];col=+m[2];}else{m=msg.match(/position (\d+)/i);const pos=m?+m[1]:(/end of/i.test(msg)?src.length:null);if(pos!=null){const pre=src.slice(0,pos);line=pre.split('\n').length;col=pos-pre.lastIndexOf('\n');}}}let lineText='',caret='';if(line){const Ln=src.split('\n')[line-1]||'';const c=Math.max(1,col||1);const st=c>60?c-40:0;lineText=(st?'…':'')+Ln.slice(st,st+110);caret=' '.repeat(Math.max(0,c-1-st+(st?1:0)))+'^';}return {msg:msg.split('\n')[0],line,col,lineText,caret};}
+function diffNode(a,b,key,path,io){if(a===undefined)return {key,path,st:'add',b};if(b===undefined)return {key,path,st:'del',a};if(isObj(a)&&isObj(b)){const ks=Object.keys(a);Object.keys(b).forEach(k=>{if(!(k in a))ks.push(k);});const ch=ks.map(k=>diffNode(a[k],b[k],k,cp(path,k,false),io));return {key,path,a,b,kind:'obj',ch,st:ch.every(c=>c.st==='same')?'same':'mod'};}if(Array.isArray(a)&&Array.isArray(b)){const ch=[];if(io){const used=b.map(()=>false),bc=b.map(canon),left=[];a.forEach((x,i)=>{const c=canon(x);const j=bc.findIndex((y,j)=>!used[j]&&y===c);if(j>=0){used[j]=true;ch.push({key:i,path:cp(path,i,true),st:'same',a:x,b:b[j]});}else left.push(i);});const bl=b.map((_,j)=>j).filter(j=>!used[j]);for(let k=0;k<Math.max(left.length,bl.length);k++){const i=left[k],j=bl[k];const idx=i!==undefined?i:j;ch.push(diffNode(i!==undefined?a[i]:undefined,j!==undefined?b[j]:undefined,idx,cp(path,idx,true),io));}}else{for(let i=0;i<Math.max(a.length,b.length);i++)ch.push(diffNode(i<a.length?a[i]:undefined,i<b.length?b[i]:undefined,i,cp(path,i,true),io));}return {key,path,a,b,kind:'arr',ch,st:ch.every(c=>c.st==='same')?'same':'mod'};}if(canon(a)===canon(b))return {key,path,st:'same',a,b};return {key,path,st:'chg',a,b};}
+
+class Component extends DCLogic {
+  state = this._init();
+  fileRef = React.createRef();
+  _init(){
+    const ls=k=>{try{const v=localStorage.getItem('tb.'+k);return v==null?null:JSON.parse(v);}catch(e){return null;}};
+    let localTz='UTC';try{localTz=Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';}catch(e){}
+    this.localTz=localTz;
+    let tz=ls('tz')||localTz;try{tzParts(Date.now(),tz);}catch(e){tz=localTz;}
+    const inp=(this.props&&this.props.rememberInputs===false)?{}:(ls('inputs')||{});
+    const pr=ls('prefs')||{};
+    const now=Date.now();
+    const navLang=String(navigator.language||'zh').toLowerCase().startsWith('zh')?'zh':'en';
+    const saved=ls('tool');
+    let sysDark=false;try{sysDark=matchMedia('(prefers-color-scheme: dark)').matches;}catch(e){}
+    return {tool:TOOLS.some(t=>t.id===saved)?saved:'ts',wide:window.innerWidth>=880,now,side:pr.side!==false,lang:pr.lang||navLang,theme:pr.theme||'auto',sysDark,
+      palette:false,pq:'',pi:0,toast:'',tz,tzRecent:ls('tzRecent')||[],tzOpen:false,tzQ:'',
+      tsIn:inp.tsIn!=null?inp.tsIn:String(Math.floor(now/1000)),tsUnit:'auto',tmIn:inp.tmIn!=null?inp.tmIn:fmtWall(now,tz),
+      qrText:inp.qrText!=null?inp.qrText:'https://example.com/hello',qrEc:'M',scan:null,dragOver:false,
+      json:inp.json!=null?inp.json:SAMPLE_JSON,toml:inp.toml!=null?inp.toml:SAMPLE_TOML,
+      indent:pr.indent||'2',sortKeys:!!pr.sortKeys,view:pr.view||(this.props&&this.props.defaultView)||'tree',collapsed:{json:{},toml:{}},sel:{json:'',toml:''},
+      diffA:inp.diffA!=null?inp.diffA:SAMPLE_A,diffB:inp.diffB!=null?inp.diffB:SAMPLE_B,ignoreOrder:!!pr.ignoreOrder,onlyDiff:pr.onlyDiff!==false,diffView:pr.diffView||'tree',dCol:{},
+      tomlReady:false,qrReady:!!window.qrcode};
+  }
+  componentDidMount(){
+    this._onResize=()=>{const w=window.innerWidth>=880;if(w!==this.state.wide)this.setState({wide:w});};
+    window.addEventListener('resize',this._onResize);
+    try{this._mq=matchMedia('(prefers-color-scheme: dark)');this._onMq=e=>this.setState({sysDark:e.matches});this._mq.addEventListener('change',this._onMq);}catch(e){}
+    this._tick=setInterval(()=>{if(this.state.tool==='ts'&&!this.state.palette)this.setState({now:Date.now()});if(!this.state.qrReady&&window.qrcode)this.setState({qrReady:true});},1000);
+    this._onKey=e=>this.onGlobalKey(e);window.addEventListener('keydown',this._onKey);
+    this._onPaste=e=>this.handlePaste(e);document.addEventListener('paste',this._onPaste);
+    this._dd=0;
+    const hasFiles=e=>e.dataTransfer&&Array.from(e.dataTransfer.types||[]).includes('Files');
+    this._dEnter=e=>{if(!hasFiles(e))return;e.preventDefault();this._dd++;if(!this.state.dragOver)this.setState({dragOver:true});};
+    this._dOver=e=>{if(hasFiles(e))e.preventDefault();};
+    this._dLeave=e=>{if(!hasFiles(e))return;this._dd--;if(this._dd<=0){this._dd=0;this.setState({dragOver:false});}};
+    this._dDrop=e=>{if(!hasFiles(e))return;e.preventDefault();this._dd=0;this.setState({dragOver:false});this.handleFiles(Array.from(e.dataTransfer.files||[]));};
+    window.addEventListener('dragenter',this._dEnter);window.addEventListener('dragover',this._dOver);window.addEventListener('dragleave',this._dLeave);window.addEventListener('drop',this._dDrop);
+    import('https://esm.sh/smol-toml@1.3.1').then(m=>{this.toml=m.parse?m:m.default;this.setState({tomlReady:true});}).catch(()=>{});
+    this.syncBody();this.focusTool();
+  }
+  componentWillUnmount(){window.removeEventListener('resize',this._onResize);clearInterval(this._tick);window.removeEventListener('keydown',this._onKey);document.removeEventListener('paste',this._onPaste);window.removeEventListener('dragenter',this._dEnter);window.removeEventListener('dragover',this._dOver);window.removeEventListener('dragleave',this._dLeave);window.removeEventListener('drop',this._dDrop);try{this._mq.removeEventListener('change',this._onMq);}catch(e){}}
+  componentDidUpdate(pp,ps){
+    const S=this.state;
+    if(ps.tool!==S.tool){try{localStorage.setItem('tb.tool',JSON.stringify(S.tool));}catch(e){}this.focusTool();}
+    if(ps.theme!==S.theme||ps.sysDark!==S.sysDark)this.syncBody();
+    const prefs=JSON.stringify({side:S.side,lang:S.lang,theme:S.theme,indent:S.indent,sortKeys:S.sortKeys,view:S.view,ignoreOrder:S.ignoreOrder,onlyDiff:S.onlyDiff,diffView:S.diffView});
+    if(prefs!==this._lastPrefs){this._lastPrefs=prefs;try{localStorage.setItem('tb.prefs',prefs);}catch(e){}}
+    if(this.props.rememberInputs!==false&&['tsIn','tmIn','qrText','json','toml','diffA','diffB'].some(k=>ps[k]!==S[k])){clearTimeout(this._sv);this._sv=setTimeout(()=>{const s=this.state;try{localStorage.setItem('tb.inputs',JSON.stringify({tsIn:s.tsIn,tmIn:s.tmIn,qrText:s.qrText,json:s.json,toml:s.toml,diffA:s.diffA,diffB:s.diffB}));}catch(e){}},400);}
+  }
+  isDark(){return this.state.theme==='dark'||(this.state.theme==='auto'&&this.state.sysDark);}
+  syncBody(){try{document.body.style.background=this.isDark()?'#121211':'#f6f6f4';}catch(e){}}
+  focusTool(){if(!this.state.wide)return;setTimeout(()=>{const el=document.querySelector('[data-autofocus]');if(el&&document.activeElement!==el&&!this.state.palette)el.focus();},40);}
+  T(){return DICT[this.state.lang==='en'?'en':'zh'];}
+  toolName(id){const t=TOOLS.find(x=>x.id===id);return t?t[this.state.lang==='en'?'en':'zh'][0]:'';}
+  go(id){this.setState({tool:id,palette:false,pq:'',pi:0,tzOpen:false});if(!this.state.wide)window.scrollTo(0,0);}
+  toast(msg){clearTimeout(this._tt);this.setState({toast:msg});this._tt=setTimeout(()=>this.setState({toast:''}),1500);}
+  copy(text,msg){const done=()=>this.toast(msg||this.T().copied);const fb=()=>{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');}catch(e){}ta.remove();done();};try{navigator.clipboard.writeText(String(text)).then(done,fb);}catch(e){fb();}}
+  setTz(id){const rec=[id,...this.state.tzRecent.filter(x=>x!==id)].slice(0,5);try{localStorage.setItem('tb.tz',JSON.stringify(id));localStorage.setItem('tb.tzRecent',JSON.stringify(rec));}catch(e){}this.setState({tz:id,tzRecent:rec,tzOpen:false,tzQ:''});}
+  zones(){if(this._zones)return this._zones;let list=[];try{list=Intl.supportedValuesOf('timeZone').slice();}catch(e){list=COMMON_TZ.slice();}if(!list.includes('UTC'))list.unshift('UTC');const now=Date.now();this._zones=list.map(id=>{let off=0;try{off=tzOffset(now,id);}catch(e){}const m=Math.round(off/60000);const hh=Math.trunc(m/60);const ol=offLabel(off);return {id,off,ol,hay:(id+' '+(TZ_ZH[id]||'')+' '+ol+' '+(m<0?'-':'+')+Math.abs(hh)+' '+ol.replace('−','-')).toLowerCase().replace(/_/g,' ')};});return this._zones;}
+  zoneLabel(id){if(this.state.lang==='zh'&&TZ_ZH[id])return TZ_ZH[id];if(id==='UTC')return 'UTC';return id.split('/').pop().replace(/_/g,' ');}
+  tzItems(){const S=this.state,T=this.T(),now=S.now,q=S.tzQ.trim().toLowerCase();const mk=id=>{let off=0;try{off=tzOffset(now,id);}catch(e){}return {item:true,header:false,id,label:this.zoneLabel(id),sub:id+(id===this.localTz?T.tzLocalTag:''),off:offLabel(off),bg:id===S.tz?'var(--accSoft)':'transparent',check:id===S.tz?'✓':'',onClick:()=>this.setTz(id)};};if(!q){const seen=new Set(),out=[];const sec=(title,ids)=>{ids=ids.filter(i=>!seen.has(i));if(!ids.length)return;out.push({header:true,item:false,title});ids.forEach(i=>{seen.add(i);out.push(mk(i));});};sec(T.tzLocal,[this.localTz]);sec(T.tzRecent,S.tzRecent);sec(T.tzCommon,COMMON_TZ);return out;}const qq=q.replace(/^utc/,'').trim()||q;return this.zones().filter(z=>z.hay.includes(q)||z.hay.includes(qq)).slice(0,60).map(z=>mk(z.id));}
+  onGlobalKey(e){const S=this.state;const mod=e.metaKey||e.ctrlKey;const t=e.target;const inField=t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable);
+    if(mod&&e.key.toLowerCase()==='k'){e.preventDefault();this.setState({palette:!S.palette,pq:'',pi:0});return;}
+    if(mod&&e.key.toLowerCase()==='b'&&S.wide){e.preventDefault();this.setState({side:!S.side});return;}
+    if(e.key==='Escape'){if(S.palette)this.setState({palette:false});else if(S.tzOpen)this.setState({tzOpen:false,tzQ:''});return;}
+    if(e.key==='/'&&!inField&&!S.palette){e.preventDefault();this.setState({palette:true,pq:'',pi:0});}}
+  detect(text){const s=String(text||'').trim();if(!s)return null;if(/^-?\d{9,19}(\.\d+)?$/.test(s))return 'ts';if(/^[\[{]/.test(s)){try{JSON.parse(s);return 'json';}catch(e){}}if(this.toml&&/^\s*(\[[^\]\n]+\]|[\w."'-]+\s*=)/m.test(s)){try{this.toml.parse(s);return 'toml';}catch(e){}}if(s.length<40&&/\d/.test(s)){const r=parseTime(s,this.state.tz,Date.now());if(r&&r.ms!=null)return 'tm';}return null;}
+  routeText(text,silent){const s=String(text);const d=this.detect(s);const T=this.T();let patch,tool;if(d==='ts'){tool='ts';patch={tsIn:s.trim()};}else if(d==='tm'){tool='ts';patch={tmIn:s.trim()};}else if(d==='json'){tool='json';patch={json:s,sel:{...this.state.sel,json:''}};}else if(d==='toml'){tool='toml';patch={toml:s,sel:{...this.state.sel,toml:''}};}else{tool='qrgen';patch={qrText:s};}this.setState({...patch,tool,palette:false,pq:''});if(!silent)this.toast(f(T.routed,{t:this.toolName(tool)}));}
+  handlePaste(e){const t=e.target;const inField=t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable);const items=(e.clipboardData&&e.clipboardData.items)||[];for(const it of items){if(it.type&&it.type.startsWith('image/')){const file=it.getAsFile();if(file){e.preventDefault();this.decodeFile(file,this.T().pasted);return;}}}if(inField||this.props.smartPaste===false)return;const text=e.clipboardData&&e.clipboardData.getData('text');if(!text)return;e.preventDefault();this.routeText(text);}
+  handleFiles(files){const img=files.find(x=>/^image\//.test(x.type));if(img){this.decodeFile(img);return;}const tx=files.find(x=>/\.(json|toml|txt)$/i.test(x.name));if(tx){tx.text().then(s=>{if(/\.toml$/i.test(tx.name))this.setState({toml:s,tool:'toml'});else if(/\.json$/i.test(tx.name))this.setState({json:s,tool:'json'});else this.routeText(s);});return;}this.toast(this.T().notImage);}
+  async decodeFile(file,name){if(!file||!/^image\//.test(file.type)){this.toast(this.T().notImage);return;}const old=this.state.scan;if(old&&old.src)try{URL.revokeObjectURL(old.src);}catch(e){}const src=URL.createObjectURL(file);const nm=name||file.name||'image';this.setState({tool:'qrscan',scan:{src,name:nm,busy:true,codes:[],w:1,h:1},palette:false});let img;try{img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src;});}catch(e){this.setState({scan:{src,name:nm,busy:false,codes:[],w:1,h:1}});return;}const W=img.naturalWidth,H=img.naturalHeight;let codes=[];if('BarcodeDetector' in window){try{const det=new window.BarcodeDetector({formats:['qr_code']});const r=await det.detect(img);codes=r.map(x=>({text:x.rawValue,x:x.boundingBox.x,y:x.boundingBox.y,w:x.boundingBox.width,h:x.boundingBox.height}));}catch(e){}}if(!codes.length&&window.jsQR){for(const md of [1600,900,2400]){codes=this.jsqrScan(img,W,H,md);if(codes.length)break;}}codes.sort((a,b)=>Math.abs(a.y-b.y)>Math.min(a.h,b.h)/2?a.y-b.y:a.x-b.x);this.setState({scan:{src,name:nm,busy:false,codes,w:W,h:H}});}
+  jsqrScan(img,W,H,md){const sc=Math.min(1,md/Math.max(W,H));const w=Math.max(1,Math.round(W*sc)),h=Math.max(1,Math.round(H*sc));const cv=document.createElement('canvas');cv.width=w;cv.height=h;const ctx=cv.getContext('2d',{willReadFrequently:true});ctx.drawImage(img,0,0,w,h);const out=[];for(let k=0;k<12;k++){const d=ctx.getImageData(0,0,w,h);const c=window.jsQR(d.data,w,h,{inversionAttempts:'attemptBoth'});if(!c)break;const L=c.location;const xs=[L.topLeftCorner.x,L.topRightCorner.x,L.bottomLeftCorner.x,L.bottomRightCorner.x],ys=[L.topLeftCorner.y,L.topRightCorner.y,L.bottomLeftCorner.y,L.bottomRightCorner.y];const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);const pd=Math.max(4,(x1-x0)*0.1);out.push({text:c.data,x:(x0-pd/2)/sc,y:(y0-pd/2)/sc,w:(x1-x0+pd)/sc,h:(y1-y0+pd)/sc});ctx.fillStyle='#fff';ctx.fillRect(x0-pd,y0-pd,x1-x0+2*pd,y1-y0+2*pd);}return out;}
+  qrModel(){const text=this.state.qrText,ec=this.state.qrEc;const key=text+'\u0000'+ec+'\u0000'+!!window.qrcode;if(this._qrK===key)return this._qrM;this._qrK=key;let M=null;if(window.qrcode&&text){try{const Q=window.qrcode;if(Q.stringToBytesFuncs&&Q.stringToBytesFuncs['UTF-8'])Q.stringToBytes=Q.stringToBytesFuncs['UTF-8'];const qr=Q(0,ec);qr.addData(text,'Byte');qr.make();const n=qr.getModuleCount();let d='';for(let r=0;r<n;r++){let c=0;while(c<n){if(qr.isDark(r,c)){const s=c;while(c<n&&qr.isDark(r,c))c++;d+='M'+s+' '+r+'h'+(c-s)+'v1h'+(s-c)+'z';}else c++;}}M={n,d};}catch(e){M={err:true};}}this._qrM=M;return M;}
+  qrCanvas(){const m=this.qrModel();if(!m||!m.d)return null;const scale=Math.max(4,Math.floor(1024/(m.n+8)));const size=(m.n+8)*scale;const cv=document.createElement('canvas');cv.width=cv.height=size;const ctx=cv.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,size,size);ctx.fillStyle='#111';ctx.translate(4*scale,4*scale);ctx.scale(scale,scale);ctx.fill(new Path2D(m.d));return cv;}
+  fmtCompute(lang){const S=this.state,src=S[lang];const key=[lang,src,S.indent,S.sortKeys,S.tomlReady].join('\u0000');if(this._fm&&this._fm[lang]&&this._fm[lang].k===key)return this._fm[lang].r;let r;if(!src.trim())r={empty:true};else if(lang==='toml'&&!this.toml)r={loading:true};else{let v;try{v=lang==='json'?JSON.parse(src):this.toml.parse(src);}catch(e){r={err:errInfo(e,src,lang)};}if(!r){if(S.sortKeys)v=sortDeep(v);let text;try{text=lang==='json'?JSON.stringify(v,null,S.indent==='tab'?'\t':+S.indent):this.toml.stringify(v);}catch(e){text=String(e.message||e);}r={v,text,st:stats(v)};}}this._fm=this._fm||{};this._fm[lang]={k:key,r};return r;}
+  parseAny(src){if(!String(src).trim())return {empty:true};try{return {v:JSON.parse(src),lang:'JSON'};}catch(e){}if(this.toml){try{return {v:this.toml.parse(src),lang:'TOML'};}catch(e){}}return {bad:true};}
+  toggleFold(lang,path){this.setState(s=>({collapsed:{...s.collapsed,[lang]:{...s.collapsed[lang],[path]:!s.collapsed[lang][path]}}}));}
+  setLevel(lang,v,level){const out={};const w=(x,path,dep)=>{if(!isCont(x))return;if(dep>=level)out[path]=true;const arr=Array.isArray(x);(arr?x.map((y,i)=>[i,y]):Object.entries(x)).forEach(([k,y])=>w(y,cp(path,k,arr),dep+1));};if(level<Infinity)w(v,'$',0);this.setState(s=>({collapsed:{...s.collapsed,[lang]:out}}));}
+  buildTree(v,lang){const S=this.state,T=this.T(),col=S.collapsed[lang]||{},sel=S.sel[lang];const rows=[],pv={};let n=0;const CAP=4000;const keyFmt=(k,isIdx)=>isIdx?String(k):lang==='json'?JSON.stringify(k):(/^[A-Za-z0-9_-]+$/.test(k)?k:JSON.stringify(k));
+    const walk=(x,key,path,depth,last,isIdx)=>{if(rows.length>=CAP)return;pv[path]=x;const comma=last||lang==='toml'?'':',';const keyText=key===null?'':keyFmt(key,isIdx);const colon=key===null?'':(lang==='toml'&&!isIdx?' = ':': ');const keyColor=isIdx?'var(--faint)':'var(--ink)';const select=()=>this.setState(s=>({sel:{...s.sel,[lang]:path}}));const bg=sel===path?'var(--accSoft2)':'transparent';
+      if(isCont(x)){const arr=Array.isArray(x);const ents=arr?x.map((y,i)=>[i,y]):Object.entries(x);const o=arr?'[':'{',c=arr?']':'}';if(!ents.length){rows.push({n:++n,indent:depth*18,caret:'',keyText,keyColor,colon,valText:o+c,valColor:'var(--faint)',comma,meta:'',bg,select});return;}const isC=!!col[path];const toggle=e=>{e.stopPropagation();this.toggleFold(lang,path);};rows.push({n:++n,indent:depth*18,caret:isC?'▶':'▼',toggle,keyText,keyColor,colon,valText:isC?o+' … '+c:o,valColor:'var(--faint)',comma:isC?comma:'',meta:isC||depth===0?f(arr?T.items:T.keys,{n:ents.length}):'',bg,select});if(!isC){ents.forEach(([k,y],i)=>walk(y,k,cp(path,k,arr),depth+1,i===ents.length-1,arr));if(rows.length<CAP)rows.push({n:++n,indent:depth*18,caret:'',keyText:'',keyColor,colon:'',valText:c,valColor:'var(--faint)',comma,meta:'',bg:'transparent',select});}}
+      else{const [t,c]=prim(x);rows.push({n:++n,indent:depth*18,caret:'',keyText,keyColor,colon,valText:t,valColor:c,comma,meta:'',bg,select});}};
+    walk(v,null,'$',0,true,false);this._pv=this._pv||{};this._pv[lang]=pv;return {rows,capped:rows.length>=CAP};}
+  buildDiff(root){const S=this.state,T=this.T(),col=S.dCol,rows=[],list=[];let nA=0,nD=0,nC=0;
+    const coll=(nd)=>{if(nd.st==='add'){nA++;list.push({mark:'+',color:'var(--add)',path:nd.path,hasOld:false,hasNew:true,isChg:false,newText:preview(nd.b),oldText:''});}else if(nd.st==='del'){nD++;list.push({mark:'−',color:'var(--del)',path:nd.path,hasOld:true,hasNew:false,isChg:false,oldText:preview(nd.a),newText:''});}else if(nd.st==='chg'){nC++;list.push({mark:'~',color:'var(--chg)',path:nd.path,hasOld:true,hasNew:true,isChg:true,oldText:preview(nd.a),newText:preview(nd.b)});}else if(nd.st==='mod')nd.ch.forEach(coll);};coll(root);
+    list.forEach(d=>{const p=d.path;d.copyPath=()=>this.copy(p);});
+    const cnt=nd=>nd.st==='mod'?nd.ch.reduce((a,c)=>a+cnt(c),0):(nd.st==='same'?0:1);
+    const base=(nd,depth,isIdx)=>({indent:depth*18,keyText:nd.key===null?'':(isIdx?String(nd.key):JSON.stringify(nd.key)),keyColor:isIdx?'var(--faint)':'var(--ink)',colon:nd.key===null?'':': ',mark:'',markColor:'var(--faint)',bg:'transparent',caret:'',meta:'',deco:'none',isChg:false,newText:'',valText:'',valColor:'var(--ink)'});
+    const walk=(nd,depth,isIdx)=>{const b=base(nd,depth,isIdx);if(nd.st==='mod'){const arr=nd.kind==='arr';const isC=!!col[nd.path];const p=nd.path;rows.push({...b,caret:isC?'▶':'▼',toggle:()=>this.setState(s=>({dCol:{...s.dCol,[p]:!s.dCol[p]}})),valText:isC?(arr?'[ … ]':'{ … }'):(arr?'[':'{'),valColor:'var(--faint)',meta:isC?f(T.diffs,{n:cnt(nd)}):''});if(!isC){let hidden=0;nd.ch.forEach(c=>{if(S.onlyDiff&&c.st==='same'){hidden++;return;}walk(c,depth+1,arr);});if(hidden)rows.push({...base({key:null},depth+1,false),meta:f(T.unchanged,{n:hidden})});rows.push({...b,keyText:'',colon:'',valText:arr?']':'}',valColor:'var(--faint)'});}return;}
+      if(nd.st==='same'){const [t,c]=isCont(nd.a)?[preview(nd.a),'var(--mut)']:prim(nd.a);rows.push({...b,valText:t,valColor:c});return;}
+      if(nd.st==='add'){rows.push({...b,mark:'+',markColor:'var(--add)',bg:'var(--addBg)',valText:preview(nd.b),valColor:'var(--add)'});return;}
+      if(nd.st==='del'){rows.push({...b,mark:'−',markColor:'var(--del)',bg:'var(--delBg)',valText:preview(nd.a),valColor:'var(--del)',deco:'line-through'});return;}
+      rows.push({...b,mark:'~',markColor:'var(--chg)',bg:'var(--chgBg)',valText:preview(nd.a),valColor:'var(--del)',deco:'line-through',isChg:true,newText:preview(nd.b)});};
+    if(root.st!=='same')walk(root,0,false);return {rows,list,nA,nD,nC};}
+  paletteItems(){const S=this.state,lang=S.lang==='en'?'en':'zh',T=this.T();const raw=S.pq;const q=raw.trim().toLowerCase();const list=TOOLS.filter(t=>!q||(t.zh.join(' ')+' '+t.en.join(' ')+' '+t.kw+' '+CATS[t.cat].zh+' '+CATS[t.cat].en).toLowerCase().includes(q));const items=list.map(t=>({icon:t.icon,name:t[lang][0],crumb:CATS[t.cat][lang]+' · '+t[lang][2],run:()=>this.go(t.id)}));if(q){const d=this.detect(raw);if(d){const tid=d==='tm'?'ts':d;items.unshift({icon:'↵',name:f(T.palDetect,{t:this.toolName(tid)}),crumb:raw.trim().slice(0,60),run:()=>this.routeText(raw,true)});}}const pi=Math.min(S.pi,Math.max(0,items.length-1));items.forEach((it,i)=>{const on=i===pi;it.bg=on?'var(--sub)':'transparent';it.iconBg=on?'var(--acc)':'var(--seg)';it.iconColor=on?'var(--accInk)':'var(--mut)';it.enter=on?'↵':'';it.hover=()=>{if(this.state.pi!==i)this.setState({pi:i});};});this._pItems=items;return items;}
+  onTmKey(e){if(e.key!=='ArrowUp'&&e.key!=='ArrowDown')return;e.preventDefault();const dir=e.key==='ArrowUp'?1:-1;const el=e.target;const pos=el.selectionStart||0;const S=this.state;const r=parseTime(S.tmIn,S.tz,Date.now());const base=r&&r.ms!=null?r.ms:Date.now();const p=tzParts(base,S.tz);const canonF=/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(S.tmIn);let seg=canonF?(pos<=4?0:pos<=7?1:pos<=10?2:pos<=13?3:pos<=16?4:5):4;if(e.shiftKey)seg=3;const a=[p.y,p.m,p.d,p.h,p.mi,p.s];a[seg]+=dir;if(seg<=1){const dt=new Date(Date.UTC(a[0],a[1]-1,1));const dim=new Date(Date.UTC(dt.getUTCFullYear(),dt.getUTCMonth()+1,0)).getUTCDate();if(a[2]>dim)a[2]=dim;}const ms=wallToMs(a[0],a[1],a[2],a[3],a[4],a[5],0,S.tz);this.setState({tmIn:fmtWall(ms,S.tz)},()=>{requestAnimationFrame(()=>{try{el.setSelectionRange(pos,pos);}catch(_){}});});}
+  renderVals(){
+    const S=this.state,lang=S.lang==='en'?'en':'zh',T=DICT[lang];
+    const tool=TOOLS.find(x=>x.id===S.tool)||TOOLS[0];
+    const isMac=/Mac|iPhone|iPad/i.test(navigator.platform||navigator.userAgent||'');
+    const seg=(opts,cur,fn)=>opts.map(([v,l,title])=>({label:l,title:title||'',onClick:()=>fn(v),bg:v===cur?'var(--segOn)':'transparent',color:v===cur?'var(--ink)':'var(--mut)',sh:v===cur?'0 1px 2px rgba(0,0,0,.12)':'none'}));
+    const navItem=x=>{const on=x.id===S.tool;return {name:x[lang][0],icon:x.icon,go:()=>this.go(x.id),bg:on?'var(--sel)':'transparent',weight:on?600:400,iconBg:on?'var(--acc)':'var(--seg)',iconColor:on?'var(--accInk)':'var(--mut)'};};
+    const v={t:T,themeAttr:this.isDark()?'dark':'light',wide:S.wide,narrow:!S.wide,sideOpen:S.side,sideClosed:!S.side,sideW:S.side?232:64,
+      toggleSide:()=>this.setState(s=>({side:!s.side})),pad:S.wide?'26px 36px 56px':'14px 14px 40px',
+      curName:tool[lang][0],curCat:CATS[tool.cat][lang],curDesc:tool[lang][2],
+      nav:CAT_ORDER.map(c=>({name:CATS[c][lang],items:TOOLS.filter(x=>x.cat===c).map(navItem)})),
+      mChips:TOOLS.map(x=>{const on=x.id===S.tool;return {label:x[lang][1],go:()=>this.go(x.id),bg:on?'var(--inv)':'var(--card)',color:on?'var(--invInk)':'var(--ink)',bd:on?'var(--inv)':'var(--line)'};}),
+      openPalette:()=>this.setState({palette:true,pq:'',pi:0}),closePalette:()=>this.setState({palette:false}),stop:e=>e.stopPropagation(),
+      kbdK:isMac?'⌘K':'Ctrl K',kbdShort:isMac?'⌘K':'^K',pasteKey:isMac?'⌘ V':'Ctrl V',smartBody:f(T.smartBody,{k:isMac?'⌘V':'Ctrl+V'}),
+      langSeg:seg([['zh','中'],['en','EN']],lang,l=>this.setState({lang:l})),
+      themeSeg:seg([['light',T.theme.light],['dark',T.theme.dark],['auto',T.theme.auto]],S.theme,th=>this.setState({theme:th})),
+      toggleLang:()=>this.setState({lang:lang==='zh'?'en':'zh'}),langBtn:lang==='zh'?'EN':'中',
+      cycleTheme:()=>this.setState(s=>({theme:{light:'dark',dark:'auto',auto:'light'}[s.theme]})),themeShort:T.theme[S.theme],themeTitle:T.themeLong[S.theme],
+      isTs:S.tool==='ts',isQrGen:S.tool==='qrgen',isQrScan:S.tool==='qrscan',isFmt:S.tool==='json'||S.tool==='toml',isJson:S.tool==='json',isDiff:S.tool==='diff',
+      hasToast:!!S.toast,toast:S.toast,dragOver:S.dragOver,palette:S.palette};
+    if(S.palette){const items=this.paletteItems();Object.assign(v,{pq:S.pq,pItems:items,pNone:!items.length,onPq:e=>this.setState({pq:e.target.value,pi:0}),onPKey:e=>{const its=this._pItems||[];if(e.key==='ArrowDown'){e.preventDefault();this.setState(s=>({pi:Math.min(its.length-1,s.pi+1)}));}else if(e.key==='ArrowUp'){e.preventDefault();this.setState(s=>({pi:Math.max(0,s.pi-1)}));}else if(e.key==='Enter'){e.preventDefault();const it=its[Math.min(this.state.pi,its.length-1)];if(it)it.run();}else if(e.key==='Escape'){this.setState({palette:false});}}});}
+    if(S.tool==='ts')Object.assign(v,this.tsVals(T,lang));
+    if(S.tool==='qrgen')Object.assign(v,this.qrVals(T));
+    if(S.tool==='qrscan')Object.assign(v,this.scanVals(T));
+    if(S.tool==='json'||S.tool==='toml')Object.assign(v,this.fmtVals(T,S.tool));
+    if(S.tool==='diff')Object.assign(v,this.diffVals(T));
+    return v;
+  }
+  tsVals(T,lang){const S=this.state,tz=S.tz,now=S.now;const cpy=(s)=>()=>this.copy(s);let off=0;try{off=tzOffset(now,tz);}catch(e){}const tzLabel=this.zoneLabel(tz),tzOff=offLabel(off);const np=tzParts(now,tz);
+    const v={tzLabel,tzOff,nowS:String(Math.floor(now/1000)),nowMs:String(now),nowText:fmtWall(now,tz)+' '+T.wd[np.wd],copyNowS:cpy(String(Math.floor(now/1000))),copyNowMs:cpy(String(now)),
+      toggleTz:()=>this.setState(s=>({tzOpen:!s.tzOpen,tzQ:''})),closeTz:()=>this.setState({tzOpen:false,tzQ:''}),tzOpen:S.tzOpen,tzQ:S.tzQ,onTzQ:e=>this.setState({tzQ:e.target.value}),
+      onTzKey:e=>{if(e.key==='Enter'){const it=this.tzItems().find(x=>x.item);if(it)it.onClick();}},
+      unitSeg:[['auto',T.auto],['s',T.units.s],['ms',T.units.ms]].map(([u,l])=>({label:l,onClick:()=>this.setState({tsUnit:u}),bg:u===S.tsUnit?'var(--segOn)':'transparent',color:u===S.tsUnit?'var(--ink)':'var(--mut)',sh:u===S.tsUnit?'0 1px 2px rgba(0,0,0,.12)':'none'})),
+      tsIn:S.tsIn,onTsIn:e=>this.setState({tsIn:e.target.value}),tmIn:S.tmIn,onTmIn:e=>this.setState({tmIn:e.target.value}),onTmKey:e=>this.onTmKey(e)};
+    if(S.tzOpen){const items=this.tzItems();v.tzItems=items;v.tzNone=!items.length;}
+    const r=parseTs(S.tsIn,S.tsUnit);v.tsOk=!!(r&&r.ms!=null);v.tsErr=!!(r&&r.err);v.tsEmpty=!r;v.tsErrText=r&&r.err?T[r.err]:'';
+    if(v.tsOk){const ms=r.ms,p=tzParts(ms,tz);const main=fmtWall(ms,tz);v.tsMain=main;v.tsMainMs=p.ms?'.'+String(p.ms).padStart(3,'0'):'';v.tsNote=S.tsUnit==='auto'?f(T.detected,{u:T.units[r.u],d:r.dig}):f(T.forced,{u:T.units[r.u]});v.tsSub=T.wd[p.wd]+' · '+tzLabel+' '+tzOff;v.copyTsMain=cpy(main+v.tsMainMs);
+      const rows=[[T.rowISO,fmtISO(ms,tz)],[T.rowUTC,fmtWall(ms,'UTC',true)],[T.rowRel,relTime(ms,now,T.relLocale)],r.u==='s'?[T.units.ms,String(ms)]:[T.units.s,String(Math.floor(ms/1000))]];v.tsRows=rows.map(([label,value])=>({label,value,copy:cpy(value)}));}
+    const m=parseTime(S.tmIn,tz,now);v.tmOk=!!(m&&m.ms!=null);v.tmErr=!!(m&&m.err);
+    if(v.tmOk){const ms=m.ms,p=tzParts(ms,tz);const sec=String(Math.floor(ms/1000));v.tmSec=sec;v.copyTmMain=cpy(sec);v.tmNote=f(T.parsedAs,{v:fmtWall(ms,tz,true)+' '+T.wd[p.wd]});v.tmSub=(m.note?m.note+' → ':'')+tzLabel+' '+tzOff+' · '+relTime(ms,now,T.relLocale);v.tmRows=[[T.units.ms,String(ms)],[T.rowISO,fmtISO(ms,tz)],[T.rowUTC,fmtWall(ms,'UTC',true)]].map(([label,value])=>({label,value,copy:cpy(value)}));}
+    const setMs=ms=>this.setState({tmIn:fmtWall(ms,tz)});const today=n=>{const t=new Date(Date.UTC(np.y,np.m-1,np.d+n));return wallToMs(t.getUTCFullYear(),t.getUTCMonth()+1,t.getUTCDate(),0,0,0,0,tz);};const baseMs=()=>{const x=parseTime(this.state.tmIn,tz,Date.now());return x&&x.ms!=null?x.ms:Date.now();};
+    v.tmQuick=[[T.q.now,()=>setMs(Date.now())],[T.q.today,()=>setMs(today(0))],[T.q.tomorrow,()=>setMs(today(1))],[T.q.month,()=>setMs(wallToMs(np.y,np.m,1,0,0,0,0,tz))],[T.q.m1d,()=>setMs(baseMs()-864e5)],[T.q.m1h,()=>setMs(baseMs()-36e5)],[T.q.p1h,()=>setMs(baseMs()+36e5)],[T.q.p1d,()=>setMs(baseMs()+864e5)]].map(([label,onClick])=>({label,onClick}));
+    return v;}
+  qrVals(T){const S=this.state;const m=this.qrModel();const has=!!(m&&m.d);let bytes=0;try{bytes=new TextEncoder().encode(S.qrText).length;}catch(e){bytes=S.qrText.length;}
+    return {qrText:S.qrText,onQrText:e=>this.setState({qrText:e.target.value}),clearQr:()=>this.setState({qrText:''}),qrBytes:f(T.bytes,{n:bytes}),qrHas:has,qrEmpty:!has,qrEmptyText:!window.qrcode?T.qrLoading:!S.qrText?T.qrEmpty:T.qrTooLong,qrViewBox:has?'0 0 '+m.n+' '+m.n:'0 0 1 1',qrPath:has?m.d:'',qrInfo:has?m.n+'×'+m.n:'',
+      ecSeg:['L','M','Q','H'].map(l=>({label:l,title:T.ecT[l],onClick:()=>this.setState({qrEc:l}),bg:l===S.qrEc?'var(--segOn)':'transparent',color:l===S.qrEc?'var(--ink)':'var(--mut)',sh:l===S.qrEc?'0 1px 2px rgba(0,0,0,.12)':'none'})),
+      downloadQr:()=>{const cv=this.qrCanvas();if(!cv)return;const a=document.createElement('a');a.href=cv.toDataURL('image/png');a.download='qrcode.png';a.click();},
+      copyQrImg:()=>{const cv=this.qrCanvas();if(!cv)return;cv.toBlob(b=>{try{navigator.clipboard.write([new ClipboardItem({'image/png':b})]).then(()=>this.toast(T.imgCopied),()=>this.toast(T.imgCopyFail));}catch(e){this.toast(T.imgCopyFail);}});},
+      copyQrText:()=>this.copy(S.qrText)};}
+  scanVals(T){const S=this.state,sc=S.scan;const v={fileRef:this.fileRef,pickFile:()=>this.fileRef.current&&this.fileRef.current.click(),onFile:e=>{const fl=e.target.files&&e.target.files[0];if(fl)this.decodeFile(fl);e.target.value='';},scanEmpty:!sc,scanHas:!!sc};
+    if(sc){const kind=t=>/^https?:\/\//i.test(t)?'url':/^wifi:/i.test(t)?'wifi':/^(mailto:|[\w.+-]+@[\w-]+\.[\w.]+$)/i.test(t)?'mail':/^tel:/i.test(t)?'tel':'text';const codes=sc.codes.map((c,i)=>{const k=kind(c.text);return {n:i+1,text:c.text,kind:T.kinds[k],isUrl:k==='url',l:(c.x/sc.w*100).toFixed(2),t:(c.y/sc.h*100).toFixed(2),w:(c.w/sc.w*100).toFixed(2),h:(c.h/sc.h*100).toFixed(2),copy:()=>this.copy(c.text)};});
+      Object.assign(v,{scanSrc:sc.src,scanName:sc.name,codes:sc.busy?[]:codes,scanTitle:sc.busy?T.scanning:codes.length?f(T.found,{n:codes.length}):T.notFound,scanNone:!sc.busy&&!codes.length,scanMulti:codes.length>1,copyAllCodes:()=>this.copy(sc.codes.map(c=>c.text).join('\n'))});}
+    return v;}
+  fmtVals(T,lang){const S=this.state;const L=lang==='json'?'JSON':'TOML';const r=this.fmtCompute(lang);const ok=!!(r&&r.v!==undefined);const src=S[lang];let inB=0;try{inB=new TextEncoder().encode(src).length;}catch(e){inB=src.length;}
+    const v={fmtLangName:L,fmtInput:src,onFmtInput:e=>this.setState({[lang]:e.target.value}),fmtPh:f(T.fmtPh,{L}),inSize:bytesLabel(inB),taH:S.wide?480:220,outMaxH:S.wide?'calc(100vh - 250px)':'70vh',
+      fmtSample:()=>this.setState({[lang]:lang==='json'?SAMPLE_JSON:SAMPLE_TOML}),fmtClear:()=>this.setState({[lang]:'',sel:{...S.sel,[lang]:''}}),
+      indentSeg:[['2',T.indent2],['4',T.indent4],['tab','Tab']].map(([k,l])=>({label:l,onClick:()=>this.setState({indent:k}),bg:k===S.indent?'var(--segOn)':'transparent',color:k===S.indent?'var(--ink)':'var(--mut)',sh:k===S.indent?'0 1px 2px rgba(0,0,0,.12)':'none'})),
+      toggleSort:()=>this.setState(s=>({sortKeys:!s.sortKeys})),sortMark:S.sortKeys?'✓':'○',sortBg:S.sortKeys?'var(--accSoft)':'var(--card)',sortColor:S.sortKeys?'var(--acc)':'var(--ink)',sortBd:S.sortKeys?'var(--acc)':'var(--line2)',
+      viewSeg:[['tree',T.viewTree],['text',T.viewText]].map(([k,l])=>({label:l,onClick:()=>this.setState({view:k}),bg:k===S.view?'var(--segOn)':'transparent',color:k===S.view?'var(--ink)':'var(--mut)',sh:k===S.view?'0 1px 2px rgba(0,0,0,.12)':'none'})),
+      convertLabel:lang==='json'?T.toToml:T.toJson,
+      convert:()=>{if(!ok)return;if(lang==='json'){if(!this.toml)return;if(!isObj(r.v)){this.toast(T.tomlTop);return;}try{this.setState({toml:this.toml.stringify(r.v),tool:'toml'});}catch(e){this.toast(String(e.message||e));}}else{this.setState({json:JSON.stringify(r.v,null,S.indent==='tab'?'\t':+S.indent),tool:'json'});}},
+      copyMin:()=>{if(ok)this.copy(JSON.stringify(r.v),T.minCopied);},copyOut:()=>{if(ok)this.copy(r.text);},
+      fmtErr:!!(r&&r.err),fmtWait:!!(r&&(r.empty||r.loading)),fmtWaitText:r&&r.loading?T.loadingToml:f(T.waiting,{L}),
+      isTree:ok&&S.view==='tree',isText:ok&&S.view==='text',outText:ok?r.text:''};
+    v.fmtStatus=ok?f(T.valid,{L,n:r.st.n,d:r.st.d}):r.err?(r.err.line?f(T.errAt,{l:r.err.line,c:r.err.col}):T.errNoPos):r.loading?T.loadingToml:T.empty;
+    v.statusColor=ok?'var(--add)':r.err?'var(--del)':'var(--faint)';
+    if(r.err){v.errWhere=v.fmtStatus;v.errMsg=r.err.msg;v.errLine=r.err.lineText;v.errCaret=r.err.caret;}
+    if(v.isTree){const tr=this.buildTree(r.v,lang);v.treeRows=tr.rows;v.treeCapped=tr.capped;v.treeCapText=f(T.truncated,{n:tr.rows.length});v.levelBtns=[[T.expandAll,Infinity],[f(T.level,{n:1}),1],[f(T.level,{n:2}),2],[f(T.level,{n:3}),3]].map(([label,lv])=>({label,onClick:()=>this.setLevel(lang,r.v,lv)}));}
+    const sel=S.sel[lang];const pv=this._pv&&this._pv[lang];v.hasSel=ok&&!!sel&&!!pv&&(sel in pv);v.noSel=ok&&!v.hasSel&&S.view==='tree';
+    if(v.hasSel){v.selPath=sel;v.copySelPath=()=>this.copy(sel);v.copySelValue=()=>{const x=pv[sel];this.copy(typeof x==='string'?x:JSON.stringify(x,null,2));};v.clearSel=()=>this.setState(s=>({sel:{...s.sel,[lang]:''}}));}
+    return v;}
+  diffVals(T){const S=this.state;const A=this.parseAny(S.diffA),B=this.parseAny(S.diffB);const st=x=>x.empty?[T.empty,'var(--faint)']:x.bad?[T.invalid,'var(--del)']:['✓ '+x.lang,'var(--add)'];const [aS,aC]=st(A),[bS,bC]=st(B);
+    const tg=(on,label,fn)=>({label,onClick:fn,mark:on?'✓':'○',bg:on?'var(--accSoft)':'var(--card)',color:on?'var(--acc)':'var(--ink)',bd:on?'var(--acc)':'var(--line2)'});
+    const v={diffA:S.diffA,diffB:S.diffB,onDiffA:e=>this.setState({diffA:e.target.value}),onDiffB:e=>this.setState({diffB:e.target.value}),aStatus:aS,aColor:aC,bStatus:bS,bColor:bC,
+      diffToggles:[tg(S.ignoreOrder,T.ignoreOrder,()=>this.setState(s=>({ignoreOrder:!s.ignoreOrder}))),tg(S.onlyDiff,T.onlyDiff,()=>this.setState(s=>({onlyDiff:!s.onlyDiff})))],
+      swapAB:()=>this.setState(s=>({diffA:s.diffB,diffB:s.diffA})),diffSample:()=>this.setState({diffA:SAMPLE_A,diffB:SAMPLE_B}),diffClear:()=>this.setState({diffA:'',diffB:''}),
+      diffViewSeg:[['tree',T.diffTree],['list',T.diffList]].map(([k,l])=>({label:l,onClick:()=>this.setState({diffView:k}),bg:k===S.diffView?'var(--segOn)':'transparent',color:k===S.diffView?'var(--ink)':'var(--mut)',sh:k===S.diffView?'0 1px 2px rgba(0,0,0,.12)':'none'}))};
+    const ready=A.v!==undefined&&B.v!==undefined;v.diffNeed=!ready;v.diffHas=false;v.diffSame=false;v.diffShowTree=false;v.diffShowList=false;
+    if(ready){const key=S.diffA+'\u0000'+S.diffB+'\u0000'+S.ignoreOrder;if(this._dk!==key){this._dk=key;this._dr=diffNode(A.v,B.v,null,'$',S.ignoreOrder);}const root=this._dr;if(root.st==='same')v.diffSame=true;else{const d=this.buildDiff(root);Object.assign(v,{diffHas:true,nAdd:d.nA,nDel:d.nD,nChg:d.nC,dRows:d.rows,dList:d.list,diffShowTree:S.diffView==='tree',diffShowList:S.diffView==='list'});}}
+    return v;}
+}
+</script>
+</body>
+</html>
