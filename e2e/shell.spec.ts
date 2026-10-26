@@ -1,7 +1,7 @@
 // App shell: navigation, sidebar, search palette, themes, languages, layout, offline.
 import { activeTool, expect, nav, open, test } from './helpers';
 
-const TOOLS = ['时间戳转换', '生成二维码', '识别二维码', 'JSON 格式化', 'TOML 格式化', 'JSON 对比'];
+const TOOLS = ['时间戳转换', '生成二维码', '识别二维码', 'JSON 格式化', 'TOML 格式化', 'JSON 对比', 'Base64 编解码', '哈希'];
 
 test('every tool opens; the page has no title / breadcrumb / smart-paste card', async ({ page }) => {
   await open(page);
@@ -49,6 +49,17 @@ test('palette: Ctrl+K, "/", search by pinyin initials, Enter opens, Esc closes',
   await page.keyboard.press('Escape');
   await expect(input).toHaveCount(0);
 });
+
+for (const [q, tool] of [['md5', '哈希'], ['sha256', '哈希'], ['hx', '哈希'], ['base64', 'Base64 编解码'], ['jm', 'Base64 编解码']] as const) {
+  test(`palette: "${q}" finds ${tool}`, async ({ page }) => {
+    await open(page);
+    await page.keyboard.press('Control+k');
+    await page.getByPlaceholder('搜索工具，或直接粘贴内容…').fill(q);
+    await expect(page.locator('.list-item').first()).toContainText(tool);
+    await page.keyboard.press('Enter');
+    await expect.poll(() => activeTool(page)).toContain(tool);
+  });
+}
 
 test('palette: content typed into it is offered to the matching tool', async ({ page }) => {
   await open(page);
@@ -111,7 +122,7 @@ for (const [width, locale, scheme] of [[320, 'zh-CN', 'dark'], [390, 'en-US', 'l
       await page.evaluate(() => localStorage.clear());
       await page.reload();
       const count = width < 800 ? await page.locator('.chip').count() : await page.locator('.nav-item').count();
-      expect(count).toBe(6);
+      expect(count).toBe(8);
       for (let i = 0; i < count; i++) {
         await (width < 800 ? page.locator('.chip').nth(i) : page.locator('.nav-item').nth(i)).click();
         expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);

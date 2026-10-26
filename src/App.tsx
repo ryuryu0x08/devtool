@@ -6,7 +6,7 @@ import {
 import { hasMs, parseTime } from './lib/time';
 import { loadImage, scanImage } from './lib/qr';
 import { smolParse } from './lib/toml';
-import { clipboardUnsafe, decodeUtf8 } from './lib/data';
+import { clipboardUnsafe, decodeUtf8, normEol } from './lib/data';
 import { MobileBar, Sidebar } from './components/Sidebar';
 import { Palette } from './components/Palette';
 import { Vis } from './components/Vis';
@@ -14,6 +14,8 @@ import { Timestamp } from './tools/Timestamp';
 import { QrGen, QrScan } from './tools/Qr';
 import { Formatter } from './tools/Formatter';
 import { Diff } from './tools/Diff';
+import { Base64 } from './tools/Base64';
+import { Hash } from './tools/Hash';
 
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg|ico|avif|heic|heif|tiff?)$/i;
 
@@ -134,8 +136,29 @@ export function App() {
     set({ scan: { src, name: nm, busy: false, codes, w: img.naturalWidth, h: img.naturalHeight } });
   }, [toast]);
 
+  /** Base64 and Hash take any file as bytes; decoding Base64 reads a text file into the input. */
+  const byteFile = useCallback((file: File, note?: string) => {
+    const s = ref.current, t = dictFor(s.lang);
+    if (s.tool === 'hash') set({ hashFile: file, hashCr: false });
+    else if (s.b64Mode === 'enc') set({ b64File: file, b64Cr: false });
+    else {
+      file.arrayBuffer().then((buf) => {
+        const text = decodeUtf8(buf);
+        if (text === null) { set({ b64Mode: 'enc', b64File: file, b64Cr: false }); toast(t.b64.notText, 6000); return; }
+        const n = normEol(text);
+        replace({ b64In: n.text }, note);
+      }, () => toast(t.readFail, 5000));
+      return;
+    }
+    if (note) toast(note, 5000);
+  }, [replace, toast]);
+
   const handleFiles = useCallback((files: File[]) => {
     const t = dictFor(ref.current.lang);
+    if (ref.current.tool === 'b64' || ref.current.tool === 'hash') {
+      if (files.length) byteFile(files[0], files.length > 1 ? f(t.onlyFirst, { n: files[0].name }) : undefined);
+      return;
+    }
     const isImage = (x: File) => /^image\//.test(x.type) || (!x.type && IMAGE_EXT.test(x.name));
     const file = files.find((x) => isImage(x) || /\.(json|toml|txt)$/i.test(x.name));
     if (!file) { toast(t.unsupportedFile, 5000); return; }
@@ -154,7 +177,7 @@ export function App() {
       else if (/\.json$/i.test(file.name)) replace({ json: s, sel: { ...ref.current.sel, json: '' }, tool: 'json' }, note);
       else routeText(s);
     });
-  }, [decodeFile, replace, routeText, toast]);
+  }, [byteFile, decodeFile, replace, routeText, toast]);
 
   // Global listeners: resize, system theme, shortcuts, smart paste, drag & drop.
   useEffect(() => {
@@ -185,6 +208,21 @@ export function App() {
     const onPaste = (e: ClipboardEvent) => {
       // Text wins: apps like Office put a picture of the selection next to the text.
       const text = e.clipboardData?.getData('text') || '';
+      const s = ref.current;
+      // Base64 and Hash keep what is pasted on a blank area (any file, or the text itself).
+      if (s.tool === 'b64' || s.tool === 'hash') {
+        if (isField(e.target)) return;
+        if (!text) {
+          const file = Array.from(e.clipboardData?.items || []).find((it) => it.kind === 'file')?.getAsFile();
+          if (file) { e.preventDefault(); byteFile(file); }
+          return;
+        }
+        e.preventDefault();
+        const n = normEol(text);
+        if (s.tool === 'hash') { set({ hashFile: null, hashCr: n.cr }); replace({ hashIn: n.text }); }
+        else { set({ b64File: null, b64Cr: n.cr }); replace({ b64In: n.text }); }
+        return;
+      }
       if (!text.trim()) {
         for (const it of Array.from(e.clipboardData?.items || [])) {
           if (it.type?.startsWith('image/')) {
@@ -229,7 +267,7 @@ export function App() {
       window.removeEventListener('drop', dDrop);
       mq?.removeEventListener('change', onMq);
     };
-  }, [decodeFile, routeText, handleFiles]);
+  }, [byteFile, decodeFile, replace, routeText, handleFiles]);
 
   // Theme on <html> so body background and native controls follow it.
   useLayoutEffect(() => {
@@ -297,13 +335,15 @@ export function App() {
             {S.tool === 'qrscan' && <QrScan />}
             {(S.tool === 'json' || S.tool === 'toml') && <Formatter key={S.tool} lang={S.tool} />}
             {S.tool === 'diff' && <Diff />}
+            {S.tool === 'b64' && <Base64 />}
+            {S.tool === 'hash' && <Hash />}
           </div>
         </main>
         {S.palette && <Palette />}
         {S.dragOver && (
           <div className="drop-overlay">
             <span style={{ fontSize: 20, fontWeight: 600, color: 'var(--acc)' }}>{T.dropHere}</span>
-            <span style={{ fontSize: 13, color: 'var(--mut)' }}>{T.dropHereSub}</span>
+            <span style={{ fontSize: 13, color: 'var(--mut)' }}>{S.tool === 'b64' || S.tool === 'hash' ? T.dropAny : T.dropHereSub}</span>
           </div>
         )}
         {S.toast && (

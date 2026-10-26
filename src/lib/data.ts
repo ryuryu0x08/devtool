@@ -215,9 +215,24 @@ export function stats(v: unknown): { n: number; d: number } {
   return { n, d };
 }
 
-export const bytesLabel = (n: number) => (n < 1024 ? n + ' B' : (n / 1024).toFixed(1) + ' KB');
+export const bytesLabel = (n: number) =>
+  n < 1024 ? n + ' B' : n < 1024 ** 2 ? (n / 1024).toFixed(1) + ' KB' : n < 1024 ** 3 ? (n / 1024 ** 2).toFixed(1) + ' MB' : (n / 1024 ** 3).toFixed(2) + ' GB';
 
 export const byteLen = (s: string) => new TextEncoder().encode(s).length;
+
+export type Eol = 'lf' | 'crlf';
+
+/**
+ * Text as the input box will hold it: browsers turn CRLF and CR into LF in text fields. `cr`
+ * says the original had CRs, so tools that work on bytes can tell the user.
+ */
+export const normEol = (s: string) => ({ text: s.replace(/\r\n?/g, '\n'), cr: s.includes('\r') });
+
+/** UTF-8 bytes of the text with the chosen line ending; null when it has lone surrogates. */
+export function textBytes(s: string, eol: Eol): Uint8Array | null {
+  if (!wellFormed(s)) return null;
+  return new TextEncoder().encode(eol === 'crlf' ? s.replace(/\r?\n/g, '\r\n') : s);
+}
 
 /** True if `s` has no lone surrogates (which UTF-8 and the clipboard can't carry). */
 export function wellFormed(s: string): boolean {

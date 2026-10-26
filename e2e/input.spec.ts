@@ -82,7 +82,7 @@ test.describe('drag & drop', () => {
   test('an unsupported file type is explained', async ({ page }) => {
     await open(page);
     await drop(page, [{ name: 'notes.yaml', bytes: 'a: 1' }]);
-    await expect(toast(page)).toHaveText('不支持这种文件：请拖入图片、.json、.toml 或 .txt');
+    await expect(toast(page)).toHaveText('这里不支持这种文件：请拖入图片、.json、.toml 或 .txt；任意文件可在「Base64」或「哈希」中处理');
   });
 
   test('an unreadable image says so (not "no QR code")', async ({ page }) => {

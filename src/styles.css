@@ -47,6 +47,8 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .btn.inv { border-color: var(--inv); background: var(--inv); color: var(--invInk); }
 .btn.inv:hover { opacity: 0.88; background: var(--inv); }
 .btn.on { border-color: var(--acc); background: var(--accSoft); color: var(--acc); }
+.btn.sm { height: 28px; padding: 0 10px; border-radius: 7px; font-size: 12px; font-weight: 400; }
+.btn:disabled { opacity: 0.45; cursor: default; }
 .ghost { border: 0; background: transparent; cursor: pointer; }
 .ghost:hover { background: var(--sel); color: var(--ink); }
 .sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }

@@ -3,6 +3,8 @@ import { createContext, useContext } from 'react';
 import { DICT, SAMPLE_A, SAMPLE_B, SAMPLE_JSON, SAMPLE_TOML, TOOLS, type Dict, type Lang, type ToolId } from './i18n';
 import { fmtWall, tzParts, type TsUnit } from './lib/time';
 import type { Ec, FoundCode } from './lib/qr';
+import type { Eol } from './lib/data';
+import type { HashFmt } from './lib/hash';
 
 /** Behaviour switches (editor props in the design prototype). */
 export const CONFIG = { smartPaste: true, rememberInputs: true, defaultView: 'tree' as 'tree' | 'text' };
@@ -51,6 +53,23 @@ export interface State {
   onlyDiff: boolean;
   diffView: 'tree' | 'list';
   dCol: Record<string, boolean>;
+  b64In: string;
+  b64Mode: 'enc' | 'dec';
+  b64Url: boolean;
+  b64Pad: boolean;
+  b64DataUrl: boolean;
+  b64Eol: Eol;
+  /** The pasted text had CR line breaks, which the input box turned into LF. */
+  b64Cr: boolean;
+  /** A file to encode (exact bytes); not stored across reloads. */
+  b64File: File | null;
+  b64View: 'text' | 'hex';
+  hashIn: string;
+  hashFmt: HashFmt;
+  hashEol: Eol;
+  hashCr: boolean;
+  hashFile: File | null;
+  hashCheck: string;
 }
 
 export type Patch = Partial<State> | ((s: State) => Partial<State>);
@@ -71,13 +90,14 @@ export const localTz = (() => {
   try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; }
 })();
 
-type Inputs = Pick<State, 'tsIn' | 'tmIn' | 'qrText' | 'json' | 'toml' | 'diffA' | 'diffB'>;
-type Prefs = Pick<State, 'side' | 'lang' | 'theme' | 'indent' | 'sortKeys' | 'view' | 'ignoreOrder' | 'onlyDiff' | 'diffView'>;
+type Inputs = Pick<State, 'tsIn' | 'tmIn' | 'qrText' | 'json' | 'toml' | 'diffA' | 'diffB' | 'b64In' | 'hashIn' | 'hashCheck'>;
+type Prefs = Pick<State, 'side' | 'lang' | 'theme' | 'indent' | 'sortKeys' | 'view' | 'ignoreOrder' | 'onlyDiff' | 'diffView' | 'b64Mode' | 'b64Url' | 'b64Pad' | 'b64DataUrl' | 'hashFmt'>;
 
-export const INPUT_KEYS: (keyof Inputs)[] = ['tsIn', 'tmIn', 'qrText', 'json', 'toml', 'diffA', 'diffB'];
+export const INPUT_KEYS: (keyof Inputs)[] = ['tsIn', 'tmIn', 'qrText', 'json', 'toml', 'diffA', 'diffB', 'b64In', 'hashIn', 'hashCheck'];
 export const pickPrefs = (S: State): Prefs => ({
   side: S.side, lang: S.lang, theme: S.theme, indent: S.indent, sortKeys: S.sortKeys, view: S.view,
   ignoreOrder: S.ignoreOrder, onlyDiff: S.onlyDiff, diffView: S.diffView,
+  b64Mode: S.b64Mode, b64Url: S.b64Url, b64Pad: S.b64Pad, b64DataUrl: S.b64DataUrl, hashFmt: S.hashFmt,
 });
 
 const validTz = (z: string) => {
@@ -134,6 +154,16 @@ export function initState(): State {
     onlyDiff: pr.onlyDiff !== false,
     diffView: oneOf(pr.diffView, ['tree', 'list'] as const, 'tree'),
     dCol: {},
+    b64In: inp.b64In ?? '',
+    b64Mode: oneOf(pr.b64Mode, ['enc', 'dec'] as const, 'enc'),
+    b64Url: pr.b64Url === true,
+    b64Pad: pr.b64Pad !== false,
+    b64DataUrl: pr.b64DataUrl === true,
+    b64Eol: 'lf', b64Cr: false, b64File: null, b64View: 'text',
+    hashIn: inp.hashIn ?? '',
+    hashFmt: oneOf(pr.hashFmt, ['hex', 'HEX', 'b64'] as const, 'hex'),
+    hashEol: 'lf', hashCr: false, hashFile: null,
+    hashCheck: inp.hashCheck ?? '',
   };
 }
 
