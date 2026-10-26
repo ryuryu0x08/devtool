@@ -142,7 +142,8 @@ export function Timestamp() {
   const now = useNow();
   const tz = S.tz;
   const zoneLabel = lang === 'zh' && TZ_ZH[tz] ? TZ_ZH[tz] : tz === 'UTC' ? 'UTC' : tz.split('/').pop()!.replace(/_/g, ' ');
-  const tzOff = offLabel(safeOff(now, tz));
+  // Offset at the converted moment, not now — they differ across DST.
+  const offAt = (ms: number) => offLabel(safeOff(ms, tz));
   const np = tzParts(now, tz);
 
   // Timestamp → date
@@ -238,7 +239,7 @@ export function Timestamp() {
                     {S.tsUnit === 'auto' ? f(T.detected, { u: T.units[tsOk.u], d: tsOk.dig }) : f(T.forced, { u: T.units[tsOk.u] })}
                   </span>
                   <span className="hero-big">{main}<span style={{ color: 'var(--faint)', fontWeight: 500 }}>{msPart}</span></span>
-                  <span style={{ fontSize: 13, color: 'var(--mut)' }}>{T.wd[p.wd] + ' · ' + zoneLabel + ' ' + tzOff}</span>
+                  <span style={{ fontSize: 13, color: 'var(--mut)' }}>{T.wd[p.wd] + ' · ' + zoneLabel + ' ' + offAt(ms)}</span>
                 </button>
                 <KvRows rows={rows} />
               </div>
@@ -266,7 +267,7 @@ export function Timestamp() {
                     <span className="hero-big">{sec}</span><span style={{ fontSize: 13, color: 'var(--mut)' }}>{T.sec}</span>
                   </span>
                   <span style={{ fontSize: 13, color: 'var(--mut)' }}>
-                    {(tm.note ? tm.note + ' → ' : '') + zoneLabel + ' ' + tzOff + ' · ' + relTime(ms, now, T.relLocale)}
+                    {(tm.note ? tm.note + ' → ' : '') + zoneLabel + ' ' + offAt(ms) + ' · ' + relTime(ms, now, T.relLocale)}
                   </span>
                 </button>
                 <KvRows rows={[[T.units.ms, String(ms)], [T.rowISO, fmtISO(ms, tz)], [T.rowUTC, fmtWall(ms, 'UTC', true)]]} />
@@ -274,7 +275,6 @@ export function Timestamp() {
             );
           })()}
           {m && 'err' in m && <div style={{ fontSize: 13, color: 'var(--del)', padding: 2, lineHeight: 1.5 }}>{T.tmErr}</div>}
-          <div style={{ fontSize: 12, color: 'var(--faint)', lineHeight: 1.5 }}>{T.tmHint}</div>
         </section>
       </div>
     </div>

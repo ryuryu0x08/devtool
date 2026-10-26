@@ -1,16 +1,17 @@
 import { useMemo } from 'react';
-import * as TOML from 'smol-toml';
 import { SAMPLE_A, SAMPLE_B, f, type Dict } from '../i18n';
 import { useApp } from '../store';
 import { Seg, Toggle } from '../components/Seg';
 import { diffNode, isCont, preview, prim, type DiffNode } from '../lib/data';
+import { parseJson } from '../lib/json';
+import { parseToml } from '../lib/toml';
 
 type Parsed = { empty: true } | { bad: true } | { v: unknown; lang: 'JSON' | 'TOML' };
 
 function parseAny(src: string): Parsed {
   if (!src.trim()) return { empty: true };
-  try { return { v: JSON.parse(src), lang: 'JSON' }; } catch { /* try TOML */ }
-  try { return { v: TOML.parse(src), lang: 'TOML' }; } catch { /* neither */ }
+  try { return { v: parseJson(src), lang: 'JSON' }; } catch { /* try TOML */ }
+  try { return { v: parseToml(src), lang: 'TOML' }; } catch { /* neither */ }
   return { bad: true };
 }
 

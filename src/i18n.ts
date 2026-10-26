@@ -41,17 +41,17 @@ export const TZ_ZH: Record<string, string> = {
 export const COMMON_TZ = ['UTC', 'Asia/Shanghai', 'Asia/Tokyo', 'Asia/Singapore', 'Europe/London', 'Europe/Berlin', 'America/New_York', 'America/Los_Angeles'];
 
 const zh = {
-  brand: '工具箱', search: '搜索工具…', searchShort: '搜索', collapse: '收起侧栏  ⌘B', expand: '展开侧栏  ⌘B', smartTitle: '智能粘贴', smartBody: '在空白处按 {k}：时间戳、JSON、TOML、图片会自动打开对应工具',
+  brand: '工具箱', search: '搜索工具…', searchShort: '搜索', collapse: '收起侧栏', expand: '展开侧栏',
   now: '现在', tzSearch: '搜索城市或时区，如 tokyo / 东京 / +9', tzLocal: '本机', tzRecent: '最近使用', tzCommon: '常用', tzNone: '没有匹配的时区', tzLocalTag: ' · 本机',
   ts2t: '时间戳', t2ts: '时间', auto: '自动', units: { s: '秒', ms: '毫秒', us: '微秒', ns: '纳秒' }, tsPh: '粘贴时间戳，如 1793000000', detected: '识别为{u} · {d} 位 · 点击复制', forced: '按{u}解析 · 点击复制',
   rowISO: 'ISO 8601', rowUTC: 'UTC', rowRel: '相对', copy: '复制', copyText: '复制文本', tsErr: '请输入数字时间戳', tsRange: '超出可表示的时间范围', tsEmpty: '输入时间戳，结果实时显示',
-  tmPh: '2026-10-26 14:30 · 明天 9点 · now', parsedAs: '解析为 {v} · 点击复制', tmErr: '无法识别。试试 2026-10-26 14:30、10/26 9:00、明天 9点、14:30 或 now', tmHint: '支持多种写法；光标放在年 / 月 / 日 / 时 / 分 / 秒上按 ↑ ↓ 逐段调整，⇧ 调整小时', sec: '秒',
+  tmPh: '2026-10-26 14:30 · 明天 9点 · now', parsedAs: '解析为 {v} · 点击复制', tmErr: '无法识别。试试 2026-10-26 14:30、10/26 9:00、明天 9点、14:30 或 now', sec: '秒',
   q: { now: '现在', today: '今天 0 点', tomorrow: '明天 0 点', month: '本月 1 日', m1d: '−1 天', m1h: '−1 时', p1h: '+1 时', p1d: '+1 天' }, wd: ['周日', '周一', '周二', '周三', '周四', '周五', '周六'],
   copied: '已复制', qrContent: '内容', qrPh: '输入文本或链接，二维码实时生成', bytes: '{n} 字节', qrEmpty: '输入内容即时生成', qrTooLong: '内容过长，无法生成', ec: '容错', dlPng: '下载 PNG', copyImg: '复制图片', clear: '清空', sample: '示例', imgCopied: '图片已复制', imgCopyFail: '当前浏览器不支持复制图片', ecT: { L: '约 7%', M: '约 15%', Q: '约 25%', H: '约 30%' },
   dropTitle: '粘贴、拖入或点击选择图片', dropSub: '自动识别图中所有二维码 · 图片仅在本地处理', scanning: '识别中…', found: '识别到 {n} 个二维码', notFound: '未识别到二维码', notFoundSub: '换一张更清晰、二维码更完整的图片试试。', another: '换一张', copyAll: '复制全部', open: '打开', pasted: '粘贴的图片',
   kinds: { url: '链接', wifi: 'Wi-Fi', mail: '邮箱', tel: '电话', text: '文本' },
   input: '输入', indent2: '2 空格', indent4: '4 空格', sortKeys: '按 key 排序', minify: '压缩复制', toToml: '转为 TOML', toJson: '转为 JSON', viewTree: '结构', viewText: '文本', copyResult: '复制结果', expandAll: '全部展开', level: '{n} 层',
-  valid: '有效 {L} · {n} 个节点 · 深度 {d}', waiting: '在左侧输入或粘贴 {L}', errAt: '第 {l} 行，第 {c} 列', errNoPos: '解析失败', items: '{n} 项', keys: '{n} 个键', copyPath: '复制路径', copyValue: '复制值', pathHint: '点击任一行查看并复制它的路径', truncated: '仅显示前 {n} 行，切换到「文本」查看全部', tomlTop: 'TOML 顶层必须是对象', minCopied: '已复制压缩后的 JSON', fmtPh: '粘贴 {L}…',
+  valid: '有效 {L} · {n} 个节点 · 深度 {d}', waiting: '在左侧输入或粘贴 {L}', errAt: '第 {l} 行，第 {c} 列', errNoPos: '解析失败', items: '{n} 项', keys: '{n} 个键', copyPath: '复制路径', copyValue: '复制值', truncated: '仅显示前 {n} 行，切换到「文本」查看全部', tomlTop: 'TOML 顶层必须是对象', cv: { null: 'TOML 不支持 null（{p}），未转换', nonFinite: 'JSON 不支持 nan / inf（{p}），未转换', badString: '字符串含有 TOML 无法表示的字符（{p}）' }, minCopied: '已复制压缩后的 JSON', fmtPh: '粘贴 {L}…',
   ignoreOrder: '忽略数组顺序', onlyDiff: '仅显示差异', swap: '交换', a: 'A · 原始', b: 'B · 修改后', diffTree: '合并视图', diffList: '差异清单', same: '语义完全一致', sameSub: 'key 顺序、缩进、空白不影响结果', added: '新增', removed: '删除', changed: '修改', unchanged: '… {n} 项未变化', diffs: '{n} 处差异', needBoth: '两侧都填入有效的 JSON / TOML 后显示差异', invalid: '无效', empty: '空',
   pal: '搜索工具，或直接粘贴内容…', palNone: '没有匹配的工具', palFoot: '↑↓ 选择 · ↵ 打开 · 也可直接粘贴时间戳 / JSON 自动识别', palDetect: '用「{t}」处理输入的内容',
   routed: '已识别，打开「{t}」', dropHere: '松开即可识别', dropHereSub: '图片 → 识别二维码 · .json / .toml → 格式化', notImage: '请提供图片文件',
@@ -61,17 +61,17 @@ const zh = {
 export type Dict = typeof zh;
 
 const en: Dict = {
-  brand: 'Toolbox', search: 'Search tools…', searchShort: 'Search', collapse: 'Collapse sidebar  ⌘B', expand: 'Expand sidebar  ⌘B', smartTitle: 'Smart paste', smartBody: 'Press {k} anywhere blank — timestamps, JSON, TOML and images open the right tool.',
+  brand: 'Toolbox', search: 'Search tools…', searchShort: 'Search', collapse: 'Collapse sidebar', expand: 'Expand sidebar',
   now: 'Now', tzSearch: 'Search city or zone — tokyo, +9…', tzLocal: 'This device', tzRecent: 'Recent', tzCommon: 'Common', tzNone: 'No matching time zone', tzLocalTag: ' · this device',
   ts2t: 'Timestamp', t2ts: 'Date', auto: 'Auto', units: { s: 'seconds', ms: 'milliseconds', us: 'microseconds', ns: 'nanoseconds' }, tsPh: 'Paste a timestamp, e.g. 1793000000', detected: 'Detected {u} · {d} digits · click to copy', forced: 'Read as {u} · click to copy',
   rowISO: 'ISO 8601', rowUTC: 'UTC', rowRel: 'Relative', copy: 'Copy', copyText: 'Copy text', tsErr: 'Enter a numeric timestamp', tsRange: 'Out of representable range', tsEmpty: 'Type a timestamp — results appear instantly',
-  tmPh: '2026-10-26 14:30 · tomorrow 9:00 · now', parsedAs: 'Parsed as {v} · click to copy', tmErr: 'Not recognised. Try 2026-10-26 14:30, 10/26 9:00, tomorrow 9:00, 14:30 or now', tmHint: 'Many formats accepted. Put the caret on any part and press ↑ ↓ to adjust it; ⇧ adjusts the hour.', sec: 'sec',
+  tmPh: '2026-10-26 14:30 · tomorrow 9:00 · now', parsedAs: 'Parsed as {v} · click to copy', tmErr: 'Not recognised. Try 2026-10-26 14:30, 10/26 9:00, tomorrow 9:00, 14:30 or now', sec: 'sec',
   q: { now: 'Now', today: 'Today 00:00', tomorrow: 'Tomorrow 00:00', month: '1st of month', m1d: '−1 d', m1h: '−1 h', p1h: '+1 h', p1d: '+1 d' }, wd: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
   copied: 'Copied', qrContent: 'Content', qrPh: 'Type text or a link — the code updates live', bytes: '{n} bytes', qrEmpty: 'Start typing to generate', qrTooLong: 'Too long for a QR code', ec: 'Error correction', dlPng: 'Download PNG', copyImg: 'Copy image', clear: 'Clear', sample: 'Sample', imgCopied: 'Image copied', imgCopyFail: 'This browser can’t copy images', ecT: { L: '~7%', M: '~15%', Q: '~25%', H: '~30%' },
   dropTitle: 'Paste, drop or click to choose an image', dropSub: 'Finds every QR code in the image · processed locally', scanning: 'Scanning…', found: '{n} QR code(s) found', notFound: 'No QR code found', notFoundSub: 'Try a sharper image where the whole code is visible.', another: 'Another image', copyAll: 'Copy all', open: 'Open', pasted: 'Pasted image',
   kinds: { url: 'Link', wifi: 'Wi-Fi', mail: 'Email', tel: 'Phone', text: 'Text' },
   input: 'Input', indent2: '2 spaces', indent4: '4 spaces', sortKeys: 'Sort keys', minify: 'Copy minified', toToml: 'To TOML', toJson: 'To JSON', viewTree: 'Tree', viewText: 'Text', copyResult: 'Copy result', expandAll: 'Expand all', level: 'Level {n}',
-  valid: 'Valid {L} · {n} nodes · depth {d}', waiting: 'Type or paste {L} on the left', errAt: 'Line {l}, column {c}', errNoPos: 'Parse error', items: '{n} items', keys: '{n} keys', copyPath: 'Copy path', copyValue: 'Copy value', pathHint: 'Click any row to see and copy its path', truncated: 'Showing first {n} rows — switch to Text for everything', tomlTop: 'TOML needs an object at the top level', minCopied: 'Minified JSON copied', fmtPh: 'Paste {L}…',
+  valid: 'Valid {L} · {n} nodes · depth {d}', waiting: 'Type or paste {L} on the left', errAt: 'Line {l}, column {c}', errNoPos: 'Parse error', items: '{n} items', keys: '{n} keys', copyPath: 'Copy path', copyValue: 'Copy value', truncated: 'Showing first {n} rows — switch to Text for everything', tomlTop: 'TOML needs an object at the top level', cv: { null: 'TOML has no null ({p}) — not converted', nonFinite: 'JSON has no nan / inf ({p}) — not converted', badString: 'String has characters TOML can’t represent ({p})' }, minCopied: 'Minified JSON copied', fmtPh: 'Paste {L}…',
   ignoreOrder: 'Ignore array order', onlyDiff: 'Only differences', swap: 'Swap', a: 'A · original', b: 'B · changed', diffTree: 'Merged', diffList: 'Change list', same: 'Semantically identical', sameSub: 'Key order, indentation and whitespace are ignored', added: 'added', removed: 'removed', changed: 'changed', unchanged: '… {n} unchanged', diffs: '{n} differences', needBoth: 'Enter valid JSON / TOML on both sides to compare', invalid: 'Invalid', empty: 'Empty',
   pal: 'Search tools, or paste content…', palNone: 'No matching tools', palFoot: '↑↓ select · ↵ open · paste a timestamp / JSON to auto-detect', palDetect: 'Open with “{t}”',
   routed: 'Detected — opened “{t}”', dropHere: 'Drop to process', dropHereSub: 'Image → QR scan · .json / .toml → formatter', notImage: 'Please provide an image',

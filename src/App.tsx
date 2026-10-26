@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from 'react';
-import * as TOML from 'smol-toml';
-import { CATS, TOOLS, f, type ToolId } from './i18n';
+import { TOOLS, f, type ToolId } from './i18n';
 import {
   AppCtx, CONFIG, INPUT_KEYS, WIDE_MIN, dictFor, initState, lsSet, pickPrefs, type Ctx, type Patch, type State,
 } from './store';
 import { hasMs, parseTime } from './lib/time';
 import { loadImage, scanImage } from './lib/qr';
+import { parseToml } from './lib/toml';
 import { MobileBar, Sidebar } from './components/Sidebar';
 import { Palette } from './components/Palette';
 import { Timestamp } from './tools/Timestamp';
@@ -68,7 +68,7 @@ export function App() {
     if (!s) return null;
     if (/^-?\d{9,19}(\.\d+)?$/.test(s)) return 'ts';
     if (/^[[{]/.test(s)) { try { JSON.parse(s); return 'json'; } catch { /* not JSON */ } }
-    if (/^\s*(\[[^\]\n]+\]|[\w."'-]+\s*=)/m.test(s)) { try { TOML.parse(s); return 'toml'; } catch { /* not TOML */ } }
+    if (/^\s*(\[[^\]\n]+\]|[\w."'-]+\s*=)/m.test(s)) { try { parseToml(s); return 'toml'; } catch { /* not TOML */ } }
     if (s.length < 40 && /\d/.test(s) && hasMs(parseTime(s, ref.current.tz, Date.now()))) return 'tm';
     return null;
   }, []);
@@ -224,8 +224,6 @@ export function App() {
   const ctx = useMemo<Ctx>(() => ({ S, set, T, lang, isMac, go, copy, toast, toolName, routeText, detect, decodeFile }),
     [S, T, lang, isMac, go, copy, toast, toolName, routeText, detect, decodeFile]);
 
-  const tool = TOOLS.find((x) => x.id === S.tool) || TOOLS[0];
-
   return (
     <AppCtx.Provider value={ctx}>
       <div className="app">
@@ -233,15 +231,6 @@ export function App() {
         <main className="main">
           {!S.wide && <MobileBar />}
           <div className="content" style={{ padding: S.wide ? '26px 36px 56px' : '14px 14px 40px' }}>
-            {S.wide && (
-              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-                <div>
-                  <div style={{ fontSize: 12, color: 'var(--faint)' }}>{CATS[tool.cat][lang]} / {tool[lang][0]}</div>
-                  <h1 style={{ margin: '4px 0 0', fontSize: 22, fontWeight: 600, letterSpacing: '-.01em' }}>{tool[lang][0]}</h1>
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--mut)' }}>{tool[lang][2]}</div>
-              </div>
-            )}
             {S.tool === 'ts' && <Timestamp />}
             {S.tool === 'qrgen' && <QrGen />}
             {S.tool === 'qrscan' && <QrScan />}

@@ -1,4 +1,4 @@
-import { CATS, CAT_ORDER, TOOLS, f } from '../i18n';
+import { CATS, CAT_ORDER, TOOLS } from '../i18n';
 import { useApp, type Theme } from '../store';
 import { Seg } from './Seg';
 
@@ -29,7 +29,7 @@ export function Sidebar() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '2px 2px 14px 8px' }}>
             <span className="logo" style={{ width: 26, height: 26, borderRadius: 7 }}>TB</span>
             <span style={{ fontWeight: 600, fontSize: 15, flex: 1 }}>{T.brand}</span>
-            <button className="ghost" onClick={c.toggleSide} title={T.collapse}
+            <button className="ghost" onClick={c.toggleSide} title={T.collapse + (isMac ? '  ⌘B' : '  Ctrl+B')}
               style={{ width: 30, height: 30, borderRadius: 7, color: 'var(--faint)', fontSize: 16, lineHeight: 1 }}>«</button>
           </div>
           <button className="search-btn" onClick={c.openPalette}>
@@ -49,10 +49,6 @@ export function Sidebar() {
             ))}
           </nav>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 12 }}>
-            <div style={{ padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 10, fontSize: 12, lineHeight: 1.55, color: 'var(--mut)' }}>
-              <div style={{ fontWeight: 600, color: 'var(--ink)', marginBottom: 2 }}>{T.smartTitle}</div>
-              {f(T.smartBody, { k: isMac ? '⌘V' : 'Ctrl+V' })}
-            </div>
             <div style={{ display: 'flex', gap: 6 }}>
               <Seg size="sm" value={lang} onChange={(l) => set({ lang: l })} opts={[{ value: 'zh', label: '中' }, { value: 'en', label: 'EN' }]} />
               <Seg size="sm" value={S.theme} onChange={(th) => set({ theme: th })}
@@ -62,7 +58,7 @@ export function Sidebar() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', gap: 6, width: 43 }}>
-          <button className="logo" onClick={c.toggleSide} title={T.expand}
+          <button className="logo" onClick={c.toggleSide} title={T.expand + (isMac ? '  ⌘B' : '  Ctrl+B')}
             style={{ width: 32, height: 32, border: 0, borderRadius: 8, cursor: 'pointer', margin: '0 0 8px' }}>TB</button>
           <button className="search-btn mono" onClick={c.openPalette} title={T.search}
             style={{ width: 40, height: 34, padding: 0, justifyContent: 'center', color: 'var(--mut)', fontSize: 10.5, fontWeight: 500 }}>
@@ -80,7 +76,7 @@ export function Sidebar() {
           <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
             <button className="rail-btn" onClick={c.toggleLang} title="中 / EN">{c.langBtn}</button>
             <button className="rail-btn" onClick={c.cycleTheme} title={c.themeTitle}>{c.themeShort}</button>
-            <button className="ghost" onClick={c.toggleSide} title={T.expand}
+            <button className="ghost" onClick={c.toggleSide} title={T.expand + (isMac ? '  ⌘B' : '  Ctrl+B')}
               style={{ width: 44, height: 30, borderRadius: 8, color: 'var(--faint)', fontSize: 16 }}>»</button>
           </div>
         </div>
