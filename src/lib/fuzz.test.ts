@@ -1,8 +1,8 @@
 // Randomized property tests: the parsers, the lossless formatters, verification and the diff.
 import { describe, expect, it } from 'vitest';
-import { Num, canon, diffNode, isObj, type DiffNode, type Obj } from './data';
-import { astEqual, jsonValue, parseJsonAst, printJson, sortAst } from './json';
-import { VerifyError, formatToml, parseTomlDoc, smolParse, verifyToml } from './toml';
+import { ConvertError, DateTime, Num, canon, diffNode, isObj, numKey, wellFormed, type DiffNode, type Obj } from './data';
+import { astEqual, jsonValue, parseJsonAst, printJson, sortAst, toJsonText } from './json';
+import { VerifyError, formatToml, parseTomlDoc, smolParse, toTomlText, verifyToml } from './toml';
 
 /** Small deterministic PRNG (mulberry32). */
 function rng(seed: number) {
@@ -17,8 +17,8 @@ const picker = (r: () => number) => <T,>(a: readonly T[]) => a[Math.floor(r() * 
 
 // ---------- JSON ----------
 
-const KEYS = ['a', 'b', 'id', 'name', 'x y', 'a.b', '', 'constructor', '__proto__', 'toString', '中文', 'é', '"q"', 'tab\t', '0'];
-const STRS = ['""', '"hello"', '"line\\nbreak"', '"quote\\"back\\\\slash"', '"\\u00e9"', '"é"', '"\\/"', '"\\uD83D\\uDE00"', '"😀"', '"\\u0000\\u001f"', '"中文"', '"\\u2028"'];
+const KEYS = ['a', 'b', 'id', 'name', 'x y', 'a.b', '', 'constructor', '__proto__', 'toString', '中文', 'é', '"q"', 'tab\t', '0', '\ud800'];
+const STRS = ['"\\ud800"', '""', '"hello"', '"line\\nbreak"', '"quote\\"back\\\\slash"', '"\\u00e9"', '"é"', '"\\/"', '"\\uD83D\\uDE00"', '"😀"', '"\\u0000\\u001f"', '"中文"', '"\\u2028"'];
 const NUMS = ['0', '-0', '1', '-1', '1.5', '1.50', '1e3', '1E-7', '12345678901234567890', '-9007199254740993', '3.141592653589793238', '1e400', '0.1', '0.10000000000000000555', '42', '100'];
 
 /** Random JSON text with varied whitespace; `dups` allows duplicate keys. */
@@ -307,5 +307,71 @@ describe('fuzz: TOML', () => {
       expect(d.st).toBe('same');
       expect(d.hasFmt).toBe(false);
     }
+  });
+});
+
+// ---------- conversion ----------
+
+/** Date-times as the strings JSON gets. */
+const datesToStrings = (v: unknown): unknown =>
+  v instanceof DateTime ? v.raw : Array.isArray(v) ? v.map(datesToStrings)
+    : isObj(v) ? Object.fromEntries(Object.keys(v).map((k) => [k, datesToStrings(v[k])])) : v;
+
+/** Last key of a path, for errors about a key rather than a value. */
+const lastKey = (path: string) => { const m = /(?:\.([A-Za-z_$][\w$]*)|\[("(?:[^"\\]|\\.)*")\])$/.exec(path); return m ? m[1] ?? JSON.parse(m[2]) : ''; };
+
+describe('fuzz: conversion', () => {
+  it('JSON → TOML: the result parses back to exactly the same data, or is refused for a reason that holds', () => {
+    const r = rng(20);
+    let ok = 0, refused = 0;
+    for (let n = 0; n < 4000; n++) {
+      const v = jv(genJson(r)).v;
+      if (!isObj(v)) continue;
+      let text: string;
+      try { text = toTomlText(v); } catch (e) {
+        if (!(e instanceof ConvertError)) throw e;
+        const x = at(v, e.path);
+        const reason: Record<string, () => boolean> = {
+          null: () => x === null,
+          intRange: () => x instanceof Num && x.kind === 'int' && (BigInt(x.raw) >= 2n ** 63n || BigInt(x.raw) < -(2n ** 63n)),
+          floatRange: () => x instanceof Num && x.kind === 'float' && !isFinite(Number(x.raw)),
+          floatPrecision: () => x instanceof Num && x.kind === 'float' && numKey(String(Number(x.raw))) !== numKey(x),
+          badString: () => (typeof x === 'string' && !wellFormed(x)) || !wellFormed(lastKey(e.path)),
+        };
+        if (!reason[e.code]?.()) throw new Error(e.code + ' at ' + e.path + ' does not hold');
+        refused++;
+        continue;
+      }
+      expect(canon(parseTomlDoc(text).value)).toBe(canon(v));
+      ok++;
+    }
+    expect(ok).toBeGreaterThan(200);
+    expect(refused).toBeGreaterThan(200);
+  });
+
+  it('TOML → JSON: the result parses back to the same data (dates as strings, all reported), or nan/inf is refused', () => {
+    const r = rng(21);
+    let ok = 0, refused = 0;
+    for (let n = 0; n < 2000; n++) {
+      const doc = parseTomlDoc(genToml(r));
+      const dates: string[] = [];
+      let text: string;
+      try { text = toJsonText(doc.value, 2, dates); } catch (e) {
+        if (!(e instanceof ConvertError) || e.code !== 'nanInf') throw e;
+        const x = at(doc.value, e.path);
+        expect(x instanceof Num && /inf|nan/.test(x.raw)).toBe(true);
+        refused++;
+        continue;
+      }
+      expect(canon(jv(text).v)).toBe(canon(datesToStrings(doc.value)));
+      // Every date-time that became a string was reported.
+      let count = 0;
+      const walk = (x: unknown) => { if (x instanceof DateTime) count++; else if (Array.isArray(x)) x.forEach(walk); else if (isObj(x)) Object.values(x).forEach(walk); };
+      walk(doc.value);
+      expect(dates.length).toBe(count);
+      ok++;
+    }
+    expect(ok).toBeGreaterThan(200);
+    expect(refused).toBeGreaterThan(50);
   });
 });

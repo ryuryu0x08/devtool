@@ -50,7 +50,7 @@ export function QrGen() {
               <path d={model.d} fill="#111111" />
             </svg>
           ) : (
-            <span style={{ fontSize: 13, color: '#8f8e89', textAlign: 'center' }}>{!S.qrText ? T.qrEmpty : T.qrTooLong}</span>
+            <span style={{ fontSize: 13, color: m ? 'oklch(0.52 0.18 25)' : '#8f8e89', textAlign: 'center' }}>{!m ? T.qrEmpty : 'err' in m && m.err === 'bad' ? T.qrBadText : T.qrTooLong}</span>
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -122,6 +122,7 @@ export function QrScan() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span className="mono" style={{ minWidth: 22, height: 22, padding: '0 6px', borderRadius: 6, background: 'var(--acc)', color: 'var(--accInk)', fontSize: 12, fontWeight: 600, lineHeight: '22px', textAlign: 'center' }}>{i + 1}</span>
                     <span style={{ fontSize: 12, color: 'var(--mut)', padding: '2px 8px', borderRadius: 999, background: 'var(--seg)' }}>{T.kinds[k]}</span>
+                    {c.enc && <span style={{ fontSize: 12, color: 'var(--chg)', padding: '2px 8px', borderRadius: 999, background: 'var(--chgBg)' }}>{c.enc === 'browser' ? T.decodedByBrowser : f(T.decodedAs, { e: c.enc })}</span>}
                   </div>
                   <div style={{ font: "14px/1.55 'Geist Mono','PingFang SC',monospace", wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>{c.text}</div>
                   <div style={{ display: 'flex', gap: 8 }}>

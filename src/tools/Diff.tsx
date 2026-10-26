@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { SAMPLE_A, SAMPLE_B, f, type Dict } from '../i18n';
 import { useApp } from '../store';
 import { Seg, Toggle } from '../components/Seg';
+import { useSettled } from '../components/useSettled';
 import { ConvertError, changePair, diffNode, errInfo, isCont, preview, prim, windowPair, type DiffNode, type ErrInfo } from '../lib/data';
 import { jsonValue, parseJsonAst } from '../lib/json';
 import { TomlMismatch, TomlSyntaxError, parseTomlDoc } from '../lib/toml';
@@ -117,16 +118,19 @@ function buildDiff(root: DiffNode, col: Record<string, boolean>, onlyDiff: boole
 
 export function Diff() {
   const { S, set, T, copy } = useApp();
-  const A = useMemo(() => parseAny(S.diffA, T), [S.diffA, T]);
-  const B = useMemo(() => parseAny(S.diffB, T), [S.diffB, T]);
+  const [srcA, pendA] = useSettled(S.diffA);
+  const [srcB, pendB] = useSettled(S.diffB);
+  const pending = pendA || pendB;
+  const A = useMemo(() => parseAny(srcA, T), [srcA, T]);
+  const B = useMemo(() => parseAny(srcB, T), [srcB, T]);
   const st = (x: Parsed): [string, string, string] =>
     'empty' in x ? [T.empty, 'var(--faint)', '']
       : 'bad' in x ? [T.invalid + (x.bad.line ? ' · ' + f(T.errAt, { l: x.bad.line, c: x.bad.col ?? 1 }) : ''), 'var(--del)', x.bad.msg]
         : ['✓ ' + x.lang + (x.bom ? ' · ' + T.bomRemoved : ''), x.bom ? 'var(--chg)' : 'var(--add)', ''];
   const [aS, aC, aM] = st(A), [bS, bC, bM] = st(B);
-  const ready = 'v' in A && 'v' in B;
+  const ready = 'v' in A && 'v' in B && !pending;
   const root = useMemo(() => {
-    if (!('v' in A) || !('v' in B)) return null;
+    if (pending || !('v' in A) || !('v' in B)) return null;
     const same = A.lang === B.lang;
     // TOML distinguishes 1 from 1.0; JSON doesn't. Value spellings are compared across formats too
     // (1.0 vs 1, 'x' vs "x"); key spellings only within one format (bare TOML keys vs quoted JSON keys).
@@ -134,7 +138,7 @@ export function Diff() {
       io: S.ignoreOrder, typed: A.lang === 'TOML' && same, rawA: A.raw, rawB: B.raw,
       keysA: same ? A.keys : undefined, keysB: same ? B.keys : undefined,
     });
-  }, [A, B, S.ignoreOrder]);
+  }, [A, B, S.ignoreOrder, pending]);
   const d = useMemo(() => (root && (root.st !== 'same' || root.hasFmt) ? buildDiff(root, S.dCol, S.onlyDiff, T) : null), [root, S.dCol, S.onlyDiff, T]);
 
   const pane = (label: string, status: string, color: string, msg: string, value: string, key: 'diffA' | 'diffB', auto?: boolean) => (
@@ -178,7 +182,7 @@ export function Diff() {
               <span style={{ fontSize: 12.5, color: d ? 'var(--chg)' : 'var(--mut)' }}>{d ? f(T.sameButFmt, { n: d.nF }) : T.sameSub}</span>
             </div>
           )}
-          {!ready && <span style={{ fontSize: 13, color: 'var(--faint)' }}>{T.needBoth}</span>}
+          {!ready && <span style={{ fontSize: 13, color: 'var(--faint)' }}>{pending ? T.processing : T.needBoth}</span>}
           {d && <Seg value={S.diffView} onChange={(k) => set({ diffView: k })} opts={[{ value: 'tree', label: T.diffTree }, { value: 'list', label: T.diffList }]} />}
         </div>
         {d && S.diffView === 'tree' && (

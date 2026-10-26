@@ -6,7 +6,7 @@ import {
 import { hasMs, parseTime } from './lib/time';
 import { loadImage, scanImage } from './lib/qr';
 import { smolParse } from './lib/toml';
-import { decodeUtf8 } from './lib/data';
+import { clipboardUnsafe, decodeUtf8 } from './lib/data';
 import { MobileBar, Sidebar } from './components/Sidebar';
 import { Palette } from './components/Palette';
 import { Timestamp } from './tools/Timestamp';
@@ -38,7 +38,9 @@ export function App() {
   }, []);
 
   const copy = useCallback((text: string, msg?: string) => {
-    const done = () => toast(msg || dictFor(ref.current.lang).copied);
+    const t = dictFor(ref.current.lang);
+    // The system clipboard may truncate at NUL or replace lone surrogates: say so.
+    const done = () => (clipboardUnsafe(text) ? toast(t.copyRisky, 5000) : toast(msg || t.copied));
     const fallback = () => {
       const ta = document.createElement('textarea');
       ta.value = text;
@@ -205,15 +207,33 @@ export function App() {
   useEffect(() => { lsSet('tool', S.tool); }, [S.tool]);
   const prefs = JSON.stringify(pickPrefs(S));
   useEffect(() => { try { localStorage.setItem('tb.prefs', prefs); } catch { /* ignore */ } }, [prefs]);
-  const inputsKey = INPUT_KEYS.map((k) => S[k]).join('\u0000');
+  // Inputs are saved one key at a time. If one doesn't fit, its stored copy is removed (so a
+  // reload never shows stale content) and the user is told it won't be kept.
+  const saved = useRef<Partial<Record<string, string>>>({});
+  const unsaved = useRef(new Set<string>());
   useEffect(() => {
     if (!CONFIG.rememberInputs) return;
     const t = setTimeout(() => {
       const s = ref.current;
-      lsSet('inputs', Object.fromEntries(INPUT_KEYS.map((k) => [k, s[k]])));
+      let newlyFailed = false;
+      for (const k of INPUT_KEYS) {
+        if (saved.current[k] === s[k]) continue;
+        try {
+          localStorage.setItem('tb.in.' + k, JSON.stringify(s[k]));
+          saved.current[k] = s[k];
+          unsaved.current.delete(k);
+        } catch {
+          try { localStorage.removeItem('tb.in.' + k); } catch { /* storage unavailable */ }
+          saved.current[k] = undefined;
+          if (!unsaved.current.has(k)) newlyFailed = true;
+          unsaved.current.add(k);
+        }
+      }
+      try { localStorage.removeItem('tb.inputs'); } catch { /* storage unavailable */ }
+      if (newlyFailed) toast(dictFor(s.lang).notSaved, 5000);
     }, 400);
     return () => clearTimeout(t);
-  }, [inputsKey]);
+  }, INPUT_KEYS.map((k) => S[k]));
 
   // On desktop, focus the tool's main input after switching tools.
   useEffect(() => {

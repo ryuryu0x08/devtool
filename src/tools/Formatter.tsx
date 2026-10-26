@@ -2,9 +2,10 @@ import { useMemo } from 'react';
 import { SAMPLE_JSON, SAMPLE_TOML, f, type Dict } from '../i18n';
 import { useApp, type FmtLang } from '../store';
 import { Seg } from '../components/Seg';
-import { ConvertError, DateTime, Num, bytesLabel, byteLen, cp, errInfo, isCont, isObj, sortDeep, stats, type ErrInfo, type Obj } from '../lib/data';
+import { useSettled } from '../components/useSettled';
+import { ConvertError, DateTime, Num, bytesLabel, byteLen, clipboardUnsafe, cp, errInfo, isCont, isObj, sortDeep, stats, type ErrInfo, type Obj } from '../lib/data';
 import { astEqual, dupKeys, jsonValue, parseJsonAst, printJson, sortAst, statsAst, toJsonText, type JNode } from '../lib/json';
-import { TomlMismatch, TomlSyntaxError, VerifyError, bareKey, formatToml, parseTomlDoc, toTomlText, tomlValue, verifyToml, walkToml, type TomlDoc } from '../lib/toml';
+import { TomlMismatch, TomlSyntaxError, VerifyError, bareKey, formatToml, parseTomlDoc, toTomlText, tomlStr, tomlValue, verifyToml, walkToml, type TomlDoc } from '../lib/toml';
 
 const TREE_CAP = 4000;
 const SAMPLE = { json: SAMPLE_JSON, toml: SAMPLE_TOML };
@@ -152,9 +153,12 @@ export function Formatter({ lang }: { lang: FmtLang }) {
   const { S, set, T, copy, toast } = useApp();
   const L = lang === 'json' ? 'JSON' : 'TOML';
   const src = S[lang];
-  const r = useMemo(() => compute(lang, src, S.indent, S.sortKeys, T), [lang, src, S.indent, S.sortKeys, T]);
-  const ok = 'text' in r ? r : null;
-  const err = 'err' in r ? r.err : null;
+  // Large inputs are processed when typing pauses; until then nothing can be copied or converted,
+  // so a result is never used for text it wasn't made from.
+  const [settled, pending] = useSettled(src);
+  const r = useMemo(() => compute(lang, settled, S.indent, S.sortKeys, T), [lang, settled, S.indent, S.sortKeys, T]);
+  const ok = 'text' in r && !pending ? r : null;
+  const err = 'err' in r && !pending ? r.err : null;
   const isTree = !!ok && S.view === 'tree';
   const col = S.collapsed[lang];
   const tree = useMemo(() => {
@@ -168,7 +172,7 @@ export function Formatter({ lang }: { lang: FmtLang }) {
   const notices: string[] = [];
   if (ok?.lang === 'json' && ok.dupes.length) notices.push(f(T.dupKeysKept, { n: ok.dupes.length, p: ok.dupes[0] }));
   if (ok?.bom) notices.push(T.bomRemoved);
-  const status = ok ? [f(T.valid, { L, n: ok.st.n, d: ok.st.d }), ...notices].join(' · ')
+  const status = pending ? T.processing : ok ? [f(T.valid, { L, n: ok.st.n, d: ok.st.d }), ...notices].join(' · ')
     : err ? (err.line ? f(T.errAt, { l: err.line, c: err.col ?? 1 }) : T.errNoPos) : T.empty;
   const statusColor = ok ? (notices.length ? 'var(--chg)' : 'var(--add)') : err ? 'var(--del)' : 'var(--faint)';
   const taH = S.wide ? 480 : 220;
@@ -194,10 +198,15 @@ export function Formatter({ lang }: { lang: FmtLang }) {
     if (!tree || !hasSel || !ok) return;
     if (ok.lang === 'json') {
       const node = (tree.sel[sel] as { node: JNode }).node;
-      copy(node.t === 'str' ? node.v : printJson(node, 2));
+      if (node.t !== 'str') copy(printJson(node, 2));
+      // The clipboard can't hold NUL / lone surrogates faithfully: copy the escaped form instead.
+      else if (clipboardUnsafe(node.v)) copy(JSON.stringify(node.v), T.copiedEscaped);
+      else copy(node.v);
     } else {
       const { value, path } = tree.sel[sel] as { path: string; value: unknown };
-      copy(typeof value === 'string' ? value : tomlValue(value, path, ok.doc.raw));
+      if (typeof value !== 'string') copy(tomlValue(value, path, ok.doc.raw));
+      else if (clipboardUnsafe(value)) copy(tomlStr(value), T.copiedEscaped);
+      else copy(value);
     }
   };
   const toggleFold = (id: string) =>
@@ -281,7 +290,7 @@ export function Formatter({ lang }: { lang: FmtLang }) {
                 )}
               </div>
             )}
-            {'empty' in r && (
+            {'empty' in r && !pending && (
               <div style={{ padding: '30px 16px', textAlign: 'center', fontSize: 13, fontFamily: "'Geist Sans', 'Geist', sans-serif", color: 'var(--faint)' }}>{f(T.waiting, { L })}</div>
             )}
           </div>

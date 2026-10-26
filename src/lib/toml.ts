@@ -518,7 +518,7 @@ export function tomlStr(s: string, path = '$'): string {
   return o + '"';
 }
 
-export const bareKey = (k: string) => (/^[A-Za-z0-9_-]+$/.test(k) ? k : tomlStr(k));
+export const bareKey = (k: string, path = '$') => (/^[A-Za-z0-9_-]+$/.test(k) ? k : tomlStr(k, path));
 export const isAoT = (x: unknown): x is Obj[] => Array.isArray(x) && x.length > 0 && x.every(isObj);
 
 const I64_MIN = -(2n ** 63n), I64_MAX = 2n ** 63n - 1n;
@@ -550,7 +550,7 @@ export function tomlValue(x: unknown, path = '$', raw?: Map<string, string>): st
   if (Array.isArray(x)) return '[' + x.map((y, i) => tomlValue(y, cp(path, i, true), raw)).join(', ') + ']';
   if (isObj(x)) {
     const e = Object.keys(x);
-    return e.length ? '{ ' + e.map((k) => bareKey(k) + ' = ' + tomlValue(x[k], cp(path, k, false), raw)).join(', ') + ' }' : '{}';
+    return e.length ? '{ ' + e.map((k) => bareKey(k, cp(path, k, false)) + ' = ' + tomlValue(x[k], cp(path, k, false), raw)).join(', ') + ' }' : '{}';
   }
   throw new ConvertError('null', path);
 }
@@ -569,8 +569,8 @@ export function walkToml(
     ks.filter((k) => !isObj(obj[k]) && !isAoT(obj[k])).forEach((k) => onKey(k, obj[k], cp(path, k, false), depth));
     ks.filter((k) => isObj(obj[k]) || isAoT(obj[k])).forEach((k) => {
       const y = obj[k];
-      const nm = [...names, bareKey(k)];
       const p = cp(path, k, false);
+      const nm = [...names, bareKey(k, p)];
       if (isObj(y)) {
         if (onHeader('[' + nm.join('.') + ']', y, p, depth)) table(y, p, depth + 1, nm);
       } else {
@@ -589,7 +589,7 @@ export function toTomlText(v: Obj): string {
   const lines: string[] = [];
   walkToml(
     v,
-    (k, y, path) => lines.push(bareKey(k) + ' = ' + tomlValue(y, path)),
+    (k, y, path) => lines.push(bareKey(k, path) + ' = ' + tomlValue(y, path)),
     (label) => {
       if (lines.length) lines.push('');
       lines.push(label);

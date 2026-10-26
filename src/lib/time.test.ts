@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fmtISO, fmtWall, parseTime, parseTs, wallToMs } from './time';
+import { exactUnits, fmtISO, fmtWall, parseTime, parseTs, resolveWall, wallToMs } from './time';
 
 const SH = 'Asia/Shanghai';
 const NOW = Date.UTC(2026, 9, 26, 6, 0, 0); // 2026-10-26 14:00 in Shanghai
@@ -66,5 +66,68 @@ describe('parseTime', () => {
 describe('wallToMs', () => {
   it('handles DST zones', () => {
     expect(wallToMs(2026, 7, 1, 12, 0, 0, 0, 'America/New_York')).toBe(Date.UTC(2026, 6, 1, 16));
+  });
+});
+
+describe('precision finer than a millisecond is kept', () => {
+  it('µs / ns timestamps keep their extra digits', () => {
+    expect(parseTs('1793000000123456789', 'auto')).toMatchObject({ ms: 1793000000123, sub: '456789' });
+    expect(parseTs('1793000000123456', 'auto')).toMatchObject({ ms: 1793000000123, sub: '456' });
+    expect(parseTs('1700000000.123456', 'auto')).toMatchObject({ ms: 1700000000123, sub: '456' });
+    expect(parseTs('1700000000.5', 'auto')).toMatchObject({ ms: 1700000000500, sub: '' });
+  });
+  it('negative timestamps: floor + positive remainder, still exact', () => {
+    const r = parseTs('-1.0005', 's') as { ms: number; sub: string };
+    expect(r).toMatchObject({ ms: -1001, sub: '5' });
+    expect(exactUnits(r.ms, r.sub, 3)).toBe('-1.0005');
+  });
+  it('exact unit conversion', () => {
+    expect(exactUnits(1793000000123, '456789', 3)).toBe('1793000000.123456789');
+    expect(exactUnits(1793000000123, '456789', 0)).toBe('1793000000123.456789');
+    expect(exactUnits(1793000000000, '', 3)).toBe('1793000000');
+    expect(exactUnits(-500, '', 3)).toBe('-0.5');
+  });
+  it('shown in formatted dates', () => {
+    expect(fmtISO(1793000000123, 'UTC', '456789')).toBe('2026-10-26T07:33:20.123456789+00:00');
+    expect(fmtWall(1793000000000, 'UTC', true, '000001')).toBe('2026-10-26 07:33:20.000000001');
+    expect(fmtWall(1793000000000, 'UTC', true, '')).toBe('2026-10-26 07:33:20');
+  });
+  it('date input with µs keeps them', () => {
+    const r = parseTime('2026-10-26T14:30:00.123456Z', SH, NOW) as { ms: number; sub: string };
+    expect(exactUnits(r.ms, r.sub, 3)).toBe(String(Date.UTC(2026, 9, 26, 14, 30) / 1000) + '.123456');
+  });
+});
+
+describe('DST: ambiguous and non-existent local times are reported', () => {
+  const NY = 'America/New_York';
+  it('fall back: 01:30 happens twice', () => {
+    const w = resolveWall(2026, 11, 1, 1, 30, 0, 0, NY);
+    expect(w.ms).toBe(Date.UTC(2026, 10, 1, 5, 30)); // EDT, first
+    expect(w.alt).toBe(Date.UTC(2026, 10, 1, 6, 30)); // EST, second
+    const r = parseTime('2026-11-01 01:30', NY, NOW) as { alt?: number };
+    expect(r.alt).toBe(Date.UTC(2026, 10, 1, 6, 30));
+  });
+  it('spring forward: 02:30 does not exist', () => {
+    const w = resolveWall(2026, 3, 8, 2, 30, 0, 0, NY);
+    expect(w.gap).toBe(true);
+    expect(fmtWall(w.ms, NY)).toBe('2026-03-08 03:30:00');
+  });
+  it('ordinary times are unambiguous', () => {
+    expect(resolveWall(2026, 7, 1, 12, 0, 0, 0, NY)).toEqual({ ms: Date.UTC(2026, 6, 1, 16) });
+    expect(resolveWall(2026, 10, 26, 14, 30, 0, 0, SH)).toEqual({ ms: Date.UTC(2026, 9, 26, 6, 30) });
+  });
+});
+
+describe('lenient parsing never guesses', () => {
+  const at = (s: string) => {
+    const r = parseTime(s, SH, NOW);
+    return r && 'ms' in r ? fmtWall(r.ms, SH) : 'err';
+  };
+  it.each(['hello 2020', 'foo 1', 'Oct 32 2026', 'Feb 30 2026', '2026-10-26T10:00+25:00', '2026-10-26T10:00+08:60', 'abc'])('%s → not recognised', (s) => {
+    expect(at(s)).toBe('err');
+  });
+  it('real English dates still work', () => {
+    expect(at('26 Oct 2026 14:30')).toBe('2026-10-26 14:30:00');
+    expect(at('October 26, 2026')).toBe('2026-10-26 00:00:00');
   });
 });

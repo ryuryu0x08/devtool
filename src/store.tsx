@@ -82,7 +82,15 @@ export function initState(): State {
   // Last-used zone wins; default is this device's zone.
   let tz = ls<string>('tz') || localTz;
   try { tzParts(Date.now(), tz); } catch { tz = localTz; }
-  const inp: Partial<Inputs> = CONFIG.rememberInputs ? ls<Inputs>('inputs') || {} : {};
+  // Each input is stored separately (tb.in.<key>); tb.inputs is the older combined format.
+  const inp: Partial<Inputs> = {};
+  if (CONFIG.rememberInputs) {
+    const old = ls<Partial<Inputs>>('inputs') || {};
+    for (const k of INPUT_KEYS) {
+      const v = ls<string>('in.' + k) ?? old[k];
+      if (typeof v === 'string') inp[k] = v;
+    }
+  }
   const pr: Partial<Prefs> = ls<Prefs>('prefs') || {};
   const now = Date.now();
   const navLang: Lang = String(navigator.language || 'zh').toLowerCase().startsWith('zh') ? 'zh' : 'en';

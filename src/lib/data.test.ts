@@ -1,7 +1,8 @@
 // "Nothing changes silently": formatting keeps every token, conversions refuse what the
 // target can't hold exactly, and the diff never rounds or hides a difference.
 import { describe, expect, it } from 'vitest';
-import { ConvertError, MAX_DEPTH, Num, canon, changePair, decodeUtf8, diffNode, errInfo, numKey, type DiffNode, type DiffOpts } from './data';
+import { ConvertError, MAX_DEPTH, Num, canon, changePair, clipboardUnsafe, decodeUtf8, diffNode, errInfo, numKey, wellFormed, type DiffNode, type DiffOpts } from './data';
+import { codeText, qrModel } from './qr';
 import { astEqual, dupKeys, jsonValue, parseJsonAst, printJson, sortAst, toJsonText } from './json';
 import { VerifyError, formatToml, parseTomlDoc, toTomlText, tomlValue, verifyToml } from './toml';
 
@@ -324,5 +325,34 @@ describe('diff: case matrix (nothing missed, every difference visible)', () => {
     const A = parseTomlDoc('a = 1\n[t]\nx = 1'), B = parseTomlDoc('"a" = 1\n[\'t\']\nx = 1');
     const d = diffNode(A.value, B.value, null, '$', { typed: true, rawA: A.raw, rawB: B.raw, keysA: A.keys, keysB: B.keys });
     expect(d.ch!.map((c) => c.keyFmt?.join('→'))).toEqual(['a→"a"', "t→'t'"]);
+  });
+});
+
+describe('more edge cases', () => {
+  it('numKey: huge exponents are compared exactly', () => {
+    expect(numKey('1e99999999999999999999')).not.toBe(numKey('1e99999999999999999998'));
+    expect(numKey('10e99999999999999999998')).toBe(numKey('1e99999999999999999999'));
+    expect(flat(diff('[1e99999999999999999999]', '[1e99999999999999999998]'))).toEqual(['chg $[0]']);
+  });
+  it('detects text the clipboard would alter', () => {
+    expect(clipboardUnsafe('ok 中文 😀')).toBe(false);
+    expect(clipboardUnsafe('a\u0000b')).toBe(true);
+    expect(clipboardUnsafe('\ud800')).toBe(true);
+    expect(clipboardUnsafe('\udc00x')).toBe(true);
+    expect(wellFormed('😀')).toBe(true);
+  });
+});
+
+describe('QR', () => {
+  const code = (bytes: number[], kanji = false) => codeText({ data: '', binaryData: bytes, chunks: kanji ? [{ type: 'kanji', text: '漢', bytes }] as never : [] });
+  it('decodes UTF-8, GBK / GB18030, Shift_JIS and Latin-1 instead of returning empty text', () => {
+    expect(code([...new TextEncoder().encode('中文 😀')])).toEqual({ text: '中文 😀' });
+    expect(code([0xd6, 0xd0, 0xce, 0xc4])).toEqual({ text: '中文', enc: 'GB18030' });
+    expect(code([0x63, 0x61, 0x66, 0xe9])).toEqual({ text: 'café', enc: 'ISO-8859-1' });
+  });
+  it('refuses text that has no UTF-8 encoding instead of emitting wrong bytes', () => {
+    expect(qrModel('a\ud800b', 'M')).toEqual({ err: 'bad' });
+    expect(qrModel('x'.repeat(5000), 'H')).toEqual({ err: 'long' });
+    expect(qrModel('中文 😀', 'M')).toHaveProperty('d');
   });
 });

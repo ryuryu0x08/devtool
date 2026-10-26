@@ -44,14 +44,28 @@ export function tzOffset(ms: number, tz: string): number {
   return utc(p.y, p.m, p.d, p.h, p.mi, p.s) - (ms - p.ms);
 }
 
-/** Wall-clock time in `tz` → epoch ms (handles DST transitions). */
-export function wallToMs(y: number, mo: number, d: number, h: number, mi: number, s: number, msp: number, tz: string): number {
+export interface Wall {
+  ms: number;
+  /** The wall time occurs twice (clocks turned back): the later instant. */
+  alt?: number;
+  /** The wall time doesn't exist (clocks turned forward): `ms` is the same moment read with the earlier offset. */
+  gap?: boolean;
+}
+
+/** Wall-clock time in `tz` → epoch ms, reporting DST overlaps and gaps instead of silently picking. */
+export function resolveWall(y: number, mo: number, d: number, h: number, mi: number, s: number, msp: number, tz: string): Wall {
   const g = utc(y, mo, d, h, mi, s, msp || 0);
-  const o1 = tzOffset(g, tz);
-  let r = g - o1;
-  const o2 = tzOffset(r, tz);
-  if (o2 !== o1) r = g - o2;
-  return r;
+  const before = tzOffset(g - 864e5, tz), after = tzOffset(g + 864e5, tz);
+  const hits = [...new Set([g - before, g - after, g - tzOffset(g, tz)])]
+    .filter((r) => { const p = tzParts(r, tz); return utc(p.y, p.m, p.d, p.h, p.mi, p.s, p.ms) === g; })
+    .sort((a, b) => a - b);
+  if (hits.length) return hits.length > 1 ? { ms: hits[0], alt: hits[hits.length - 1] } : { ms: hits[0] };
+  return { ms: g - before, gap: true };
+}
+
+/** Wall-clock time in `tz` → epoch ms (earlier instant in an overlap; shifted forward in a gap). */
+export function wallToMs(y: number, mo: number, d: number, h: number, mi: number, s: number, msp: number, tz: string): number {
+  return resolveWall(y, mo, d, h, mi, s, msp, tz).ms;
 }
 
 export function offLabel(off: number): string {
@@ -59,18 +73,36 @@ export function offLabel(off: number): string {
   return 'UTC' + (m < 0 ? '−' : '+') + pad2(Math.floor(a / 60)) + ':' + pad2(a % 60);
 }
 
-export function fmtWall(ms: number, tz: string, withMs = false): string {
+/** Fraction of a second: milliseconds plus any finer digits (`sub`), trailing zeros dropped (min 3 digits). */
+export const fracStr = (ms: number, sub = '') => {
+  const full = String(ms).padStart(3, '0') + sub;
+  const t = full.replace(/0+$/, '');
+  return t.length <= 3 ? full.slice(0, 3) : t;
+};
+
+export function fmtWall(ms: number, tz: string, withMs = false, sub = ''): string {
   const p = tzParts(ms, tz);
   let s = yearStr(p.y) + '-' + pad2(p.m) + '-' + pad2(p.d) + ' ' + pad2(p.h) + ':' + pad2(p.mi) + ':' + pad2(p.s);
-  if (withMs && p.ms) s += '.' + String(p.ms).padStart(3, '0');
+  if (withMs && (p.ms || /[1-9]/.test(sub))) s += '.' + fracStr(p.ms, sub);
   return s;
 }
 
-export function fmtISO(ms: number, tz: string): string {
+export function fmtISO(ms: number, tz: string, sub = ''): string {
   const p = tzParts(ms, tz);
   const m = Math.round(tzOffset(ms, tz) / 60000), a = Math.abs(m);
   return yearStr(p.y) + '-' + pad2(p.m) + '-' + pad2(p.d) + 'T' + pad2(p.h) + ':' + pad2(p.mi) + ':' + pad2(p.s) + '.' +
-    String(p.ms).padStart(3, '0') + (m < 0 ? '-' : '+') + pad2(Math.floor(a / 60)) + ':' + pad2(a % 60);
+    fracStr(p.ms, sub) + (m < 0 ? '-' : '+') + pad2(Math.floor(a / 60)) + ':' + pad2(a % 60);
+}
+
+/** Exact decimal text of `ms + 0.sub` milliseconds, scaled by 10^-shift (3 → seconds). */
+export function exactUnits(ms: number, sub: string, shift: number): string {
+  const L = sub.length + shift;
+  const total = BigInt(ms) * 10n ** BigInt(sub.length) + BigInt(sub || '0');
+  const neg = total < 0n;
+  const digits = (neg ? -total : total).toString().padStart(L + 1, '0');
+  const int = L > 0 ? digits.slice(0, -L) : digits;
+  const frac = L > 0 ? digits.slice(-L).replace(/0+$/, '') : '';
+  return (neg ? '-' : '') + int + (frac ? '.' + frac : '');
 }
 
 export function relTime(ms: number, now: number, loc: string): string {
@@ -85,7 +117,8 @@ export function relTime(ms: number, now: number, loc: string): string {
 }
 
 export type TsUnit = 's' | 'ms' | 'us' | 'ns';
-export type TsResult = { ms: number; u: TsUnit; dig: number } | { err: 'tsErr' | 'tsRange' } | null;
+/** `ms` is floored; `sub` holds the digits finer than a millisecond, so `ms + 0.sub` is exact. */
+export type TsResult = { ms: number; sub: string; u: TsUnit; dig: number } | { err: 'tsErr' | 'tsRange' } | null;
 
 /** Parse a numeric timestamp; `unit: 'auto'` picks the unit from the digit count. */
 export function parseTs(raw: string, unit: TsUnit | 'auto'): TsResult {
@@ -102,15 +135,20 @@ export function parseTs(raw: string, unit: TsUnit | 'auto'): TsResult {
   const whole = point > 0 ? digits.slice(0, point) : '0';
   const rest = point > 0 ? digits.slice(point) : digits;
   let ms = Number(whole);
-  if (neg) ms = -ms - (/[1-9]/.test(rest) ? 1 : 0);
+  let sub = rest.replace(/0+$/, '');
+  if (neg) {
+    ms = -ms;
+    // Floor, and keep the finer digits as a positive remainder: −1000.25 = −1001 + 0.75.
+    if (sub) { ms -= 1; sub = (10n ** BigInt(sub.length) - BigInt(sub)).toString().padStart(sub.length, '0').replace(/0+$/, ''); }
+  }
   if (!isFinite(ms) || Math.abs(ms) > 8.64e15) return { err: 'tsRange' };
-  return { ms: ms || 0, u, dig };
+  return { ms: ms || 0, sub, u, dig };
 }
 
-/** Parse a clock string such as `14:30`, `9点半`, `下午3点`, `9:00 pm`. */
-function parseClock(str: string, strict = false): [number, number, number, number] | null {
+/** Parse a clock string such as `14:30`, `9点半`, `下午3点`, `9:00 pm` → [h, m, s, ms, finer digits]. */
+function parseClock(str: string, strict = false): [number, number, number, number, string] | null {
   let s = (str || '').trim().toLowerCase();
-  if (!s) return strict ? null : [0, 0, 0, 0];
+  if (!s) return strict ? null : [0, 0, 0, 0, ''];
   let pm = 0;
   const ap = s.match(/^(上午|早上|凌晨|中午|下午|晚上|傍晚)\s*/);
   if (ap) {
@@ -131,10 +169,13 @@ function parseClock(str: string, strict = false): [number, number, number, numbe
   if (pm === 2 && h < 11) h += 12;
   if (pm === 3 && h === 12) h = 0;
   if (h > 23 || mi > 59 || sec > 59) return null;
-  return [h, mi, sec, ms];
+  return [h, mi, sec, ms, (m[4] || '').slice(3).replace(/0+$/, '')];
 }
 
-export type TimeResult = { ms: number; note?: string } | { err: true } | null;
+/** `sub`: digits finer than a millisecond; `alt` / `gap`: see Wall. */
+export type TimeResult = { ms: number; sub?: string; note?: string; alt?: number; gap?: boolean } | { err: true } | null;
+
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 
 const REL: Record<string, number> = {
   today: 0, '今天': 0, '今日': 0, tomorrow: 1, '明天': 1, '明日': 1,
@@ -153,15 +194,17 @@ export function parseTime(raw: string, tz: string, now: number): TimeResult {
     const t = new Date(utc(td.y, td.m, td.d + n));
     return [t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate()];
   };
+  const wall = (y: number, mo: number, d: number, t: [number, number, number, number, string]) =>
+    ({ ...resolveWall(y, mo, d, t[0], t[1], t[2], t[3], tz), sub: t[4] });
   let m = low.match(/^(today|tomorrow|yesterday|今天|今日|明天|明日|昨天|昨日|后天|前天)\s*(.*)$/);
   if (m) {
     const [y, mo, d] = shift(REL[m[1]]);
     const t = parseClock(m[2]);
     if (!t) return { err: true };
-    return { ms: wallToMs(y, mo, d, t[0], t[1], t[2], t[3], tz) };
+    return wall(y, mo, d, t);
   }
   const tOnly = parseClock(low, true);
-  if (tOnly) return { ms: wallToMs(td.y, td.m, td.d, tOnly[0], tOnly[1], tOnly[2], tOnly[3], tz) };
+  if (tOnly) return wall(td.y, td.m, td.d, tOnly);
   m = s.match(/^(\d{4})[-/.年]?(\d{1,2})[-/.月]?(\d{1,2})日?(?:[T\s]*(.*))?$/i);
   if (m) {
     let rest = (m[4] || '').trim();
@@ -181,27 +224,36 @@ export function parseTime(raw: string, tz: string, now: number): TimeResult {
       if (!/^(z|utc|gmt)$/i.test(off)) {
         const sg = off[0] === '-' ? -1 : 1;
         const dg = off.slice(1).replace(':', '');
-        om2 = sg * (+dg.slice(0, 2) * 60 + +dg.slice(2));
+        const oh = +dg.slice(0, 2), omi = +(dg.slice(2) || 0);
+        if (oh > 23 || omi > 59) return { err: true };
+        om2 = sg * (oh * 60 + omi);
       }
-      return { ms: utc(y, mo, d, t[0], t[1], t[2], t[3]) - om2 * 60000, note: off };
+      return { ms: utc(y, mo, d, t[0], t[1], t[2], t[3]) - om2 * 60000, sub: t[4], note: off };
     }
-    return { ms: wallToMs(y, mo, d, t[0], t[1], t[2], t[3], tz) };
+    return wall(y, mo, d, t);
   }
   m = s.match(/^(\d{1,2})[-/.月](\d{1,2})日?\s*(.*)$/);
   if (m) {
     const t = parseClock(m[3]);
     const mo = +m[1], d = +m[2];
     if (!t || mo < 1 || mo > 12 || d < 1 || d > daysIn(td.y, mo)) return { err: true };
-    return { ms: wallToMs(td.y, mo, d, t[0], t[1], t[2], t[3], tz) };
+    return wall(td.y, mo, d, t);
   }
-  if (/[a-z]/i.test(s)) {
+  // English dates ("Oct 26 2026 14:30", RFC 2822). Date.parse is very lenient, so only accept
+  // text with a month name, and only if the parsed month (and day, when written) match the text.
+  const mn = low.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\b/);
+  if (mn) {
     const p = Date.parse(s);
-    if (!isNaN(p)) {
-      // Without an explicit zone, Date.parse uses the browser's zone — re-read the wall time in `tz`.
-      if (/\b(z|utc|gmt|[ecmp][sd]t)\b|[+-]\d{2}:?\d{2}\b/i.test(s)) return { ms: p };
-      const L = new Date(p);
-      return { ms: wallToMs(L.getFullYear(), L.getMonth() + 1, L.getDate(), L.getHours(), L.getMinutes(), L.getSeconds(), L.getMilliseconds(), tz) };
-    }
+    if (isNaN(p)) return { err: true };
+    const zoned = /\b(z|utc|gmt|[ecmp][sd]t)\b|[+-]\d{2}:?\d{2}\b/i.test(s);
+    const L = new Date(p);
+    const [pm, pd] = zoned ? [L.getUTCMonth(), L.getUTCDate()] : [L.getMonth(), L.getDate()];
+    const day = low.match(new RegExp('\\b(\\d{1,2})(?:st|nd|rd|th)?\\s*,?\\s*' + mn[0].replace('.', '\\.') + '|' + mn[0].replace('.', '\\.') + '\\s*(\\d{1,2})\\b'));
+    const dn = day ? +(day[1] ?? day[2]) : null;
+    if (pm !== MONTHS.indexOf(mn[1]) || (dn !== null && dn !== pd && !zoned)) return { err: true };
+    // Without an explicit zone, Date.parse uses the browser's zone — re-read the wall time in `tz`.
+    if (zoned) return { ms: p };
+    return { ...resolveWall(L.getFullYear(), L.getMonth() + 1, L.getDate(), L.getHours(), L.getMinutes(), L.getSeconds(), L.getMilliseconds(), tz) };
   }
   return { err: true };
 }

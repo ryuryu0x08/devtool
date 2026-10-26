@@ -3,7 +3,7 @@ import { COMMON_TZ, TZ_ZH, f } from '../i18n';
 import { localTz, lsSet, useApp } from '../store';
 import { Seg } from '../components/Seg';
 import {
-  daysIn, fmtISO, fmtWall, hasMs, offLabel, parseTime, parseTs, relTime, tzOffset, tzParts, utc, wallToMs, type TsUnit,
+  daysIn, exactUnits, fmtISO, fmtWall, fracStr, hasMs, offLabel, parseTime, parseTs, relTime, tzOffset, tzParts, utc, wallToMs, type TsUnit,
 } from '../lib/time';
 
 interface Zone { id: string; hay: string }
@@ -148,12 +148,12 @@ export function Timestamp() {
 
   // Timestamp → date
   const r = parseTs(S.tsIn, S.tsUnit);
-  const tsOk = hasMs(r) ? (r as { ms: number; u: TsUnit; dig: number }) : null;
+  const tsOk = hasMs(r) ? (r as { ms: number; sub: string; u: TsUnit; dig: number }) : null;
   const tsErr = r && 'err' in r ? T[r.err] : '';
 
   // Date → timestamp
   const m = parseTime(S.tmIn, tz, now);
-  const tm = hasMs(m) ? (m as { ms: number; note?: string }) : null;
+  const tm = hasMs(m) ? (m as { ms: number; sub?: string; note?: string; alt?: number; gap?: boolean }) : null;
 
   const setMs = (ms: number) => set({ tmIn: fmtWall(ms, tz) });
   const dayStart = (n: number) => {
@@ -228,14 +228,15 @@ export function Timestamp() {
           <input data-autofocus="1" className="field" value={S.tsIn} onChange={(e) => set({ tsIn: e.target.value })}
             inputMode="numeric" spellCheck={false} placeholder={T.tsPh} />
           {tsOk && (() => {
-            const ms = tsOk.ms, p = tzParts(ms, tz);
+            const ms = tsOk.ms, sub = tsOk.sub, p = tzParts(ms, tz);
             const main = fmtWall(ms, tz);
-            const msPart = p.ms ? '.' + String(p.ms).padStart(3, '0') : '';
+            // Digits finer than a millisecond (µs / ns input) are shown, never dropped.
+            const msPart = p.ms || sub ? '.' + fracStr(p.ms, sub) : '';
             const rows: [string, string][] = [
-              [T.rowISO, fmtISO(ms, tz)],
-              [T.rowUTC, fmtWall(ms, 'UTC', true)],
+              [T.rowISO, fmtISO(ms, tz, sub)],
+              [T.rowUTC, fmtWall(ms, 'UTC', true, sub)],
               [T.rowRel, relTime(ms, now, T.relLocale)],
-              tsOk.u === 's' ? [T.units.ms, String(ms)] : [T.units.s, String(Math.floor(ms / 1000))],
+              tsOk.u === 's' ? [T.units.ms, exactUnits(ms, sub, 0)] : [T.units.s, exactUnits(ms, sub, 3)],
             ];
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -262,12 +263,13 @@ export function Timestamp() {
             {quick.map(([label, fn]) => <button key={label} className="pill" onClick={fn}>{label}</button>)}
           </div>
           {tm && (() => {
-            const ms = tm.ms, p = tzParts(ms, tz);
-            const sec = String(Math.floor(ms / 1000));
+            const ms = tm.ms, sub = tm.sub || '', p = tzParts(ms, tz);
+            // Exact: a time with a fraction gives a fractional timestamp rather than a truncated one.
+            const sec = exactUnits(ms, sub, 3);
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <button className="hero" onClick={() => copy(sec)}>
-                  <span style={{ fontSize: 12, color: 'var(--mut)' }}>{f(T.parsedAs, { v: fmtWall(ms, tz, true) + ' ' + T.wd[p.wd] })}</span>
+                  <span style={{ fontSize: 12, color: 'var(--mut)' }}>{f(T.parsedAs, { v: fmtWall(ms, tz, true, sub) + ' ' + T.wd[p.wd] })}</span>
                   <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                     <span className="hero-big">{sec}</span><span style={{ fontSize: 13, color: 'var(--mut)' }}>{T.sec}</span>
                   </span>
@@ -275,7 +277,14 @@ export function Timestamp() {
                     {(tm.note ? tm.note + ' → ' : '') + zoneLabel + ' ' + offAt(ms) + ' · ' + relTime(ms, now, T.relLocale)}
                   </span>
                 </button>
-                <KvRows rows={[[T.units.ms, String(ms)], [T.rowISO, fmtISO(ms, tz)], [T.rowUTC, fmtWall(ms, 'UTC', true)]]} />
+                {(tm.alt !== undefined || tm.gap) && (
+                  <div style={{ fontSize: 12.5, lineHeight: 1.5, color: 'var(--chg)', background: 'var(--chgBg)', borderRadius: 8, padding: '8px 10px', margin: '2px 0 4px' }}>
+                    {tm.alt !== undefined
+                      ? f(T.dstTwice, { a: offAt(ms), b: offAt(tm.alt), s: exactUnits(tm.alt, sub, 3) })
+                      : f(T.dstGap, { t: fmtWall(ms, tz) + ' ' + offAt(ms) })}
+                  </div>
+                )}
+                <KvRows rows={[[T.units.ms, exactUnits(ms, sub, 0)], [T.rowISO, fmtISO(ms, tz, sub)], [T.rowUTC, fmtWall(ms, 'UTC', true, sub)]]} />
               </div>
             );
           })()}

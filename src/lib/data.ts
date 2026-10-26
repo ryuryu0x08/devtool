@@ -65,9 +65,10 @@ export function numKey(n: Num | string): string {
   const frac = m[3] || '';
   let digits = ((m[2] || '') + frac).replace(/^0+/, '');
   if (!digits) return '0';
-  let exp = (m[4] ? parseInt(m[4], 10) : 0) - frac.length;
+  // BigInt: a huge exponent must not round (1e99999999999999999999 vs …98).
+  let exp = (m[4] ? BigInt(m[4]) : 0n) - BigInt(frac.length);
   const t = /0*$/.exec(digits)![0].length;
-  if (t) { digits = digits.slice(0, -t); exp += t; }
+  if (t) { digits = digits.slice(0, -t); exp += BigInt(t); }
   return (m[1] ? '-' : '') + digits + 'e' + exp;
 }
 
@@ -180,6 +181,22 @@ export function stats(v: unknown): { n: number; d: number } {
 export const bytesLabel = (n: number) => (n < 1024 ? n + ' B' : (n / 1024).toFixed(1) + ' KB');
 
 export const byteLen = (s: string) => new TextEncoder().encode(s).length;
+
+/** True if `s` has no lone surrogates (which UTF-8 and the clipboard can't carry). */
+export function wellFormed(s: string): boolean {
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c >= 0xd800 && c <= 0xdbff) {
+      const d = s.charCodeAt(i + 1);
+      if (!(d >= 0xdc00 && d <= 0xdfff)) return false;
+      i++;
+    } else if (c >= 0xdc00 && c <= 0xdfff) return false;
+  }
+  return true;
+}
+
+/** Text the system clipboard may alter: NUL (ends C strings on some systems) or lone surrogates. */
+export const clipboardUnsafe = (s: string) => s.includes('\u0000') || !wellFormed(s);
 
 /** Strict UTF-8 decode (keeps a BOM so it can be reported); null if the bytes aren't valid UTF-8. */
 export function decodeUtf8(bytes: ArrayBuffer | Uint8Array): string | null {
