@@ -1,20 +1,31 @@
-// Helpers for structured data: paths, previews, stats, parse errors and the semantic diff.
+// Value model shared by the formatter, converters and the semantic diff.
+// Scalars keep their source text so nothing is ever rounded or rewritten.
 
 export type Obj = Record<string, unknown>;
 
-/** A JSON number kept as its source text because a JS number would change it (big ints, `1.50`, `1e400`). */
-export class JsonNum {
+/** A number exactly as written (JSON or TOML syntax). Never converted to a JS number for storage. */
+export class Num {
+  constructor(readonly raw: string, readonly kind: 'int' | 'float', readonly src: 'json' | 'toml') {}
+}
+
+/** A TOML date / time literal exactly as written. */
+export class DateTime {
   constructor(readonly raw: string) {}
 }
 
-/** Thrown when a value can't be represented in the target format. */
+export type CvCode = 'null' | 'nanInf' | 'badString' | 'intRange' | 'floatRange' | 'floatPrecision' | 'dupKey' | 'notObject';
+
+/** Thrown when a value can't be represented exactly in the target format. */
 export class ConvertError extends Error {
-  constructor(readonly code: 'null' | 'nonFinite' | 'badString', readonly path: string) {
-    super(code + ' at ' + path);
+  constructor(readonly code: CvCode, readonly path: string, readonly detail = '') {
+    super(code + ' at ' + path + (detail ? ': ' + detail : ''));
   }
 }
 
-/** Plain objects only — not arrays, dates (incl. TOML dates) or JsonNum. */
+/** Nesting beyond this is refused (the recursive tree / diff code would overflow the stack). */
+export const MAX_DEPTH = 512;
+
+/** Plain objects only — not arrays or value classes. */
 export const isObj = (v: unknown): v is Obj => {
   if (v === null || typeof v !== 'object') return false;
   const p = Object.getPrototypeOf(v);
@@ -28,7 +39,8 @@ export function setKey(o: Obj, k: string, v: unknown) {
   else o[k] = v;
 }
 
-const own = (o: Obj, k: string) => (Object.prototype.hasOwnProperty.call(o, k) ? o[k] : undefined);
+export const hasOwn = (o: object, k: string) => Object.prototype.hasOwnProperty.call(o, k);
+export const own = (o: Obj, k: string) => (hasOwn(o, k) ? o[k] : undefined);
 
 export function sortDeep(v: unknown): unknown {
   if (Array.isArray(v)) return v.map(sortDeep);
@@ -40,43 +52,58 @@ export function sortDeep(v: unknown): unknown {
   return v;
 }
 
-/** Date text without a redundant `.000`. */
-export const dateText = (d: Date) => d.toISOString().replace(/\.000(?=$|[Z+-])/, '');
+/** Number text without TOML's `_` separators and leading `+`. */
+export const cleanNum = (raw: string) => raw.replace(/_/g, '').replace(/^\+/, '');
 
-const isNum = (v: unknown): v is number | bigint | JsonNum =>
-  typeof v === 'number' || typeof v === 'bigint' || v instanceof JsonNum;
-
-/** Exact canonical form of a numeric value, so 1, 1.0, 1e0 and 1n compare equal. */
-export function numKey(x: number | bigint | JsonNum): string {
-  if (typeof x === 'number' && !isFinite(x)) return Number.isNaN(x) ? 'nan' : x > 0 ? 'inf' : '-inf';
-  const raw = x instanceof JsonNum ? x.raw : String(x);
-  const m = /^([+-]?)(\d*)(?:\.(\d*))?(?:[eE]([+-]?\d+))?$/.exec(raw);
-  if (!m) return raw;
+/** Exact canonical decimal of a number, so 1, 1.0, 1e0, +1, 0x1 and 1_0e-1 all compare equal. */
+export function numKey(n: Num | string): string {
+  let r = cleanNum(typeof n === 'string' ? n : n.raw);
+  if (/^-?(inf|nan)$/.test(r)) return r.endsWith('nan') ? 'nan' : r[0] === '-' ? '-inf' : 'inf';
+  if (/^0[xob]/.test(r)) r = BigInt(r).toString();
+  const m = /^(-?)(\d*)(?:\.(\d*))?(?:[eE]([+-]?\d+))?$/.exec(r);
+  if (!m) return r;
   const frac = m[3] || '';
   let digits = ((m[2] || '') + frac).replace(/^0+/, '');
   if (!digits) return '0';
   let exp = (m[4] ? parseInt(m[4], 10) : 0) - frac.length;
   const t = /0*$/.exec(digits)![0].length;
   if (t) { digits = digits.slice(0, -t); exp += t; }
-  return (m[1] === '-' ? '-' : '') + digits + 'e' + exp;
+  return (m[1] ? '-' : '') + digits + 'e' + exp;
+}
+
+/** Canonical date / time: `T` separator, upper case, seconds present, no trailing fraction zeros, +00:00 → Z. */
+export function dateKey(raw: string): string {
+  return raw
+    .toUpperCase()
+    .replace(/^(\d{4}-\d{2}-\d{2})[T ](?=\d)/, '$1T')
+    .replace(/(^|T)(\d{2}:\d{2})(?!:)/, '$1$2:00')
+    .replace(/\.(\d*?)0+(?=$|[Z+-])/, (_m, d: string) => (d ? '.' + d : ''))
+    .replace(/\+00:00$/, 'Z');
+}
+
+export interface CmpOpts {
+  /** Ignore array element order. */
+  io?: boolean;
+  /** Distinguish integers from floats (both sides TOML). */
+  typed?: boolean;
 }
 
 /**
- * Canonical string of a value: object key order never matters; with `io` (ignore
- * order) array element order doesn't either. Types stay distinct ("1" ≠ 1).
+ * Canonical string of a value: object key order never matters; with `io` array
+ * element order doesn't either. Types stay distinct ("1" ≠ 1).
  */
-export function canon(v: unknown, io = false): string {
+export function canon(v: unknown, o: CmpOpts = {}): string {
   if (v === null) return 'null';
-  if (isNum(v)) return 'n' + numKey(v);
-  if (v instanceof Date) return 'd' + dateText(v);
+  if (v instanceof Num) return 'n' + numKey(v) + (o.typed ? (v.kind === 'int' ? 'i' : 'f') : '');
+  if (v instanceof DateTime) return 'd' + dateKey(v.raw);
   if (typeof v === 'string') return JSON.stringify(v);
   if (typeof v === 'boolean') return String(v);
   if (Array.isArray(v)) {
-    const p = v.map((x) => canon(x, io));
-    if (io) p.sort();
+    const p = v.map((x) => canon(x, o));
+    if (o.io) p.sort();
     return '[' + p.join(',') + ']';
   }
-  if (isObj(v)) return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canon(v[k], io)).join(',') + '}';
+  if (isObj(v)) return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canon(v[k], o)).join(',') + '}';
   return 'u' + String(v);
 }
 
@@ -87,46 +114,26 @@ export function cp(path: string, k: string | number, arr: boolean): string {
   return /^[A-Za-z_$][\w$]*$/.test(s) ? path + '.' + s : path + '[' + JSON.stringify(s) + ']';
 }
 
-/** Text and color for a primitive value. */
+/** Display text and color for a scalar (source text for numbers and dates). */
 export function prim(v: unknown): [string, string] {
   if (v === null) return ['null', 'var(--faint)'];
-  if (v instanceof JsonNum) return [v.raw, 'var(--num)'];
-  if (v instanceof Date) return [dateText(v), 'var(--date)'];
+  if (v instanceof Num) return [v.raw, 'var(--num)'];
+  if (v instanceof DateTime) return [v.raw, 'var(--date)'];
   switch (typeof v) {
     case 'string': return [JSON.stringify(v), 'var(--str)'];
-    case 'number': case 'bigint': return [String(v), 'var(--num)'];
     case 'boolean': return [String(v), 'var(--bool)'];
     default: return [String(v), 'var(--ink)'];
   }
 }
 
-/** Serialize to JSON text. Numbers keep their source text; bigints are written as digits. */
-export function stringifyJson(v: unknown, indent: string | number = '', lenient = false): string {
-  const gap = typeof indent === 'number' ? ' '.repeat(Math.min(10, indent)) : indent;
-  const out = (x: unknown, cur: string, path: string): string => {
-    if (x === null || x === undefined) return 'null';
-    if (x instanceof JsonNum) return x.raw;
-    if (x instanceof Date) return JSON.stringify(dateText(x));
-    switch (typeof x) {
-      case 'string': return JSON.stringify(x);
-      case 'boolean': case 'bigint': return String(x);
-      case 'number':
-        if (isFinite(x)) return String(x);
-        if (lenient) return numKey(x);
-        throw new ConvertError('nonFinite', path);
-    }
-    const inner = cur + gap;
-    const wrap = (o: string, c: string, items: string[]) =>
-      !items.length ? o + c : gap ? o + '\n' + inner + items.join(',\n' + inner) + '\n' + cur + c : o + items.join(',') + c;
-    if (Array.isArray(x)) return wrap('[', ']', x.map((y, i) => out(y, inner, cp(path, i, true))));
-    if (isObj(x)) return wrap('{', '}', Object.keys(x).map((k) => JSON.stringify(k) + (gap ? ': ' : ':') + out(x[k], inner, cp(path, k, false))));
-    return JSON.stringify(String(x));
-  };
-  return out(v, '', '$');
-}
-
+/** Compact one-line display of any value (numbers and dates as written). */
 export function preview(v: unknown): string {
-  const s = stringifyJson(v, '', true);
+  const out = (x: unknown): string => {
+    if (Array.isArray(x)) return '[' + x.map(out).join(',') + ']';
+    if (isObj(x)) return '{' + Object.keys(x).map((k) => JSON.stringify(k) + ':' + out(x[k])).join(',') + '}';
+    return prim(x)[0];
+  };
+  const s = out(v);
   return s.length > 90 ? s.slice(0, 88) + '…' : s;
 }
 
@@ -145,24 +152,25 @@ export const bytesLabel = (n: number) => (n < 1024 ? n + ' B' : (n / 1024).toFix
 
 export const byteLen = (s: string) => new TextEncoder().encode(s).length;
 
+/** Strict UTF-8 decode (keeps a BOM so it can be reported); null if the bytes aren't valid UTF-8. */
+export function decodeUtf8(bytes: ArrayBuffer | Uint8Array): string | null {
+  try { return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes); } catch { return null; }
+}
+
 export interface ErrInfo { msg: string; line: number | null; col: number | null; lineText: string; caret: string }
 
 /** Extract line / column from parser errors and build a caret marker. */
-export function errInfo(e: unknown, src: string, lang: 'json' | 'toml'): ErrInfo {
+export function errInfo(e: unknown, src: string): ErrInfo {
   let line: number | null = null, col: number | null = null;
   const err = e as { message?: string; line?: number; column?: number; pos?: number };
   const msg = String((err && err.message) || e);
-  if (lang === 'toml') {
-    line = err?.line || null;
-    col = err?.column || null;
-  } else {
-    const m = msg.match(/position (\d+)/i);
-    const pos = typeof err?.pos === 'number' ? err.pos : m ? +m[1] : null;
-    if (pos != null) {
-      const pre = src.slice(0, pos);
-      line = pre.split('\n').length;
-      col = pos - pre.lastIndexOf('\n');
-    }
+  if (typeof err?.pos === 'number') {
+    const pre = src.slice(0, err.pos);
+    line = pre.split('\n').length;
+    col = err.pos - pre.lastIndexOf('\n');
+  } else if (err?.line) {
+    line = err.line;
+    col = err.column || null;
   }
   let lineText = '', caret = '';
   if (line) {
@@ -189,6 +197,16 @@ export interface DiffNode {
   b?: unknown;
   kind?: 'obj' | 'arr';
   ch?: DiffNode[];
+  /** Equal values written differently (e.g. 1.0 vs 1, 0xFF vs 255): source text of A and B. */
+  fmt?: [string, string];
+  /** This node or a descendant has `fmt`. */
+  hasFmt?: boolean;
+}
+
+export interface DiffOpts extends CmpOpts {
+  /** Source text of scalars by path, to report representation-only differences. */
+  rawA?: Map<string, string>;
+  rawB?: Map<string, string>;
 }
 
 /** Index pairs of equal elements (longest common subsequence after trimming shared ends). */
@@ -220,42 +238,45 @@ function lcsPairs(ka: string[], kb: string[]): [number, number][] {
 }
 
 /**
- * Semantic diff. Object key order is ignored and numbers compare by value. Arrays are
- * aligned on equal elements (so an insertion doesn't mark everything after it as
- * changed); unmatched elements in between are compared pairwise. With `io` (ignore
- * order) array elements are matched as a multiset instead.
+ * Semantic diff. Object key order is ignored and numbers compare by exact value.
+ * Arrays are aligned on equal elements (so an insertion doesn't mark everything after
+ * it as changed); unmatched elements in between are compared pairwise. With `io`
+ * array elements are matched as a multiset instead. Equal scalars whose source text
+ * differs are flagged with `fmt` when raw maps are given.
  * Every node carries its location in A (`key`, `path`) and in B (`keyB`, `pathB`).
  */
 export function diffNode(
-  a: unknown, b: unknown, key: string | number | null, path: string, io: boolean,
+  a: unknown, b: unknown, key: string | number | null, path: string, o: DiffOpts = {},
   keyB: string | number | null = key, pathB = path,
 ): DiffNode {
   if (a === undefined) return { key: keyB, path: pathB, keyB, pathB, st: 'add', b };
   if (b === undefined) return { key, path, keyB: key, pathB: path, st: 'del', a };
   const at = { key, path, keyB, pathB, a, b };
+  const done = (n: DiffNode): DiffNode => {
+    n.hasFmt = !!n.fmt || !!n.ch?.some((c) => c.hasFmt);
+    return n;
+  };
   if (isObj(a) && isObj(b)) {
     const ks = Object.keys(a);
-    Object.keys(b).forEach((k) => { if (!Object.prototype.hasOwnProperty.call(a, k)) ks.push(k); });
-    const ch = ks.map((k) => diffNode(own(a, k), own(b, k), k, cp(path, k, false), io, k, cp(pathB, k, false)));
-    return { ...at, kind: 'obj', ch, st: ch.every((c) => c.st === 'same') ? 'same' : 'mod' };
+    Object.keys(b).forEach((k) => { if (!hasOwn(a, k)) ks.push(k); });
+    const ch = ks.map((k) => diffNode(own(a, k), own(b, k), k, cp(path, k, false), o, k, cp(pathB, k, false)));
+    return done({ ...at, kind: 'obj', ch, st: ch.every((c) => c.st === 'same') ? 'same' : 'mod' });
   }
   if (Array.isArray(a) && Array.isArray(b)) {
     const ch: DiffNode[] = [];
     const sub = (i: number | undefined, j: number | undefined) => {
       const ia = (i ?? j)!, jb = (j ?? i)!;
-      ch.push(diffNode(i !== undefined ? a[i] : undefined, j !== undefined ? b[j] : undefined, ia, cp(path, ia, true), io, jb, cp(pathB, jb, true)));
+      ch.push(diffNode(i !== undefined ? a[i] : undefined, j !== undefined ? b[j] : undefined, ia, cp(path, ia, true), o, jb, cp(pathB, jb, true)));
     };
-    const same = (i: number, j: number) =>
-      ch.push({ key: i, path: cp(path, i, true), keyB: j, pathB: cp(pathB, j, true), st: 'same', a: a[i], b: b[j] });
-    const ka = a.map((x) => canon(x, io)), kb = b.map((x) => canon(x, io));
-    if (io) {
+    const ka = a.map((x) => canon(x, o)), kb = b.map((x) => canon(x, o));
+    if (o.io) {
       const pool = new Map<string, number[]>();
       kb.forEach((k, j) => { const l = pool.get(k); if (l) l.push(j); else pool.set(k, [j]); });
       const match = ka.map((k) => pool.get(k)?.shift());
       const used = new Set(match.filter((j) => j !== undefined));
       const free = b.map((_, j) => j).filter((j) => !used.has(j));
       let fi = 0;
-      a.forEach((_, i) => (match[i] !== undefined ? same(i, match[i]!) : sub(i, free[fi++])));
+      a.forEach((_, i) => sub(i, match[i] !== undefined ? match[i] : free[fi++]));
       for (; fi < free.length; fi++) sub(undefined, free[fi]);
     } else {
       let pi = 0, pj = 0;
@@ -264,13 +285,18 @@ export function diffNode(
       };
       for (const [i, j] of lcsPairs(ka, kb)) {
         gap(i, j);
-        same(i, j);
+        sub(i, j);
         pi = i + 1;
         pj = j + 1;
       }
       gap(a.length, b.length);
     }
-    return { ...at, kind: 'arr', ch, st: ch.every((c) => c.st === 'same') ? 'same' : 'mod' };
+    return done({ ...at, kind: 'arr', ch, st: ch.every((c) => c.st === 'same') ? 'same' : 'mod' });
   }
-  return { ...at, st: canon(a, io) === canon(b, io) ? 'same' : 'chg' };
+  const n: DiffNode = { ...at, st: canon(a, o) === canon(b, o) ? 'same' : 'chg' };
+  if (n.st === 'same' && o.rawA && o.rawB) {
+    const ra = o.rawA.get(path), rb = o.rawB.get(pathB);
+    if (ra !== undefined && rb !== undefined && ra !== rb) n.fmt = [ra, rb];
+  }
+  return done(n);
 }

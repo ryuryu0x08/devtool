@@ -2,133 +2,149 @@ import { useMemo } from 'react';
 import { SAMPLE_JSON, SAMPLE_TOML, f, type Dict } from '../i18n';
 import { useApp, type FmtLang } from '../store';
 import { Seg } from '../components/Seg';
-import { ConvertError, bytesLabel, byteLen, cp, errInfo, isCont, isObj, prim, sortDeep, stats, stringifyJson, type ErrInfo } from '../lib/data';
-import { parseJson } from '../lib/json';
-import { bareKey, jsonToToml, parseToml, stringifyToml, tomlNum, tomlStr, tomlValue, walkToml } from '../lib/toml';
+import { ConvertError, DateTime, Num, bytesLabel, byteLen, cp, errInfo, isCont, isObj, sortDeep, stats, type ErrInfo, type Obj } from '../lib/data';
+import { astEqual, dupKeys, jsonValue, parseJsonAst, printJson, sortAst, statsAst, toJsonText, type JNode } from '../lib/json';
+import { TomlMismatch, TomlSyntaxError, VerifyError, bareKey, formatToml, parseTomlDoc, toTomlText, tomlValue, verifyToml, walkToml, type TomlDoc } from '../lib/toml';
 
 const TREE_CAP = 4000;
 const SAMPLE = { json: SAMPLE_JSON, toml: SAMPLE_TOML };
 
-/** Toast text for a failed conversion / serialization. */
+/** Message for a value that can't be converted / represented. */
 export function convertMsg(e: unknown, T: Dict): string {
-  if (e instanceof ConvertError) return f(T.cv[e.code], { p: e.path });
+  if (e instanceof ConvertError) return f(T.cv[e.code], { p: e.path, d: e.detail });
   return String((e as Error)?.message || e);
 }
 
 type Result =
   | { empty: true }
   | { err: ErrInfo }
-  | { v: unknown; text: string; st: { n: number; d: number }; dupes: string[] };
+  | { lang: 'json'; ast: JNode; text: string; st: { n: number; d: number }; dupes: string[]; bom: boolean }
+  | { lang: 'toml'; doc: TomlDoc; value: Obj; text: string; st: { n: number; d: number }; bom: boolean };
 
-function compute(lang: FmtLang, src: string, indent: string, sortKeys: boolean): Result {
+const plainErr = (msg: string): ErrInfo => ({ msg, line: null, col: null, lineText: '', caret: '' });
+
+/**
+ * Parse, re-print and verify. The output is only shown if re-parsing it gives back the
+ * identical document (every token / literal / comment); anything else is an error.
+ */
+function compute(lang: FmtLang, src: string, indent: string, sortKeys: boolean, T: Dict): Result {
   if (!src.trim()) return { empty: true };
-  let v: unknown;
-  const dupes: string[] = [];
-  try {
-    v = lang === 'json' ? parseJson(src, dupes) : parseToml(src);
-  } catch (e) {
-    return { err: errInfo(e, src, lang) };
+  if (lang === 'json') {
+    let ast: JNode, bom: boolean;
+    try { ({ ast, bom } = parseJsonAst(src)); } catch (e) { return { err: errInfo(e, src) }; }
+    if (sortKeys) ast = sortAst(ast);
+    const text = printJson(ast, indent === 'tab' ? '\t' : +indent);
+    let back: JNode | null = null;
+    try { back = parseJsonAst(text).ast; } catch { /* reported below */ }
+    if (!back || !astEqual(back, ast)) return { err: plainErr(f(T.verifyFail, { p: '$' })) };
+    return { lang, ast, text, st: statsAst(ast), dupes: dupKeys(ast), bom };
   }
-  if (sortKeys) v = sortDeep(v);
-  let text: string;
-  try {
-    text = lang === 'json' ? stringifyJson(v, indent === 'tab' ? '\t' : +indent) : stringifyToml(v as Record<string, unknown>);
-  } catch (e) {
-    return { err: { msg: String((e as Error).message || e), line: null, col: null, lineText: '', caret: '' } };
+  let doc: TomlDoc;
+  try { doc = parseTomlDoc(src); } catch (e) {
+    if (e instanceof TomlMismatch) return { err: plainErr(f(T.tomlMismatch, { p: e.path })) };
+    const info = errInfo(e, src);
+    // smol-toml accepted it but our lossless parser can't represent it: say so.
+    if (e instanceof TomlSyntaxError) info.msg = f(T.tomlUnsupported, { m: info.msg });
+    return { err: info };
   }
-  return { v, text, st: stats(v), dupes };
+  const text = formatToml(doc, sortKeys);
+  try { verifyToml(doc, text, sortKeys); } catch (e) {
+    return { err: plainErr(f(T.verifyFail, { p: e instanceof VerifyError ? e.path : '$' })) };
+  }
+  return { lang, doc, value: (sortKeys ? sortDeep(doc.value) : doc.value) as Obj, text, st: stats(doc.value), bom: doc.bom };
 }
 
 interface Row {
-  n: number; indent: number; caret: string; path: string; keyText: string; keyColor: string; colon: string;
+  n: number; id: string; path: string; indent: number; caret: string; keyText: string; keyColor: string; colon: string;
   valText: string; valColor: string; comma: string; meta: string; selectable: boolean; foldable: boolean;
 }
 
-function buildTree(v: unknown, col: Record<string, boolean>, T: Dict) {
-  const rows: Row[] = [], pv: Record<string, unknown> = {};
+const COLOR = { str: 'var(--str)', num: 'var(--num)', bool: 'var(--bool)', date: 'var(--date)', faint: 'var(--faint)' };
+
+/** JSON tree straight from the syntax tree: tokens as written, duplicate keys flagged. */
+function buildJsonTree(ast: JNode, col: Record<string, boolean>, T: Dict) {
+  const rows: Row[] = [], sel: Record<string, { path: string; node: JNode }> = {};
   let n = 0;
-  const walk = (x: unknown, key: string | number | null, path: string, depth: number, last: boolean, isIdx: boolean) => {
+  const walk = (x: JNode, keyText: string, id: string, path: string, depth: number, last: boolean, isIdx: boolean, dup: boolean) => {
     if (rows.length >= TREE_CAP) return;
-    pv[path] = x;
+    sel[id] = { path, node: x };
     const comma = last ? '' : ',';
-    const keyText = key === null ? '' : isIdx ? String(key) : JSON.stringify(key);
-    const colon = key === null ? '' : ': ';
-    const keyColor = isIdx ? 'var(--faint)' : 'var(--ink)';
-    const base = { indent: depth * 18, path, keyText, keyColor, colon, selectable: true, foldable: false, caret: '', meta: '' };
-    if (isCont(x)) {
-      const arr = Array.isArray(x);
-      const ents: [string | number, unknown][] = arr ? x.map((y, i) => [i, y]) : Object.entries(x);
-      const o = arr ? '[' : '{', c = arr ? ']' : '}';
-      if (!ents.length) {
-        rows.push({ ...base, n: ++n, valText: o + c, valColor: 'var(--faint)', comma });
-        return;
+    const base = {
+      id, path, indent: depth * 18, keyText, keyColor: dup ? 'var(--chg)' : isIdx ? 'var(--faint)' : 'var(--ink)',
+      colon: keyText ? ': ' : '', selectable: true, foldable: false, caret: '', meta: dup ? T.dupMark : '',
+    };
+    if (x.t === 'obj' || x.t === 'arr') {
+      const [o, c] = x.t === 'arr' ? ['[', ']'] : ['{', '}'];
+      if (!x.e.length) { rows.push({ ...base, n: ++n, valText: o + c, valColor: COLOR.faint, comma }); return; }
+      const isC = !!col[id];
+      const cnt = f(x.t === 'arr' ? T.items : T.keys, { n: x.e.length });
+      rows.push({ ...base, n: ++n, caret: isC ? '▶' : '▼', foldable: true, valText: isC ? o + ' … ' + c : o, valColor: COLOR.faint, comma: isC ? comma : '', meta: [base.meta, isC || depth === 0 ? cnt : ''].filter(Boolean).join(' · ') });
+      if (isC) return;
+      if (x.t === 'arr') x.e.forEach((y, i) => walk(y, String(i), id + '/' + i, cp(path, i, true), depth + 1, i === x.e.length - 1, true, false));
+      else {
+        const seen = new Set<string>();
+        x.e.forEach((e, i) => {
+          const d = seen.has(e.k);
+          seen.add(e.k);
+          walk(e.v, e.kRaw, id + '/' + i, cp(path, e.k, false), depth + 1, i === x.e.length - 1, false, d);
+        });
       }
-      const isC = !!col[path];
-      rows.push({
-        ...base, n: ++n, caret: isC ? '▶' : '▼', foldable: true, valText: isC ? o + ' … ' + c : o, valColor: 'var(--faint)',
-        comma: isC ? comma : '', meta: isC || depth === 0 ? f(arr ? T.items : T.keys, { n: ents.length }) : '',
-      });
-      if (!isC) {
-        ents.forEach(([k, y], i) => walk(y, k, cp(path, k, arr), depth + 1, i === ents.length - 1, arr));
-        if (rows.length < TREE_CAP) rows.push({ ...base, n: ++n, keyText: '', colon: '', valText: c, valColor: 'var(--faint)', comma, selectable: false });
-      }
-    } else {
-      const [t, c] = prim(x);
-      rows.push({ ...base, n: ++n, valText: t, valColor: c, comma });
+      if (rows.length < TREE_CAP) rows.push({ ...base, n: ++n, keyText: '', colon: '', meta: '', valText: c, valColor: COLOR.faint, comma, selectable: false });
+      return;
     }
+    const color = x.t === 'str' ? COLOR.str : x.t === 'num' ? COLOR.num : x.raw === 'null' ? COLOR.faint : COLOR.bool;
+    rows.push({ ...base, n: ++n, valText: x.raw, valColor: color, comma });
   };
-  walk(v, null, '$', 0, true, false);
-  return { rows, pv, capped: rows.length >= TREE_CAP };
+  walk(ast, '', '$', '$', 0, true, false, false);
+  return { rows, sel, capped: rows.length >= TREE_CAP };
 }
 
-function tomlPrim(x: unknown): [string, string] {
-  if (typeof x === 'number' || typeof x === 'bigint') return [tomlNum(x), 'var(--num)'];
-  if (typeof x === 'string') return [tomlStr(x), 'var(--str)'];
-  return prim(x);
+function scalarColor(y: unknown) {
+  return typeof y === 'string' ? COLOR.str : y instanceof Num ? COLOR.num : y instanceof DateTime ? COLOR.date : COLOR.bool;
 }
 
-function buildTomlTree(v: Record<string, unknown>, col: Record<string, boolean>, T: Dict) {
-  const rows: Row[] = [], pv: Record<string, unknown> = { $: v };
+/** TOML tree laid out as tables; every scalar shown exactly as written in the source. */
+function buildTomlTree(v: Obj, raw: Map<string, string>, col: Record<string, boolean>, T: Dict) {
+  const rows: Row[] = [], sel: Record<string, { path: string; value: unknown }> = { $: { path: '$', value: v } };
   let n = 0;
   const row = (r: Partial<Row> & Pick<Row, 'path'>) => {
     if (rows.length >= TREE_CAP) return;
-    rows.push({ n: ++n, indent: 0, caret: '', keyText: '', keyColor: 'var(--ink)', colon: '', valText: '', valColor: 'var(--ink)', comma: '', meta: '', selectable: true, foldable: false, ...r });
+    rows.push({ n: ++n, id: r.path, indent: 0, caret: '', keyText: '', keyColor: 'var(--ink)', colon: '', valText: '', valColor: 'var(--ink)', comma: '', meta: '', selectable: true, foldable: false, ...r });
   };
   walkToml(
     v,
     (k, y, path, depth) => {
-      pv[path] = y;
-      const [t, c] = isCont(y) ? [tomlValue(y, path), 'var(--ink)'] : tomlPrim(y);
-      row({ path, indent: depth * 18, keyText: bareKey(k), colon: ' = ', valText: t, valColor: c });
+      sel[path] = { path, value: y };
+      row({ path, indent: depth * 18, keyText: bareKey(k), colon: ' = ', valText: tomlValue(y, path, raw), valColor: isCont(y) ? 'var(--ink)' : scalarColor(y) });
     },
     (label, obj, path, depth) => {
-      pv[path] = obj;
+      sel[path] = { path, value: obj };
       const cnt = Object.keys(obj).length;
       const isC = cnt > 0 && !!col[path];
       row({ path, indent: depth * 18, caret: cnt ? (isC ? '▶' : '▼') : '', foldable: cnt > 0, keyText: label, keyColor: 'var(--acc)', meta: isC ? f(T.keys, { n: cnt }) : '' });
       return !isC && rows.length < TREE_CAP;
     },
   );
-  return { rows, pv, capped: rows.length >= TREE_CAP };
+  return { rows, sel, capped: rows.length >= TREE_CAP };
 }
 
-/** Fold TOML sections nested `level` deep or more (Infinity = expand all). */
-function tomlLevelMap(v: Record<string, unknown>, level: number) {
+/** Fold JSON containers `level` deep or more (Infinity = expand all). */
+function jsonLevelMap(ast: JNode, level: number) {
   const out: Record<string, boolean> = {};
-  if (level < Infinity) walkToml(v, () => {}, (_l, _o, path, depth) => { if (depth + 1 >= level) out[path] = true; return true; });
+  const w = (x: JNode, id: string, dep: number) => {
+    if (x.t !== 'obj' && x.t !== 'arr') return;
+    if (dep >= level) out[id] = true;
+    if (x.t === 'arr') x.e.forEach((y, i) => w(y, id + '/' + i, dep + 1));
+    else x.e.forEach((e, i) => w(e.v, id + '/' + i, dep + 1));
+  };
+  if (level < Infinity) w(ast, '$', 0);
   return out;
 }
 
-/** Collapse every container at depth ≥ level (Infinity = expand all). */
-function levelMap(v: unknown, level: number) {
+/** Fold TOML sections nested `level` deep or more (Infinity = expand all). */
+function tomlLevelMap(v: Obj, level: number) {
   const out: Record<string, boolean> = {};
-  const w = (x: unknown, path: string, dep: number) => {
-    if (!isCont(x)) return;
-    if (dep >= level) out[path] = true;
-    const arr = Array.isArray(x);
-    (arr ? x.map((y, i) => [i, y] as [number, unknown]) : Object.entries(x)).forEach(([k, y]) => w(y, cp(path, k, arr), dep + 1));
-  };
-  if (level < Infinity) w(v, '$', 0);
+  if (level < Infinity) walkToml(v, () => {}, (_l, _o, path, depth) => { if (depth + 1 >= level) out[path] = true; return true; });
   return out;
 }
 
@@ -136,36 +152,62 @@ export function Formatter({ lang }: { lang: FmtLang }) {
   const { S, set, T, copy, toast } = useApp();
   const L = lang === 'json' ? 'JSON' : 'TOML';
   const src = S[lang];
-  const r = useMemo(() => compute(lang, src, S.indent, S.sortKeys), [lang, src, S.indent, S.sortKeys]);
-  const ok = 'v' in r ? r : null;
+  const r = useMemo(() => compute(lang, src, S.indent, S.sortKeys, T), [lang, src, S.indent, S.sortKeys, T]);
+  const ok = 'text' in r ? r : null;
   const err = 'err' in r ? r.err : null;
   const isTree = !!ok && S.view === 'tree';
   const col = S.collapsed[lang];
-  const tree = useMemo(() => (!isTree || !ok ? null : lang === 'toml' ? buildTomlTree(ok.v as Record<string, unknown>, col, T) : buildTree(ok.v, col, T)), [isTree, ok, lang, col, T]);
+  const tree = useMemo(() => {
+    if (!isTree || !ok) return null;
+    return ok.lang === 'json' ? buildJsonTree(ok.ast, col, T) : buildTomlTree(ok.value, ok.doc.raw, col, T);
+  }, [isTree, ok, col, T]);
   const sel = S.sel[lang];
-  const hasSel = !!tree && !!sel && sel in tree.pv;
+  const hasSel = !!tree && !!sel && sel in tree.sel;
 
-  const status = ok ? f(T.valid, { L, n: ok.st.n, d: ok.st.d }) + (ok.dupes.length ? ' · ' + f(T.dupKeys, { n: ok.dupes.length, p: ok.dupes[0] }) : '') : err ? (err.line ? f(T.errAt, { l: err.line, c: err.col ?? 1 }) : T.errNoPos) : T.empty;
-  const statusColor = ok ? (ok.dupes.length ? 'var(--chg)' : 'var(--add)') : err ? 'var(--del)' : 'var(--faint)';
+  // Anything the user should know about the input, even though the output is unchanged.
+  const notices: string[] = [];
+  if (ok?.lang === 'json' && ok.dupes.length) notices.push(f(T.dupKeysKept, { n: ok.dupes.length, p: ok.dupes[0] }));
+  if (ok?.bom) notices.push(T.bomRemoved);
+  const status = ok ? [f(T.valid, { L, n: ok.st.n, d: ok.st.d }), ...notices].join(' · ')
+    : err ? (err.line ? f(T.errAt, { l: err.line, c: err.col ?? 1 }) : T.errNoPos) : T.empty;
+  const statusColor = ok ? (notices.length ? 'var(--chg)' : 'var(--add)') : err ? 'var(--del)' : 'var(--faint)';
   const taH = S.wide ? 480 : 220;
 
   const convert = () => {
     if (!ok) return;
-    if (lang === 'json') {
-      if (!isObj(ok.v)) { toast(T.tomlTop); return; }
-      try { set({ toml: stringifyToml(jsonToToml(ok.v) as Record<string, unknown>), tool: 'toml' }); } catch (e) { toast(convertMsg(e, T)); }
-    } else {
-      try { set({ json: stringifyJson(ok.v, S.indent === 'tab' ? '\t' : +S.indent), tool: 'json' }); } catch (e) { toast(convertMsg(e, T)); }
+    try {
+      if (ok.lang === 'json') {
+        const { v } = jsonValue(ok.ast);
+        if (!isObj(v)) { toast(T.cvFail + T.tomlTop, 6000); return; }
+        set({ toml: toTomlText(v), tool: 'toml' });
+      } else {
+        const dates: string[] = [];
+        const text = toJsonText(ok.value, S.indent === 'tab' ? '\t' : +S.indent, dates);
+        set({ json: text, tool: 'json' });
+        if (dates.length) toast(f(T.datesToStr, { n: dates.length }), 6000);
+      }
+    } catch (e) {
+      toast(T.cvFail + convertMsg(e, T), 6000);
     }
   };
-  const toggleFold = (path: string) =>
-    set((s) => ({ collapsed: { ...s.collapsed, [lang]: { ...s.collapsed[lang], [path]: !s.collapsed[lang][path] } } }));
-  const setSel = (path: string) => set((s) => ({ sel: { ...s.sel, [lang]: path } }));
+  const copySelValue = () => {
+    if (!tree || !hasSel || !ok) return;
+    if (ok.lang === 'json') {
+      const node = (tree.sel[sel] as { node: JNode }).node;
+      copy(node.t === 'str' ? node.v : printJson(node, 2));
+    } else {
+      const { value, path } = tree.sel[sel] as { path: string; value: unknown };
+      copy(typeof value === 'string' ? value : tomlValue(value, path, ok.doc.raw));
+    }
+  };
+  const toggleFold = (id: string) =>
+    set((s) => ({ collapsed: { ...s.collapsed, [lang]: { ...s.collapsed[lang], [id]: !s.collapsed[lang][id] } } }));
+  const setSel = (id: string) => set((s) => ({ sel: { ...s.sel, [lang]: id } }));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-        <button className="btn" onClick={() => set({ [lang]: lang === 'json' ? SAMPLE.json : SAMPLE.toml })}>{T.sample}</button>
+        <button className="btn" onClick={() => set({ [lang]: SAMPLE[lang] })}>{T.sample}</button>
         <button className="btn" onClick={() => set((s) => ({ [lang]: '', sel: { ...s.sel, [lang]: '' } }))}>{T.clear}</button>
         <span className="sep" />
         {lang === 'json' && (
@@ -173,7 +215,7 @@ export function Formatter({ lang }: { lang: FmtLang }) {
             opts={[{ value: '2', label: T.indent2 }, { value: '4', label: T.indent4 }, { value: 'tab', label: 'Tab' }]} />
         )}
         <button className={'btn' + (S.sortKeys ? ' on' : '')} onClick={() => set((s) => ({ sortKeys: !s.sortKeys }))}>{S.sortKeys ? '✓' : '○'} {T.sortKeys}</button>
-        {lang === 'json' && <button className="btn" onClick={() => { if (ok) copy(stringifyJson(ok.v), T.minCopied); }}>{T.minify}</button>}
+        {ok?.lang === 'json' && <button className="btn" onClick={() => copy(printJson(ok.ast), T.minCopied)}>{T.minify}</button>}
         <button className="btn" onClick={convert}>{lang === 'json' ? T.toToml : T.toJson}</button>
         <span className="spacer" />
         <Seg value={S.view} onChange={(k) => set({ view: k })} opts={[{ value: 'tree', label: T.viewTree }, { value: 'text', label: T.viewText }]} />
@@ -193,13 +235,15 @@ export function Formatter({ lang }: { lang: FmtLang }) {
 
         <section className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div className="card-head" style={{ padding: '6px 10px 6px 16px', flexWrap: 'wrap' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500 }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: statusColor }} />{status}
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500, minWidth: 0 }}>
+              <span style={{ width: 7, height: 7, flex: 'none', borderRadius: '50%', background: statusColor }} />
+              <span style={{ wordBreak: 'break-word' }}>{status}</span>
             </span>
             {isTree && ok && (
               <div style={{ display: 'flex', gap: 2 }}>
                 {([[T.expandAll, Infinity], [f(T.level, { n: 1 }), 1], [f(T.level, { n: 2 }), 2], [f(T.level, { n: 3 }), 3]] as [string, number][]).map(([label, lv]) => (
-                  <button key={label} className="ghost" onClick={() => set((s) => ({ collapsed: { ...s.collapsed, [lang]: lang === 'toml' ? tomlLevelMap(ok.v as Record<string, unknown>, lv) : levelMap(ok.v, lv) } }))}
+                  <button key={label} className="ghost"
+                    onClick={() => set((s) => ({ collapsed: { ...s.collapsed, [lang]: ok.lang === 'json' ? jsonLevelMap(ok.ast, lv) : tomlLevelMap(ok.value, lv) } }))}
                     style={{ height: 28, padding: '0 9px', borderRadius: 6, fontSize: 12, color: 'var(--mut)' }}>{label}</button>
                 ))}
               </div>
@@ -209,11 +253,11 @@ export function Formatter({ lang }: { lang: FmtLang }) {
             {tree && (
               <>
                 {tree.rows.map((row) => (
-                  <div key={row.n} className="trow click" onClick={row.selectable ? () => setSel(row.path) : undefined}
-                    style={{ background: row.selectable && sel === row.path ? 'var(--accSoft2)' : undefined }}>
+                  <div key={row.n} className="trow click" onClick={row.selectable ? () => setSel(row.id) : undefined}
+                    style={{ background: row.selectable && sel === row.id ? 'var(--accSoft2)' : undefined }}>
                     <span className="gut">{row.n}</span>
                     <div className="body" style={{ paddingLeft: row.indent }}>
-                      <span className="caret" onClick={row.foldable ? (e) => { e.stopPropagation(); toggleFold(row.path); } : undefined}>{row.caret}</span>
+                      <span className="caret" onClick={row.foldable ? (e) => { e.stopPropagation(); toggleFold(row.id); } : undefined}>{row.caret}</span>
                       <span style={{ color: row.keyColor, whiteSpace: 'pre' }}>{row.keyText}</span>
                       <span style={{ color: 'var(--faint)', whiteSpace: 'pre' }}>{row.colon}</span>
                       <span style={{ color: row.valColor, wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>{row.valText}</span>
@@ -230,9 +274,11 @@ export function Formatter({ lang }: { lang: FmtLang }) {
               <div style={{ margin: '6px 16px', padding: '14px 16px', borderRadius: 10, background: 'var(--delBg)', color: 'var(--del)', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <span style={{ fontWeight: 600, fontSize: 13, fontFamily: "'Geist Sans', 'Geist', sans-serif" }}>{status}</span>
                 <span style={{ font: "12.5px/1.5 'Geist Mono', monospace", color: 'var(--ink)', opacity: 0.8, wordBreak: 'break-word' }}>{err.msg}</span>
-                <pre style={{ margin: 0, font: "12.5px/1.5 'Geist Mono', monospace", color: 'var(--ink)', whiteSpace: 'pre', overflow: 'auto' }}>
-                  {err.lineText + '\n'}<span style={{ color: 'var(--del)', fontWeight: 700 }}>{err.caret}</span>
-                </pre>
+                {err.lineText && (
+                  <pre style={{ margin: 0, font: "12.5px/1.5 'Geist Mono', monospace", color: 'var(--ink)', whiteSpace: 'pre', overflow: 'auto' }}>
+                    {err.lineText + '\n'}<span style={{ color: 'var(--del)', fontWeight: 700 }}>{err.caret}</span>
+                  </pre>
+                )}
               </div>
             )}
             {'empty' in r && (
@@ -241,10 +287,9 @@ export function Formatter({ lang }: { lang: FmtLang }) {
           </div>
           {hasSel && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px 8px 16px', borderTop: '1px solid var(--line)', background: 'var(--sub)', flexWrap: 'wrap' }}>
-              <span className="mono" style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--acc)', wordBreak: 'break-all', flex: 1, minWidth: 120 }}>{sel}</span>
-              <button className="btn" onClick={() => copy(sel)} style={{ height: 28, padding: '0 10px', borderRadius: 7, fontSize: 12, fontWeight: 400 }}>{T.copyPath}</button>
-              <button className="btn" onClick={() => { const x = tree!.pv[sel]; copy(typeof x === 'string' ? x : lang === 'toml' ? tomlValue(x, sel) : stringifyJson(x, 2)); }}
-                style={{ height: 28, padding: '0 10px', borderRadius: 7, fontSize: 12, fontWeight: 400 }}>{T.copyValue}</button>
+              <span className="mono" style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--acc)', wordBreak: 'break-all', flex: 1, minWidth: 120 }}>{tree!.sel[sel].path}</span>
+              <button className="btn" onClick={() => copy(tree!.sel[sel].path)} style={{ height: 28, padding: '0 10px', borderRadius: 7, fontSize: 12, fontWeight: 400 }}>{T.copyPath}</button>
+              <button className="btn" onClick={copySelValue} style={{ height: 28, padding: '0 10px', borderRadius: 7, fontSize: 12, fontWeight: 400 }}>{T.copyValue}</button>
               <button className="ghost" onClick={() => setSel('')} style={{ width: 28, height: 28, borderRadius: 7, color: 'var(--faint)' }}>×</button>
             </div>
           )}

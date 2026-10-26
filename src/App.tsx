@@ -5,7 +5,8 @@ import {
 } from './store';
 import { hasMs, parseTime } from './lib/time';
 import { loadImage, scanImage } from './lib/qr';
-import { parseToml } from './lib/toml';
+import { smolParse } from './lib/toml';
+import { decodeUtf8 } from './lib/data';
 import { MobileBar, Sidebar } from './components/Sidebar';
 import { Palette } from './components/Palette';
 import { Timestamp } from './tools/Timestamp';
@@ -30,10 +31,10 @@ export function App() {
   const dark = S.theme === 'dark' || (S.theme === 'auto' && S.sysDark);
 
   const toastTimer = useRef<number | undefined>(undefined);
-  const toast = useCallback((msg: string) => {
+  const toast = useCallback((msg: string, ms = 1500) => {
     clearTimeout(toastTimer.current);
     set({ toast: msg });
-    toastTimer.current = window.setTimeout(() => set({ toast: '' }), 1500);
+    toastTimer.current = window.setTimeout(() => set({ toast: '' }), ms);
   }, []);
 
   const copy = useCallback((text: string, msg?: string) => {
@@ -68,7 +69,7 @@ export function App() {
     if (!s) return null;
     if (/^-?\d{9,19}(\.\d+)?$/.test(s)) return 'ts';
     if (/^[[{]/.test(s)) { try { JSON.parse(s); return 'json'; } catch { /* not JSON */ } }
-    if (/^\s*(\[[^\]\n]+\]|[\w."'-]+\s*=)/m.test(s)) { try { parseToml(s); return 'toml'; } catch { /* not TOML */ } }
+    if (/^\s*(\[[^\]\n]+\]|[\w."'-]+\s*=)/m.test(s)) { try { smolParse(s); return 'toml'; } catch { /* not TOML */ } }
     if (s.length < 40 && /\d/.test(s) && hasMs(parseTime(s, ref.current.tz, Date.now()))) return 'tm';
     return null;
   }, []);
@@ -110,7 +111,10 @@ export function App() {
     if (img) { decodeFile(img); return; }
     const tx = files.find((x) => /\.(json|toml|txt)$/i.test(x.name));
     if (tx) {
-      tx.text().then((s) => {
+      tx.arrayBuffer().then((buf) => {
+        // file.text() would silently turn invalid bytes into U+FFFD.
+        const s = decodeUtf8(buf);
+        if (s === null) { toast(dictFor(ref.current.lang).notUtf8, 5000); return; }
         if (/\.toml$/i.test(tx.name)) set({ toml: s, tool: 'toml' });
         else if (/\.json$/i.test(tx.name)) set({ json: s, tool: 'json' });
         else routeText(s);

@@ -1,8 +1,8 @@
-// Randomized property tests for the JSON parser, serializers and the semantic diff.
+// Randomized property tests: the parsers, the lossless formatters, verification and the diff.
 import { describe, expect, it } from 'vitest';
-import { canon, diffNode, isObj, stringifyJson, type DiffNode, type Obj } from './data';
-import { parseJson } from './json';
-import { parseToml, stringifyToml } from './toml';
+import { Num, canon, diffNode, isObj, type DiffNode, type Obj } from './data';
+import { astEqual, jsonValue, parseJsonAst, printJson, sortAst } from './json';
+import { VerifyError, formatToml, parseTomlDoc, smolParse, verifyToml } from './toml';
 
 /** Small deterministic PRNG (mulberry32). */
 function rng(seed: number) {
@@ -13,61 +13,49 @@ function rng(seed: number) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+const picker = (r: () => number) => <T,>(a: readonly T[]) => a[Math.floor(r() * a.length)];
+
+// ---------- JSON ----------
 
 const KEYS = ['a', 'b', 'id', 'name', 'x y', 'a.b', '', 'constructor', '__proto__', 'toString', '中文', 'é', '"q"', 'tab\t', '0'];
-const STRS = ['', 'hello', 'line\nbreak', 'quote"back\\slash', 'tab\tx', '\u0000\u001f\u007f', '中文', '😀', ' ', 'ünïcode', ' spaced '];
-const NUMS = ['0', '-0', '1', '-1', '1.5', '1.50', '1e3', '1E-7', '12345678901234567890', '-9007199254740993', '3.141592653589793238', '1e400', '0.1', '42'];
+const STRS = ['""', '"hello"', '"line\\nbreak"', '"quote\\"back\\\\slash"', '"\\u00e9"', '"é"', '"\\/"', '"\\uD83D\\uDE00"', '"😀"', '"\\u0000\\u001f"', '"中文"', '"\\u2028"'];
+const NUMS = ['0', '-0', '1', '-1', '1.5', '1.50', '1e3', '1E-7', '12345678901234567890', '-9007199254740993', '3.141592653589793238', '1e400', '0.1', '0.10000000000000000555', '42', '100'];
 
-function genJson(r: () => number, depth = 0): string {
-  const pick = <T,>(a: T[]) => a[Math.floor(r() * a.length)];
+/** Random JSON text with varied whitespace; `dups` allows duplicate keys. */
+function genJson(r: () => number, depth = 0, dups = false): string {
+  const pick = picker(r);
   const k = r();
   if (depth > 4 || k < 0.45) {
     const t = r();
-    if (t < 0.3) return JSON.stringify(pick(STRS));
-    if (t < 0.65) return pick(NUMS);
-    if (t < 0.8) return pick(['true', 'false']);
-    return 'null';
+    return t < 0.3 ? pick(STRS) : t < 0.65 ? pick(NUMS) : t < 0.8 ? pick(['true', 'false']) : 'null';
   }
   const n = Math.floor(r() * 5);
-  const ws = () => pick(['', ' ', '\n  ', '\t']);
-  if (k < 0.7) return '[' + Array.from({ length: n }, () => ws() + genJson(r, depth + 1)).join(',') + ws() + ']';
-  const keys = Array.from({ length: n }, () => pick(KEYS));
-  return '{' + [...new Set(keys)].map((key) => ws() + JSON.stringify(key) + ws() + ':' + genJson(r, depth + 1)).join(',') + '}';
+  const ws = () => pick(['', ' ', '\n  ', '\t', '\r\n']);
+  if (k < 0.7) return '[' + Array.from({ length: n }, () => ws() + genJson(r, depth + 1, dups)).join(',') + ws() + ']';
+  let keys = Array.from({ length: n }, () => pick(KEYS));
+  if (!dups) keys = [...new Set(keys)];
+  return '{' + keys.map((key) => ws() + JSON.stringify(key) + ws() + ':' + genJson(r, depth + 1, dups)).join(',') + '}';
 }
+const jv = (s: string) => jsonValue(parseJsonAst(s).ast);
 
-/** Rebuild one side from a diff tree: proves nothing was lost and order is right. */
-function rebuild(nd: DiffNode, side: 'a' | 'b'): unknown {
-  const skip = side === 'a' ? 'add' : 'del';
-  if (nd.st === 'mod') {
-    const ch = nd.ch!.filter((c) => c.st !== skip);
-    if (nd.kind === 'arr') return ch.map((c) => rebuild(c, side));
+/** JSON.parse result in our value model (numbers as text). */
+function fromNative(v: unknown): unknown {
+  if (typeof v === 'number') return new Num(String(v), 'float', 'json');
+  if (Array.isArray(v)) return v.map(fromNative);
+  if (v && typeof v === 'object') {
     const o: Obj = {};
-    ch.forEach((c) => Object.defineProperty(o, String(c.key), { value: rebuild(c, side), enumerable: true }));
+    for (const k of Object.keys(v)) Object.defineProperty(o, k, { value: fromNative((v as Obj)[k]), enumerable: true });
     return o;
   }
-  return side === 'a' ? nd.a : nd.b;
+  return v;
 }
 
-/** Deep equality that also distinguishes TOML integers (bigint) from floats (number). */
-function typedEq(x: unknown, y: unknown): boolean {
-  if (typeof x !== typeof y) return false;
-  if (typeof x === 'number') return Object.is(x, y) || (Number.isNaN(x) && Number.isNaN(y as number));
-  if (Array.isArray(x)) return Array.isArray(y) && x.length === y.length && x.every((v, i) => typedEq(v, y[i]));
-  if (x instanceof Date) return y instanceof Date && x.toISOString() === y.toISOString();
-  if (isObj(x)) {
-    if (!isObj(y)) return false;
-    const kx = Object.keys(x).sort(), ky = Object.keys(y).sort();
-    return kx.length === ky.length && kx.every((k, i) => k === ky[i] && typedEq(x[k], y[k]));
-  }
-  return x === y;
-}
-
-describe('fuzz: JSON parser', () => {
+describe('fuzz: JSON', () => {
   it('accepts / rejects exactly what JSON.parse does', () => {
     const r = rng(1);
     const CH = ['{', '}', '[', ']', ',', ':', '"', '\\', '-', '.', 'e', '0', '1', ' ', 'n', 't', 'u', '\u0001', '\n'];
-    for (let n = 0; n < 4000; n++) {
-      let s = genJson(r);
+    for (let n = 0; n < 5000; n++) {
+      let s = genJson(r, 0, r() < 0.3);
       const edits = Math.floor(r() * 3);
       for (let e = 0; e < edits; e++) {
         const p = Math.floor(r() * (s.length + 1));
@@ -78,59 +66,60 @@ describe('fuzz: JSON parser', () => {
       }
       let native = true, ours = true;
       try { JSON.parse(s); } catch { native = false; }
-      try { parseJson(s); } catch { ours = false; }
+      try { parseJsonAst(s); } catch { ours = false; }
       if (native !== ours) throw new Error('disagree on ' + JSON.stringify(s) + ' native=' + native);
     }
   });
 
-  it('agrees with JSON.parse on values whenever numbers are exactly representable', () => {
+  it('values agree with JSON.parse wherever a double is exact', () => {
     const r = rng(2);
     for (let n = 0; n < 2000; n++) {
       const s = genJson(r);
-      if (/12345678901234567890|9007199254740993|3\.141592653589793238|1e400/.test(s)) continue;
-      expect(canon(parseJson(s))).toBe(canon(JSON.parse(s)));
+      if (/12345678901234567890|9007199254740993|3\.141592653589793238|1e400|0\.10000000000000000555/.test(s)) continue;
+      expect(canon(jv(s).v)).toBe(canon(fromNative(JSON.parse(s))));
     }
   });
 
-  it('formats losslessly and idempotently', () => {
+  it('formatting changes whitespace only (tokens identical), also with duplicates and sorting', () => {
     const r = rng(3);
     for (let n = 0; n < 2000; n++) {
-      const v = parseJson(genJson(r));
-      for (const ind of ['', 2, '\t'] as const) {
-        const text = stringifyJson(v, ind);
-        const back = parseJson(text);
-        expect(canon(back)).toBe(canon(v));
-        expect(stringifyJson(back, ind)).toBe(text);
+      const { ast } = parseJsonAst(genJson(r, 0, r() < 0.3));
+      for (const sort of [false, true]) {
+        const want = sort ? sortAst(ast) : ast;
+        for (const ind of ['', 2, 4, '\t'] as const) {
+          const text = printJson(want, ind);
+          const back = parseJsonAst(text).ast;
+          expect(astEqual(back, want)).toBe(true);
+          expect(printJson(back, ind)).toBe(text);
+        }
       }
     }
   });
 });
 
-describe('fuzz: semantic diff', () => {
-  it('a diff can rebuild both sides, and is "same" exactly when canon matches', () => {
-    const r = rng(4);
-    for (let n = 0; n < 3000; n++) {
-      const a = parseJson(genJson(r)), b = r() < 0.15 ? parseJson(stringifyJson(a)) : parseJson(genJson(r));
-      for (const io of [false, true]) {
-        const d = diffNode(a, b, null, '$', io);
-        expect(d.st === 'same').toBe(canon(a, io) === canon(b, io));
-        expect(canon(rebuild(d, 'a'), io)).toBe(canon(a, io));
-        expect(canon(rebuild(d, 'b'), io)).toBe(canon(b, io));
-      }
-    }
-  });
-});
+// ---------- diff ----------
 
-/** Random edits: insert / delete / replace array elements, add / drop / change keys. */
+function rebuild(nd: DiffNode, side: 'a' | 'b'): unknown {
+  const skip = side === 'a' ? 'add' : 'del';
+  if (nd.ch) {
+    const ch = nd.ch.filter((c) => c.st !== skip);
+    if (nd.kind === 'arr') return ch.map((c) => rebuild(c, side));
+    const o: Obj = {};
+    ch.forEach((c) => Object.defineProperty(o, String(c.key), { value: rebuild(c, side), enumerable: true }));
+    return o;
+  }
+  return side === 'a' ? nd.a : nd.b;
+}
+
 function mutate(v: unknown, r: () => number): unknown {
   if (Array.isArray(v)) {
     const out = v.map((x) => (r() < 0.3 ? mutate(x, r) : x));
     const ops = Math.floor(r() * 3);
     for (let k = 0; k < ops; k++) {
       const p = Math.floor(r() * (out.length + 1)), op = r();
-      if (op < 0.4) out.splice(p, 0, parseJson(genJson(r, 3)));
+      if (op < 0.4) out.splice(p, 0, jv(genJson(r, 3)).v);
       else if (op < 0.8) out.splice(p, 1);
-      else if (out.length) out[p % out.length] = parseJson(genJson(r, 3));
+      else if (out.length) out[p % out.length] = jv(genJson(r, 3)).v;
     }
     return out;
   }
@@ -141,10 +130,10 @@ function mutate(v: unknown, r: () => number): unknown {
       if (t < 0.1) continue;
       Object.defineProperty(o, k, { value: t < 0.4 ? mutate(v[k], r) : v[k], enumerable: true, writable: true, configurable: true });
     }
-    if (r() < 0.3) Object.defineProperty(o, KEYS[Math.floor(r() * KEYS.length)], { value: parseJson(genJson(r, 3)), enumerable: true, writable: true, configurable: true });
+    if (r() < 0.3) Object.defineProperty(o, KEYS[Math.floor(r() * KEYS.length)], { value: jv(genJson(r, 3)).v, enumerable: true, writable: true, configurable: true });
     return o;
   }
-  return r() < 0.2 ? parseJson(genJson(r, 4)) : v;
+  return r() < 0.2 ? jv(genJson(r, 4)).v : v;
 }
 
 /** Resolve a `$.a[0]["x y"]` path. */
@@ -162,18 +151,19 @@ function at(root: unknown, path: string): unknown {
   return v;
 }
 
-describe('fuzz: diff of edited documents', () => {
-  it('rebuilds both sides and every path points at the reported value', () => {
-    const r = rng(6);
+describe('fuzz: diff', () => {
+  it('"same" exactly when canonical values match; both sides can be rebuilt; every path resolves', () => {
+    const r = rng(4);
     for (let n = 0; n < 3000; n++) {
-      const a = parseJson(genJson(r));
-      const b = mutate(a, r);
+      const A = jv(genJson(r));
+      const b = r() < 0.5 ? mutate(A.v, r) : jv(genJson(r)).v;
       for (const io of [false, true]) {
-        const d = diffNode(a, b, null, '$', io);
-        expect(canon(rebuild(d, 'a'), io)).toBe(canon(a, io));
-        expect(canon(rebuild(d, 'b'), io)).toBe(canon(b, io));
+        const d = diffNode(A.v, b, null, '$', { io });
+        expect(d.st === 'same').toBe(canon(A.v, { io }) === canon(b, { io }));
+        expect(canon(rebuild(d, 'a'), { io })).toBe(canon(A.v, { io }));
+        expect(canon(rebuild(d, 'b'), { io })).toBe(canon(b, { io }));
         const walk = (nd: DiffNode) => {
-          if (nd.st !== 'add') expect(canon(at(a, nd.path))).toBe(canon(nd.a));
+          if (nd.st !== 'add') expect(canon(at(A.v, nd.path))).toBe(canon(nd.a));
           if (nd.st !== 'del') expect(canon(at(b, nd.pathB ?? nd.path))).toBe(canon(nd.b));
           nd.ch?.forEach(walk);
         };
@@ -181,39 +171,141 @@ describe('fuzz: diff of edited documents', () => {
       }
     }
   });
-});
 
-describe('fuzz: TOML', () => {
-  const TK = ['a', 'b', 'k-1', 'x y', 'a.b', '', '中文', '"q"', 'constructor'];
-  function genToml(r: () => number, depth = 0): Obj {
-    const pick = <T,>(a: T[]) => a[Math.floor(r() * a.length)];
-    const val = (d: number): unknown => {
-      const t = r();
-      if (t < 0.15) return pick(STRS);
-      if (t < 0.3) return BigInt(pick(['0', '-1', '42', '9223372036854775807', '-9223372036854775808']));
-      if (t < 0.45) return pick([0.5, -0.0, 1, 1e21, 1e-7, 3.25, NaN, Infinity, -Infinity, 100]);
-      if (t < 0.55) return r() < 0.5;
-      if (t < 0.7 && d < 3) return Array.from({ length: Math.floor(r() * 3) }, () => val(d + 1));
-      if (t < 0.85 && d < 3) return genToml(r, d + 1);
-      if (t < 0.95 && d < 3) return Array.from({ length: 1 + Math.floor(r() * 2) }, () => genToml(r, d + 1));
-      return pick(STRS);
-    };
-    const o: Obj = {};
-    const n = Math.floor(r() * 4);
-    for (let i = 0; i < n; i++) o[pick(TK)] = val(depth);
-    return o;
-  }
-
-  it('round-trips with integer / float types intact', () => {
-    const r = rng(5);
-    for (let n = 0; n < 2000; n++) {
-      const v = genToml(r);
-      const text = stringifyToml(v);
-      let back: Obj;
-      try { back = parseToml(text); } catch (e) { throw new Error('unparseable output:\n' + text + '\n' + (e as Error).message); }
-      if (!typedEq(back, v)) throw new Error('round-trip changed value:\n' + text);
-      expect(stringifyToml(back)).toBe(text);
+  it('reports representation-only differences, and none for identical text', () => {
+    const r = rng(7);
+    const alt: Record<string, string> = { '1.50': '1.5', '1e3': '1000', '"\\u00e9"': '"é"', '"\\/"': '"/"' };
+    let seen = 0;
+    for (let n = 0; n < 1500; n++) {
+      const s = genJson(r);
+      const A = jv(s), A2 = jv(s);
+      const same = diffNode(A.v, A2.v, null, '$', { rawA: A.raw, rawB: A2.raw });
+      expect(same.st).toBe('same');
+      expect(same.hasFmt).toBe(false);
+      const from = Object.keys(alt).find((x) => s.includes(x));
+      if (!from) continue;
+      const B = jv(s.replace(from, alt[from]));
+      const d = diffNode(A.v, B.v, null, '$', { rawA: A.raw, rawB: B.raw });
+      // Same value written differently: not a change, but always visible.
+      expect(d.st).toBe('same');
+      expect(d.hasFmt).toBe(true);
+      seen++;
     }
+    expect(seen).toBeGreaterThan(200);
   });
 });
 
+// ---------- TOML ----------
+
+const T_INT = ['42', '+42', '-17', '0x2A', '0xdead_BEEF', '0o52', '0b101010', '1_000', '0', '9223372036854775807', '-9223372036854775808'];
+const T_FLOAT = ['1.0', '3.14159265358979323846', '1e3', '6.02E+23', '-0.0', '+0.0', 'inf', '-inf', 'nan', '+nan', '1_000.5', '0.1', '5e-324', '1.7976931348623157e308'];
+const T_STR = ['""', '"basic \\u00e9 \\t \\x41 \\e"', "'C:\\path'", "''", '"""\nmulti\nline"""', '"""a \\\n   b"""', "'''\nraw \\n text'''", '"""quote "" inside"""', "'''x''''", '"中文 😀"', '"\\U0001F600"'];
+const T_DATE = ['1979-05-27T07:32:00Z', '1979-05-27 07:32:00.999999-07:00', '1979-05-27t07:32:00z', '1979-05-27T07:32:00', '1979-05-27', '07:32:00.123456', '07:32', '1979-05-27T07:32Z'];
+
+/** Random valid TOML text in many styles; comments are numbered so their order is checked. */
+function genToml(r: () => number): string {
+  const pick = picker(r);
+  let cn = 0;
+  const com = () => '# c' + cn++ + pick(['', ' tail', ' 中文']);
+  const ind = () => pick(['', '', '  ', '\t']);
+  const eq = () => pick([' = ', '=', '  =  ', '\t= ']);
+  const value = (d: number): string => {
+    const t = r();
+    if (t < 0.6 || d > 2) return pick([pick(T_INT), pick(T_FLOAT), pick(T_STR), pick(T_DATE), pick(['true', 'false'])]);
+    if (t < 0.82) {
+      const items = Array.from({ length: Math.floor(r() * 4) }, () => value(d + 1));
+      if (r() < 0.4) {
+        // Multi-line array with comments.
+        return '[' + (r() < 0.3 ? ' ' + com() : '') + '\n'
+          + items.map((v) => (r() < 0.3 ? '  ' + com() + '\n' : '') + '  ' + v + ',' + (r() < 0.3 ? ' ' + com() : '')).join('\n')
+          + (r() < 0.3 ? '\n  ' + com() : '') + '\n]';
+      }
+      return '[' + items.join(pick([', ', ',', ' , '])) + (items.length && r() < 0.2 ? ',' : '') + ']';
+    }
+    const n = Math.floor(r() * 3);
+    const ents = Array.from({ length: n }, (_, j) => (r() < 0.3 ? 'e' + j + '.x' : pick(['k', '"q k"', "'l.k'"]).replace(/k|q k|l\.k/, (m) => m + j)) + ' = ' + value(d + 1));
+    if (n && r() < 0.3) return '{\n' + ents.map((e) => '  ' + e + ',' + (r() < 0.4 ? ' ' + com() : '')).join('\n') + '\n}';
+    return n ? '{ ' + ents.join(', ') + ' }' : '{}';
+  };
+  const kvs = (prefix: string) => {
+    const out: string[] = [];
+    const n = Math.floor(r() * 4);
+    for (let i = 0; i < n; i++) {
+      if (r() < 0.25) out.push(ind() + com());
+      if (r() < 0.15) out.push('');
+      const key = r() < 0.2 ? prefix + 'd' + i + '.x.y' : pick([prefix + 'k' + i, '"' + prefix + ' q' + i + '"', "'" + prefix + '.l' + i + "'"]);
+      out.push(ind() + key + eq() + value(0) + (r() < 0.3 ? ' ' + com() : ''));
+    }
+    return out;
+  };
+  const lines: string[] = [];
+  if (r() < 0.3) lines.push(com(), '');
+  lines.push(...kvs(''));
+  const nt = Math.floor(r() * 3);
+  for (let t = 0; t < nt; t++) {
+    if (r() < 0.5) lines.push('');
+    lines.push(ind() + '[t' + t + ']' + (r() < 0.3 ? ' ' + com() : ''), ...kvs('t'));
+    if (r() < 0.4) lines.push('[ t' + t + ' . sub ]', ...kvs('s'));
+  }
+  const na = Math.floor(r() * 3);
+  for (let a = 0; a < na; a++) {
+    lines.push('[[arr]]' + (r() < 0.3 ? ' ' + com() : ''), ...kvs('a'));
+    if (r() < 0.4) lines.push('[arr.child]', ...kvs('c'));
+  }
+  if (r() < 0.3) lines.push(com());
+  return lines.join(pick(['\n', '\r\n'])) + (r() < 0.7 ? '\n' : '');
+}
+
+describe('fuzz: TOML', () => {
+  it('generated documents are valid TOML (generator sanity)', () => {
+    const r = rng(10);
+    for (let n = 0; n < 300; n++) {
+      const s = genToml(r);
+      try { smolParse(s); } catch (e) { throw new Error('generator produced invalid TOML:\n' + s + '\n' + (e as Error).message); }
+    }
+  });
+
+  it('formatting keeps every value, literal and comment; output is stable', () => {
+    const r = rng(11);
+    for (let n = 0; n < 2000; n++) {
+      const s = genToml(r);
+      const doc = parseTomlDoc(s);
+      for (const sort of [false, true]) {
+        const out = formatToml(doc, sort);
+        try { verifyToml(doc, out, sort); } catch (e) { throw new Error('verify failed (sort=' + sort + '):\n' + s + '\n---\n' + out + '\n' + (e as Error).message); }
+        expect(formatToml(parseTomlDoc(out), sort)).toBe(out);
+      }
+    }
+  });
+
+  it('verification catches any rewritten literal or dropped comment', () => {
+    const r = rng(12);
+    const rewrites: [RegExp, string][] = [
+      [/0x2A/, '42'], [/(?<![\d.])1\.0(?![\d_eE])/, '1'], [/3\.14159265358979323846/, '3.141592653589793'], [/07:32:00\.123456/, '07:32:00.123'],
+      [/'C:\\path'/, '"C:\\\\path"'], [/1979-05-27 07:32/, '1979-05-27T07:32'], [/# c\d+[^\n]*/, ''], [/\+42/, '42'], [/1_000(?![._\d])/, '1000'],
+    ];
+    let caught = 0;
+    for (let n = 0; n < 1500; n++) {
+      const doc = parseTomlDoc(genToml(r));
+      const out = formatToml(doc);
+      for (const [from, to] of rewrites) {
+        const bad = out.replace(from, to);
+        if (bad === out) continue;
+        expect(() => verifyToml(doc, bad, false)).toThrow(VerifyError);
+        caught++;
+      }
+    }
+    expect(caught).toBeGreaterThan(1000);
+  });
+
+  it('diff of a document against its formatted output: identical, nothing written differently', () => {
+    const r = rng(13);
+    for (let n = 0; n < 500; n++) {
+      const A = parseTomlDoc(genToml(r));
+      const B = parseTomlDoc(formatToml(A));
+      const d = diffNode(A.value, B.value, null, '$', { typed: true, rawA: A.raw, rawB: B.raw });
+      expect(d.st).toBe('same');
+      expect(d.hasFmt).toBe(false);
+    }
+  });
+});

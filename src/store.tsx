@@ -127,7 +127,7 @@ export interface Ctx {
   isMac: boolean;
   go: (id: ToolId) => void;
   copy: (text: string, msg?: string) => void;
-  toast: (msg: string) => void;
+  toast: (msg: string, ms?: number) => void;
   toolName: (id: ToolId) => string;
   routeText: (text: string, silent?: boolean) => void;
   detect: (text: string) => 'ts' | 'tm' | 'json' | 'toml' | null;
