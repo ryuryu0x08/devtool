@@ -34,7 +34,7 @@ npm test         # 全部测试
 - **显示如实**：不可见字符和文字方向控制字符（如 U+202E）在结果中标出（复制时仍是原字符）；极大的差异结果分段显示并注明总数。
 - **本地保存**：输入过大存不下时会提示，并删除旧副本，避免刷新后看到过期内容。超过 200 KB 的输入在停止输入后才处理，处理中不能复制或转换。
 
-测试包括（另用植入错误测试检验过测试本身：28 个故意植入的错误全部被发现）：单元测试（`src/lib/data.test.ts`）、TOML 官方一致性测试集（`test/toml-test`，来自 [toml-lang/toml-test](https://github.com/toml-lang/toml-test)，MIT 许可）、以及随机化测试（`src/lib/fuzz.test.ts`：解析器与 `JSON.parse` 判断一致、格式化无损且稳定、篡改必被校验发现、差异结果可还原两侧）。
+测试包括（另用植入错误测试检验过测试本身：31 个故意植入的错误全部被发现）：单元测试（`src/lib/data.test.ts`）、TOML 官方一致性测试集（`test/toml-test`，来自 [toml-lang/toml-test](https://github.com/toml-lang/toml-test)，MIT 许可）、以及随机化测试（`src/lib/fuzz.test.ts`：解析器与 `JSON.parse` 判断一致、格式化无损且稳定、篡改必被校验发现、差异结果可还原两侧）。
 
 构建产物是纯静态文件（`base: './'`），可部署到任意静态托管。
 

@@ -201,7 +201,10 @@ export function Diff() {
               <div key={i} className="trow" style={{ background: r.bg }}>
                 <span style={{ width: 30, flex: 'none', textAlign: 'center', color: r.markColor, fontWeight: 700, userSelect: 'none' }}>{r.mark}</span>
                 <div className="body" style={{ flexWrap: 'wrap', paddingLeft: r.indent }}>
-                  <span className="caret" onClick={r.togglePath ? () => { const p = r.togglePath!; set((s) => ({ dCol: { ...s.dCol, [p]: !s.dCol[p] } })); } : undefined}>{r.caret}</span>
+                  {r.togglePath ? (
+                    <button className="caret" aria-label={T.foldRow} aria-expanded={r.caret === '▼'}
+                      onClick={() => { const p = r.togglePath!; set((s) => ({ dCol: { ...s.dCol, [p]: !s.dCol[p] } })); }}>{r.caret}</button>
+                  ) : <span className="caret" />}
                   <span style={{ color: r.keyColor, whiteSpace: 'pre' }}><Vis text={r.keyText} /></span>
                   <span style={{ color: 'var(--faint)', whiteSpace: 'pre' }}>{r.colon}</span>
                   <span style={{ color: r.valColor, wordBreak: 'break-all', textDecoration: r.deco }}><Vis text={r.valText} /></span>

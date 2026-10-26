@@ -80,10 +80,14 @@ export const pickPrefs = (S: State): Prefs => ({
   ignoreOrder: S.ignoreOrder, onlyDiff: S.onlyDiff, diffView: S.diffView,
 });
 
+const validTz = (z: string) => {
+  try { tzParts(Date.now(), z); return true; } catch { return false; }
+};
+
 export function initState(): State {
   // Last-used zone wins; default is this device's zone.
-  let tz = ls<string>('tz') || localTz;
-  try { tzParts(Date.now(), tz); } catch { tz = localTz; }
+  const stored = ls<unknown>('tz');
+  const tz = typeof stored === 'string' && validTz(stored) ? stored : validTz(localTz) ? localTz : 'UTC';
   // Each input is stored separately (tb.in.<key>); tb.inputs is the older combined format.
   const inp: Partial<Inputs> = {};
   if (CONFIG.rememberInputs) {
@@ -93,7 +97,11 @@ export function initState(): State {
       if (typeof v === 'string') inp[k] = v;
     }
   }
-  const pr: Partial<Prefs> = ls<Prefs>('prefs') || {};
+  // Stored preferences may be damaged or from an older version: keep only valid values.
+  const raw = ls<Record<string, unknown>>('prefs');
+  const pr: Record<string, unknown> = raw && typeof raw === 'object' ? raw : {};
+  const oneOf = <V,>(v: unknown, opts: readonly V[], d: V): V => (opts.includes(v as V) ? (v as V) : d);
+  const recent = ls<unknown>('tzRecent');
   const now = Date.now();
   const navLang: Lang = String(navigator.language || 'zh').toLowerCase().startsWith('zh') ? 'zh' : 'en';
   const saved = ls<string>('tool');
@@ -103,11 +111,11 @@ export function initState(): State {
     tool: (TOOLS.some((t) => t.id === saved) ? saved : 'ts') as ToolId,
     wide: window.innerWidth >= WIDE_MIN,
     side: pr.side !== false,
-    lang: pr.lang || navLang,
-    theme: pr.theme || 'auto',
+    lang: oneOf(pr.lang, ['zh', 'en'] as const, navLang),
+    theme: oneOf(pr.theme, ['light', 'dark', 'auto'] as const, 'auto'),
     sysDark,
     palette: false, pq: '', pi: 0, toast: '', undo: null,
-    tz, tzRecent: ls<string[]>('tzRecent') || [], tzOpen: false, tzQ: '',
+    tz, tzRecent: Array.isArray(recent) ? recent.filter((z): z is string => typeof z === 'string' && validTz(z)).slice(0, 5) : [], tzOpen: false, tzQ: '',
     tsIn: inp.tsIn ?? String(Math.floor(now / 1000)),
     tsUnit: 'auto',
     tmIn: inp.tmIn ?? fmtWall(now, tz),
@@ -115,16 +123,16 @@ export function initState(): State {
     qrEc: 'M', scan: null, dragOver: false,
     json: inp.json ?? SAMPLE_JSON,
     toml: inp.toml ?? SAMPLE_TOML,
-    indent: pr.indent || '2',
+    indent: oneOf(pr.indent, ['2', '4', 'tab'] as const, '2'),
     sortKeys: !!pr.sortKeys,
-    view: pr.view || CONFIG.defaultView,
+    view: oneOf(pr.view, ['tree', 'text'] as const, CONFIG.defaultView),
     collapsed: { json: {}, toml: {} },
     sel: { json: '', toml: '' },
     diffA: inp.diffA ?? SAMPLE_A,
     diffB: inp.diffB ?? SAMPLE_B,
     ignoreOrder: !!pr.ignoreOrder,
     onlyDiff: pr.onlyDiff !== false,
-    diffView: pr.diffView || 'tree',
+    diffView: oneOf(pr.diffView, ['tree', 'list'] as const, 'tree'),
     dCol: {},
   };
 }

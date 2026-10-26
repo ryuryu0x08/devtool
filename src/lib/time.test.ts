@@ -131,3 +131,21 @@ describe('lenient parsing never guesses', () => {
     expect(at('October 26, 2026')).toBe('2026-10-26 00:00:00');
   });
 });
+
+describe('English dates are parsed without the browser zone', () => {
+  const ms = (s: string, tz = SH) => { const r = parseTime(s, tz, NOW); return r && 'ms' in r ? r.ms : null; };
+  it('zone-less text is read in the selected zone, whatever the system zone', () => {
+    // 02:30 on 8 Mar 2026 does not exist in New York; it does in Shanghai.
+    expect(ms('Mar 8 2026 02:30')).toBe(Date.UTC(2026, 2, 7, 18, 30));
+    expect(ms('March 8th, 2026 at 2:30 am')).toBe(Date.UTC(2026, 2, 7, 18, 30));
+  });
+  it('formats with zones', () => {
+    expect(ms('Mon Oct 26 2026 14:30:00 GMT+0800 (China Standard Time)')).toBe(Date.UTC(2026, 9, 26, 6, 30));
+    expect(ms('Mon, 26 Oct 2026 14:30:00 GMT')).toBe(Date.UTC(2026, 9, 26, 14, 30));
+    expect(ms('Mon, 26 Oct 2026 14:30:00 EST')).toBe(Date.UTC(2026, 9, 26, 19, 30));
+    expect(ms('26 Oct 2026 14:30 +05:30')).toBe(Date.UTC(2026, 9, 26, 9, 0));
+  });
+  it.each(['Octopus 26 2026', 'Oct 26', '31 Sep 2026', 'Oct 26 2026 25:00', 'Oct 26 2026 14:30 GMT+2500'])('%s → not recognised', (s) => {
+    expect(ms(s)).toBeNull();
+  });
+});

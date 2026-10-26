@@ -176,6 +176,26 @@ function parseClock(str: string, strict = false): [number, number, number, numbe
 export type TimeResult = { ms: number; sub?: string; note?: string; alt?: number; gap?: boolean } | { err: true } | null;
 
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const MON = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\\.?';
+const EN_DATE = new RegExp(
+  '^(?:(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*\\.?,?\\s+)?' +
+  '(?:(\\d{1,2})(?:st|nd|rd|th)?\\s+' + MON + ',?\\s+(\\d{4})|' + MON + '\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s+(\\d{4}))' +
+  '(?:,?\\s+(?:at\\s+)?(.*))?$',
+);
+const US_ZONES: Record<string, number> = { est: -300, edt: -240, cst: -360, cdt: -300, mst: -420, mdt: -360, pst: -480, pdt: -420 };
+
+/** Minutes east of UTC for Z / UTC / GMT / ±hh[:mm] / GMT±hhmm / US zone names; null if out of range. */
+function offsetMinutes(off: string): number | null {
+  const o = off.toLowerCase();
+  if (o === 'z') return 0;
+  if (o in US_ZONES) return US_ZONES[o];
+  const m = o.match(/^(?:gmt|utc)?(?:([+-])(\d{2}):?(\d{2})?)?$/);
+  if (!m) return null;
+  if (!m[1]) return 0;
+  const h = +m[2], mi = +(m[3] || 0);
+  if (h > 23 || mi > 59) return null;
+  return (m[1] === '-' ? -1 : 1) * (h * 60 + mi);
+}
 
 const REL: Record<string, number> = {
   today: 0, '今天': 0, '今日': 0, tomorrow: 1, '明天': 1, '明日': 1,
@@ -205,33 +225,26 @@ export function parseTime(raw: string, tz: string, now: number): TimeResult {
   }
   const tOnly = parseClock(low, true);
   if (tOnly) return wall(td.y, td.m, td.d, tOnly);
-  m = s.match(/^(\d{4})[-/.年]?(\d{1,2})[-/.月]?(\d{1,2})日?(?:[T\s]*(.*))?$/i);
-  if (m) {
-    let rest = (m[4] || '').trim();
+  /** A date plus the rest of the text: clock time and an optional zone (Z, ±hh[:mm], GMT+0800, EST…). */
+  const dated = (y: number, mo: number, d: number, restIn: string): TimeResult => {
+    // Reject impossible dates instead of rolling 02-31 over into March.
+    if (mo < 1 || mo > 12 || d < 1 || d > daysIn(y, mo)) return { err: true };
+    let rest = restIn.replace(/\s*\([^)]*\)\s*$/, '').trim();
     let off: string | null = null;
-    const om = rest.match(/(z|utc|gmt|[+-]\d{2}(?::?\d{2})?)$/i);
+    const om = rest.match(/(z|utc|gmt|(?:gmt|utc)?[+-]\d{2}(?::?\d{2})?|[ecmp][sd]t)$/i);
     if (om) {
       off = om[1];
       rest = rest.slice(0, -om[1].length).trim();
     }
     const t = parseClock(rest);
     if (!t) return { err: true };
-    const y = +m[1], mo = +m[2], d = +m[3];
-    // Reject impossible dates instead of rolling 02-31 over into March.
-    if (mo < 1 || mo > 12 || d < 1 || d > daysIn(y, mo)) return { err: true };
-    if (off) {
-      let om2 = 0;
-      if (!/^(z|utc|gmt)$/i.test(off)) {
-        const sg = off[0] === '-' ? -1 : 1;
-        const dg = off.slice(1).replace(':', '');
-        const oh = +dg.slice(0, 2), omi = +(dg.slice(2) || 0);
-        if (oh > 23 || omi > 59) return { err: true };
-        om2 = sg * (oh * 60 + omi);
-      }
-      return { ms: utc(y, mo, d, t[0], t[1], t[2], t[3]) - om2 * 60000, sub: t[4], note: off };
-    }
-    return wall(y, mo, d, t);
-  }
+    if (off === null) return wall(y, mo, d, t);
+    const mins = offsetMinutes(off);
+    if (mins === null) return { err: true };
+    return { ms: utc(y, mo, d, t[0], t[1], t[2], t[3]) - mins * 60000, sub: t[4], note: off };
+  };
+  m = s.match(/^(\d{4})[-/.年]?(\d{1,2})[-/.月]?(\d{1,2})日?(?:[T\s]*(.*))?$/i);
+  if (m) return dated(+m[1], +m[2], +m[3], m[4] || '');
   m = s.match(/^(\d{1,2})[-/.月](\d{1,2})日?\s*(.*)$/);
   if (m) {
     const t = parseClock(m[3]);
@@ -239,21 +252,13 @@ export function parseTime(raw: string, tz: string, now: number): TimeResult {
     if (!t || mo < 1 || mo > 12 || d < 1 || d > daysIn(td.y, mo)) return { err: true };
     return wall(td.y, mo, d, t);
   }
-  // English dates ("Oct 26 2026 14:30", RFC 2822). Date.parse is very lenient, so only accept
-  // text with a month name, and only if the parsed month (and day, when written) match the text.
-  const mn = low.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\b/);
-  if (mn) {
-    const p = Date.parse(s);
-    if (isNaN(p)) return { err: true };
-    const zoned = /\b(z|utc|gmt|[ecmp][sd]t)\b|[+-]\d{2}:?\d{2}\b/i.test(s);
-    const L = new Date(p);
-    const [pm, pd] = zoned ? [L.getUTCMonth(), L.getUTCDate()] : [L.getMonth(), L.getDate()];
-    const day = low.match(new RegExp('\\b(\\d{1,2})(?:st|nd|rd|th)?\\s*,?\\s*' + mn[0].replace('.', '\\.') + '|' + mn[0].replace('.', '\\.') + '\\s*(\\d{1,2})\\b'));
-    const dn = day ? +(day[1] ?? day[2]) : null;
-    if (pm !== MONTHS.indexOf(mn[1]) || (dn !== null && dn !== pd && !zoned)) return { err: true };
-    // Without an explicit zone, Date.parse uses the browser's zone — re-read the wall time in `tz`.
-    if (zoned) return { ms: p };
-    return { ...resolveWall(L.getFullYear(), L.getMonth() + 1, L.getDate(), L.getHours(), L.getMinutes(), L.getSeconds(), L.getMilliseconds(), tz) };
+  // English dates ("Oct 26 2026 14:30", "Mon, 26 Oct 2026 14:30:00 GMT", Date#toString). Parsed
+  // here rather than with Date.parse, which is lenient and reads zone-less text in the
+  // browser's zone (shifting times that fall in a DST gap there).
+  m = low.match(EN_DATE);
+  if (m) {
+    const mo = MONTHS.indexOf((m[2] ?? m[4]).slice(0, 3)) + 1;
+    return dated(+(m[3] ?? m[6]), mo, +(m[1] ?? m[5]), m[7] || '');
   }
   return { err: true };
 }

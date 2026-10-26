@@ -211,6 +211,21 @@ export function Formatter({ lang }: { lang: FmtLang }) {
       else copy(value);
     }
   };
+  // Keyboard: ↑ ↓ Home End move (selection follows focus), → expands, ← collapses.
+  const focusId = tree && sel && sel in tree.sel ? sel : tree?.rows.find((r) => r.selectable)?.id;
+  const onRowKey = (e: React.KeyboardEvent<HTMLDivElement>, row: Row) => {
+    const rows = [...(e.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[data-row]') ?? [])];
+    const i = rows.indexOf(e.currentTarget);
+    const go = (j: number) => { e.preventDefault(); rows[Math.max(0, Math.min(rows.length - 1, j))]?.focus(); };
+    if (e.key === 'ArrowDown') go(i + 1);
+    else if (e.key === 'ArrowUp') go(i - 1);
+    else if (e.key === 'Home') go(0);
+    else if (e.key === 'End') go(rows.length - 1);
+    else if (row.foldable && ((e.key === 'ArrowRight' && row.caret === '▶') || (e.key === 'ArrowLeft' && row.caret === '▼'))) {
+      e.preventDefault();
+      toggleFold(row.id);
+    }
+  };
   const toggleFold = (id: string) =>
     set((s) => ({ collapsed: { ...s.collapsed, [lang]: { ...s.collapsed[lang], [id]: !s.collapsed[lang][id] } } }));
   const setSel = (id: string) => set((s) => ({ sel: { ...s.sel, [lang]: id } }));
@@ -265,6 +280,11 @@ export function Formatter({ lang }: { lang: FmtLang }) {
               <>
                 {tree.rows.map((row) => (
                   <div key={row.n} className="trow click" onClick={row.selectable ? () => setSel(row.id) : undefined}
+                    data-row={row.selectable ? row.id : undefined} role={row.selectable ? 'treeitem' : undefined}
+                    aria-expanded={row.foldable ? row.caret === '▼' : undefined} aria-selected={row.selectable ? sel === row.id : undefined}
+                    tabIndex={row.selectable ? (row.id === focusId ? 0 : -1) : undefined}
+                    onFocus={row.selectable && sel !== row.id ? () => setSel(row.id) : undefined}
+                    onKeyDown={row.selectable ? (e) => onRowKey(e, row) : undefined}
                     style={{ background: row.selectable && sel === row.id ? 'var(--accSoft2)' : undefined }}>
                     <span className="gut">{row.n}</span>
                     <div className="body" style={{ paddingLeft: row.indent }}>
@@ -301,7 +321,7 @@ export function Formatter({ lang }: { lang: FmtLang }) {
               <span className="mono" style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--acc)', wordBreak: 'break-all', flex: 1, minWidth: 120 }}>{tree!.sel[sel].path}</span>
               <button className="btn" onClick={() => copy(tree!.sel[sel].path)} style={{ height: 28, padding: '0 10px', borderRadius: 7, fontSize: 12, fontWeight: 400 }}>{T.copyPath}</button>
               <button className="btn" onClick={copySelValue} style={{ height: 28, padding: '0 10px', borderRadius: 7, fontSize: 12, fontWeight: 400 }}>{T.copyValue}</button>
-              <button className="ghost" onClick={() => setSel('')} style={{ width: 28, height: 28, borderRadius: 7, color: 'var(--faint)' }}>×</button>
+              <button className="ghost" onClick={() => setSel('')} aria-label={T.closeSel} title={T.closeSel} style={{ width: 28, height: 28, borderRadius: 7, color: 'var(--faint)' }}>×</button>
             </div>
           )}
         </section>

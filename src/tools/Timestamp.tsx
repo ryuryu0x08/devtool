@@ -3,7 +3,7 @@ import { COMMON_TZ, TZ_ZH, f } from '../i18n';
 import { localTz, lsSet, useApp } from '../store';
 import { Seg } from '../components/Seg';
 import {
-  daysIn, exactUnits, fmtISO, fmtWall, fracStr, hasMs, offLabel, parseTime, parseTs, relTime, tzOffset, tzParts, utc, wallToMs, type TsUnit,
+  daysIn, exactUnits, fmtISO, fmtWall, fracStr, hasMs, offLabel, parseTime, parseTs, relTime, resolveWall, tzOffset, tzParts, utc, type TsUnit,
 } from '../lib/time';
 
 interface Zone { id: string; hay: string }
@@ -138,7 +138,7 @@ function KvRows({ rows }: { rows: [string, string][] }) {
 }
 
 export function Timestamp() {
-  const { S, set, T, lang, copy } = useApp();
+  const { S, set, T, lang, copy, toast } = useApp();
   const now = useNow();
   const tz = S.tz;
   const zoneLabel = lang === 'zh' && TZ_ZH[tz] ? TZ_ZH[tz] : tz === 'UTC' ? 'UTC' : tz.split('/').pop()!.replace(/_/g, ' ');
@@ -156,28 +156,33 @@ export function Timestamp() {
   const tm = hasMs(m) ? (m as { ms: number; sub?: string; note?: string; alt?: number; gap?: boolean }) : null;
 
   const setMs = (ms: number) => set({ tmIn: fmtWall(ms, tz) });
-  const dayStart = (n: number) => {
-    const t = new Date(utc(np.y, np.m, np.d + n));
-    return wallToMs(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate(), 0, 0, 0, 0, tz);
-  };
-  const baseMs = () => {
+  /** The current input's instant, with its sub-millisecond digits (adjusting must not drop them). */
+  const base = () => {
     const x = parseTime(S.tmIn, tz, Date.now());
-    return hasMs(x) ? x.ms : Date.now();
+    return hasMs(x) ? { ms: x.ms, sub: (x as { sub?: string }).sub || '' } : { ms: Date.now(), sub: '' };
+  };
+  const setExact = (ms: number, sub: string) => set({ tmIn: fmtWall(ms, tz, true, sub) });
+  /** Set a wall-clock time; if DST makes it not exist, say what it became instead. */
+  const setWall = (y: number, mo: number, d: number, h: number, mi: number, s: number, ms: number, sub: string) => {
+    const w = resolveWall(y, mo, d, h, mi, s, ms, tz);
+    setExact(w.ms, sub);
+    if (w.gap) toast(f(T.dstShifted, { t: fmtWall(w.ms, tz) }), 6000);
   };
   // ±1 day keeps the wall-clock time (24 h would drift by an hour across DST).
-  const shiftDays = (ms: number, n: number) => {
-    const p = tzParts(ms, tz);
-    return wallToMs(p.y, p.m, p.d + n, p.h, p.mi, p.s, p.ms, tz);
+  const shiftDays = (n: number) => {
+    const b = base(), p = tzParts(b.ms, tz);
+    setWall(p.y, p.m, p.d + n, p.h, p.mi, p.s, p.ms, b.sub);
   };
+  const shiftHours = (n: number) => { const b = base(); setExact(b.ms + n * 36e5, b.sub); };
   const quick: [string, () => void][] = [
     [T.q.now, () => setMs(Date.now())],
-    [T.q.today, () => setMs(dayStart(0))],
-    [T.q.tomorrow, () => setMs(dayStart(1))],
-    [T.q.month, () => setMs(wallToMs(np.y, np.m, 1, 0, 0, 0, 0, tz))],
-    [T.q.m1d, () => setMs(shiftDays(baseMs(), -1))],
-    [T.q.m1h, () => setMs(baseMs() - 36e5)],
-    [T.q.p1h, () => setMs(baseMs() + 36e5)],
-    [T.q.p1d, () => setMs(shiftDays(baseMs(), 1))],
+    [T.q.today, () => setWall(np.y, np.m, np.d, 0, 0, 0, 0, '')],
+    [T.q.tomorrow, () => setWall(np.y, np.m, np.d + 1, 0, 0, 0, 0, '')],
+    [T.q.month, () => setWall(np.y, np.m, 1, 0, 0, 0, 0, '')],
+    [T.q.m1d, () => shiftDays(-1)],
+    [T.q.m1h, () => shiftHours(-1)],
+    [T.q.p1h, () => shiftHours(1)],
+    [T.q.p1d, () => shiftDays(1)],
   ];
 
   /** ↑ / ↓ adjusts the segment under the caret (canonical format) or minutes; ⇧ adjusts hours. */
@@ -188,7 +193,7 @@ export function Timestamp() {
     const dir = e.key === 'ArrowUp' ? 1 : -1;
     const el = e.currentTarget;
     const pos = el.selectionStart || 0;
-    const p = tzParts(baseMs(), tz);
+    const b = base(), p = tzParts(b.ms, tz);
     const canonF = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(S.tmIn);
     let seg = canonF ? (pos <= 4 ? 0 : pos <= 7 ? 1 : pos <= 10 ? 2 : pos <= 13 ? 3 : pos <= 16 ? 4 : 5) : 4;
     if (e.shiftKey) seg = 3;
@@ -199,7 +204,7 @@ export function Timestamp() {
       const dim = daysIn(dt.getUTCFullYear(), dt.getUTCMonth() + 1);
       if (a[2] > dim) a[2] = dim;
     }
-    set({ tmIn: fmtWall(wallToMs(a[0], a[1], a[2], a[3], a[4], a[5], 0, tz), tz) });
+    setWall(a[0], a[1], a[2], a[3], a[4], a[5], p.ms, b.sub);
     requestAnimationFrame(() => { try { el.setSelectionRange(pos, pos); } catch { /* detached */ } });
   };
 

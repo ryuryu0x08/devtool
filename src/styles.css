@@ -170,6 +170,8 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .trow .gut { width: 46px; flex: none; text-align: right; padding-right: 12px; color: var(--gut); user-select: none; font-size: 11.5px; }
 .trow .body { display: flex; align-items: flex-start; min-width: 0; flex: 1; padding-right: 14px; }
 .caret { width: 16px; flex: none; color: var(--faint); cursor: pointer; user-select: none; text-align: center; font-size: 10px; }
+button.caret { border: 0; background: transparent; padding: 0; font: inherit; font-size: 10px; line-height: inherit; }
+.trow:focus-visible, button.caret:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
 .meta { color: var(--faint); font: 11.5px/22px 'Geist Sans', 'Geist', sans-serif; padding-left: 8px; white-space: nowrap; }
 .badge { padding: 4px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; }
 

@@ -29,7 +29,7 @@ export function Sidebar() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '2px 2px 14px 8px' }}>
             <span className="logo" style={{ width: 26, height: 26, borderRadius: 7 }}>TB</span>
             <span style={{ fontWeight: 600, fontSize: 15, flex: 1 }}>{T.brand}</span>
-            <button className="ghost" onClick={c.toggleSide} title={T.collapse + (isMac ? '  ⌘B' : '  Ctrl+B')}
+            <button className="ghost" onClick={c.toggleSide} aria-label={T.collapse} title={T.collapse + (isMac ? '  ⌘B' : '  Ctrl+B')}
               style={{ width: 30, height: 30, borderRadius: 7, color: 'var(--faint)', fontSize: 16, lineHeight: 1 }}>«</button>
           </div>
           <button className="search-btn" onClick={c.openPalette}>
@@ -58,7 +58,7 @@ export function Sidebar() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', gap: 6, width: 43 }}>
-          <button className="logo" onClick={c.toggleSide} title={T.expand + (isMac ? '  ⌘B' : '  Ctrl+B')}
+          <button className="logo" onClick={c.toggleSide} aria-label={T.expand} title={T.expand + (isMac ? '  ⌘B' : '  Ctrl+B')}
             style={{ width: 32, height: 32, border: 0, borderRadius: 8, cursor: 'pointer', margin: '0 0 8px' }}>TB</button>
           <button className="search-btn mono" onClick={c.openPalette} title={T.search}
             style={{ width: 40, height: 34, padding: 0, justifyContent: 'center', color: 'var(--mut)', fontSize: 10.5, fontWeight: 500 }}>
@@ -76,7 +76,7 @@ export function Sidebar() {
           <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
             <button className="rail-btn" onClick={c.toggleLang} title="中 / EN">{c.langBtn}</button>
             <button className="rail-btn" onClick={c.cycleTheme} title={c.themeTitle}>{c.themeShort}</button>
-            <button className="ghost" onClick={c.toggleSide} title={T.expand + (isMac ? '  ⌘B' : '  Ctrl+B')}
+            <button className="ghost" onClick={c.toggleSide} aria-label={T.expand} title={T.expand + (isMac ? '  ⌘B' : '  Ctrl+B')}
               style={{ width: 44, height: 30, borderRadius: 8, color: 'var(--faint)', fontSize: 16 }}>»</button>
           </div>
         </div>
