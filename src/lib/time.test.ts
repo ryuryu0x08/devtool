@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { exactUnits, fmtISO, fmtWall, parseTime, parseTs, resolveWall, wallToMs } from './time';
+import { exactUnits, fmtISO, fmtWall, offLabel, parseTime, parseTs, resolveWall, tzOffset, wallToMs } from './time';
 
 const SH = 'Asia/Shanghai';
 const NOW = Date.UTC(2026, 9, 26, 6, 0, 0); // 2026-10-26 14:00 in Shanghai
@@ -147,5 +147,47 @@ describe('English dates are parsed without the browser zone', () => {
   });
   it.each(['Octopus 26 2026', 'Oct 26', '31 Sep 2026', 'Oct 26 2026 25:00', 'Oct 26 2026 14:30 GMT+2500'])('%s → not recognised', (s) => {
     expect(ms(s)).toBeNull();
+  });
+});
+
+describe('offsets are never rounded', () => {
+  const ms = (s: string) => { const r = parseTime(s, SH, NOW); return r && 'ms' in r ? r.ms : null; };
+  const Y1 = -62135596800000; // 0001-01-01T00:00:00Z
+  it('local mean time keeps its seconds (Shanghai +08:05:43 before 1901)', () => {
+    expect(tzOffset(Y1, SH)).toBe((8 * 3600 + 5 * 60 + 43) * 1000);
+    expect(offLabel(tzOffset(Y1, SH))).toBe('UTC+08:05:43');
+    expect(fmtISO(Y1, SH)).toBe('0001-01-01T08:05:43.000+08:05:43');
+    expect(offLabel(-(4 * 3600 + 56 * 60 + 2) * 1000)).toBe('UTC−04:56:02');
+    expect(offLabel(8 * 3600000)).toBe('UTC+08:00');
+  });
+  it('every ISO string shown parses back to the same instant, in every zone', () => {
+    const zones = (Intl as unknown as { supportedValuesOf(k: string): string[] }).supportedValuesOf('timeZone');
+    const instants = [Y1, Date.UTC(1800, 5, 1, 12), Date.UTC(1890, 0, 1), Date.UTC(1901, 0, 1), Date.UTC(1945, 7, 15, 3, 4, 5, 6), Date.UTC(2026, 9, 26, 6, 30, 0, 123)];
+    const bad: string[] = [];
+    for (const tz of zones) for (const t of instants) {
+      const iso = fmtISO(t, tz), back = parseTime(iso, tz, NOW);
+      if (!back || !('ms' in back) || back.ms !== t) bad.push(tz + ' ' + iso);
+    }
+    expect(bad).toEqual([]);
+  });
+  it('offsets with seconds are read, out-of-range ones refused', () => {
+    expect(ms('0001-01-01T08:05:43+08:05:43')).toBe(Y1);
+    expect(ms('2026-10-26T14:30:00+08:00:60')).toBeNull();
+  });
+});
+
+describe('full-width input (Chinese IME in full-width mode)', () => {
+  const ms = (s: string) => { const r = parseTime(s, SH, NOW); return r && 'ms' in r ? r.ms : null; };
+  it('timestamps', () => {
+    expect(parseTs('１７９３００００００', 'auto')).toMatchObject({ u: 's', ms: 1793000000000 });
+    expect(parseTs('－１', 'auto')).toMatchObject({ ms: -1000 });
+  });
+  it('dates and times', () => {
+    expect(ms('２０２６－１０－２６　１４：３０')).toBe(Date.UTC(2026, 9, 26, 6, 30));
+    expect(ms('２０２６年１０月２６日')).toBe(Date.UTC(2026, 9, 25, 16));
+  });
+  it('other look-alike digits are not guessed', () => {
+    expect(parseTs('①②③④⑤⑥⑦⑧⑨⑩', 'auto')).toEqual({ err: 'tsErr' });
+    expect(parseTs('١٧٩٣٠٠٠٠٠٠', 'auto')).toEqual({ err: 'tsErr' });
   });
 });

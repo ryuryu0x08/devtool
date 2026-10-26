@@ -4,7 +4,7 @@ import { useApp } from '../store';
 import { Seg, Toggle } from '../components/Seg';
 import { useSettled } from '../components/useSettled';
 import { Vis } from '../components/Vis';
-import { ConvertError, changePair, diffNode, errInfo, isCont, preview, prim, windowPair, type DiffNode, type ErrInfo } from '../lib/data';
+import { ConvertError, changeNote, changePair, diffNode, errInfo, isCont, preview, prim, windowPair, type DiffNode, type ErrInfo } from '../lib/data';
 import { jsonValue, parseJsonAst } from '../lib/json';
 import { TomlMismatch, TomlSyntaxError, parseTomlDoc } from '../lib/toml';
 
@@ -13,7 +13,7 @@ type Parsed =
   | { bad: ErrInfo }
   | { v: unknown; lang: 'JSON' | 'TOML'; raw: Map<string, string>; keys: Map<string, string>; bom: boolean };
 
-const plainErr = (msg: string): ErrInfo => ({ msg, line: null, col: null, lineText: '', caret: '' });
+const plainErr = (msg: string): ErrInfo => ({ msg, line: null, col: null, before: '', at: '', after: '' });
 
 function parseAny(src: string, T: Dict): Parsed {
   if (!src.trim()) return { empty: true };
@@ -48,28 +48,34 @@ interface DRow {
   indent: number; keyText: string; keyColor: string; colon: string; mark: string; markColor: string; bg: string;
   caret: string; togglePath?: string; meta: string; deco: string; isChg: boolean; newText: string; newColor: string; valText: string; valColor: string;
 }
-interface DItem { mark: string; color: string; path: string; pathB: string | null; oldText: string | null; newText: string | null; fmt: string }
+interface DItem { mark: string; color: string; path: string; pathB: string | null; oldText: string | null; newText: string | null; fmt: boolean; note: string }
 
-function buildDiff(root: DiffNode, col: Record<string, boolean>, onlyDiff: boolean, T: Dict) {
+/** Why a change may look like none: a type change, or the same instant with another offset. */
+function noteFor(a: unknown, b: unknown, typed: boolean, T: Dict): string {
+  const n = changeNote(a, b, typed);
+  return !n ? '' : 'sameInstant' in n ? T.sameInstant : f(T.typeChg, { a: T.vk[n.kinds[0]], b: T.vk[n.kinds[1]] });
+}
+
+function buildDiff(root: DiffNode, col: Record<string, boolean>, onlyDiff: boolean, typed: boolean, T: Dict) {
   const rows: DRow[] = [], list: DItem[] = [];
   let nA = 0, nD = 0, nC = 0, nF = 0;
   const moved = (nd: DiffNode) => (nd.pathB && nd.pathB !== nd.path ? nd.pathB : null);
   const coll = (nd: DiffNode) => {
     if (nd.keyFmt) {
       nF++;
-      list.push({ mark: '≈', color: 'var(--mut)', path: nd.path, pathB: moved(nd), oldText: nd.keyFmt[0], newText: nd.keyFmt[1], fmt: T.keyFmtOnly });
+      list.push({ mark: '≈', color: 'var(--mut)', path: nd.path, pathB: moved(nd), oldText: nd.keyFmt[0], newText: nd.keyFmt[1], fmt: true, note: T.keyFmtOnly });
     }
-    if (nd.st === 'add') { nA++; list.push({ mark: '+', color: 'var(--add)', path: nd.path, pathB: null, oldText: null, newText: preview(nd.b), fmt: '' }); }
-    else if (nd.st === 'del') { nD++; list.push({ mark: '−', color: 'var(--del)', path: nd.path, pathB: null, oldText: preview(nd.a), newText: null, fmt: '' }); }
+    if (nd.st === 'add') { nA++; list.push({ mark: '+', color: 'var(--add)', path: nd.path, pathB: null, oldText: null, newText: preview(nd.b), fmt: false, note: '' }); }
+    else if (nd.st === 'del') { nD++; list.push({ mark: '−', color: 'var(--del)', path: nd.path, pathB: null, oldText: preview(nd.a), newText: null, fmt: false, note: '' }); }
     else if (nd.st === 'chg') {
       nC++;
       const [ta, tb] = changePair(nd.a, nd.b);
       // After array insertions / removals the element sits at a different index in B.
-      list.push({ mark: '~', color: 'var(--chg)', path: nd.path, pathB: moved(nd), oldText: ta, newText: tb, fmt: '' });
+      list.push({ mark: '~', color: 'var(--chg)', path: nd.path, pathB: moved(nd), oldText: ta, newText: tb, fmt: false, note: noteFor(nd.a, nd.b, typed, T) });
     } else if (nd.fmt) {
       nF++;
       const [ta, tb] = windowPair(nd.fmt[0], nd.fmt[1]);
-      list.push({ mark: '≈', color: 'var(--mut)', path: nd.path, pathB: moved(nd), oldText: ta, newText: tb, fmt: T.fmtOnly });
+      list.push({ mark: '≈', color: 'var(--mut)', path: nd.path, pathB: moved(nd), oldText: ta, newText: tb, fmt: true, note: T.fmtOnly });
     }
     nd.ch?.forEach(coll);
   };
@@ -113,7 +119,7 @@ function buildDiff(root: DiffNode, col: Record<string, boolean>, onlyDiff: boole
     if (nd.st === 'add') { rows.push({ ...b, mark: '+', markColor: 'var(--add)', bg: 'var(--addBg)', valText: preview(nd.b), valColor: 'var(--add)' }); return; }
     if (nd.st === 'del') { rows.push({ ...b, mark: '−', markColor: 'var(--del)', bg: 'var(--delBg)', valText: preview(nd.a), valColor: 'var(--del)', deco: 'line-through' }); return; }
     const [ta, tb] = changePair(nd.a, nd.b);
-    rows.push({ ...b, mark: '~', markColor: 'var(--chg)', bg: 'var(--chgBg)', valText: ta, valColor: 'var(--del)', deco: 'line-through', isChg: true, newText: tb });
+    rows.push({ ...b, mark: '~', markColor: 'var(--chg)', bg: 'var(--chgBg)', valText: ta, valColor: 'var(--del)', deco: 'line-through', isChg: true, newText: tb, meta: [b.meta, noteFor(nd.a, nd.b, typed, T)].filter(Boolean).join(' · ') });
   };
   walk(root, 0, false);
   // Rendering is capped (a huge diff would freeze the page); the totals stay exact and are shown.
@@ -134,24 +140,26 @@ export function Diff() {
         : ['✓ ' + x.lang + (x.bom ? ' · ' + T.bomRemoved : ''), x.bom ? 'var(--chg)' : 'var(--add)', ''];
   const [aS, aC, aM] = st(A), [bS, bC, bM] = st(B);
   const ready = 'v' in A && 'v' in B && !pending;
+  // TOML on both sides: integers and floats are different types.
+  const typed = 'v' in A && 'v' in B && A.lang === 'TOML' && B.lang === 'TOML';
   const root = useMemo(() => {
     if (pending || !('v' in A) || !('v' in B)) return null;
     const same = A.lang === B.lang;
     // TOML distinguishes 1 from 1.0; JSON doesn't. Value spellings are compared across formats too
     // (1.0 vs 1, 'x' vs "x"); key spellings only within one format (bare TOML keys vs quoted JSON keys).
     return diffNode(A.v, B.v, null, '$', {
-      io: S.ignoreOrder, typed: A.lang === 'TOML' && same, rawA: A.raw, rawB: B.raw,
+      io: S.ignoreOrder, typed, rawA: A.raw, rawB: B.raw,
       keysA: same ? A.keys : undefined, keysB: same ? B.keys : undefined,
     });
-  }, [A, B, S.ignoreOrder, pending]);
-  const d = useMemo(() => (root && (root.st !== 'same' || root.hasFmt) ? buildDiff(root, S.dCol, S.onlyDiff, T) : null), [root, S.dCol, S.onlyDiff, T]);
+  }, [A, B, S.ignoreOrder, typed, pending]);
+  const d = useMemo(() => (root && (root.st !== 'same' || root.hasFmt) ? buildDiff(root, S.dCol, S.onlyDiff, typed, T) : null), [root, S.dCol, S.onlyDiff, typed, T]);
 
   const pane = (label: string, status: string, color: string, msg: string, value: string, key: 'diffA' | 'diffB', auto?: boolean) => (
     <section className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <div className="card-head" style={{ height: 42, minHeight: 42 }}>
         <span style={{ fontWeight: 600 }}>{label}</span><span style={{ fontSize: 12, color }}>{status}</span>
       </div>
-      {msg && <div style={{ padding: '6px 16px', fontSize: 12, color: 'var(--del)', background: 'var(--delBg)', wordBreak: 'break-word' }}>{msg}</div>}
+      {msg && <div style={{ padding: '6px 16px', fontSize: 12, color: 'var(--del)', background: 'var(--delBg)', wordBreak: 'break-word' }}><Vis text={msg} /></div>}
       <textarea data-autofocus={auto ? '1' : undefined} className="area" value={value} onChange={(e) => set({ [key]: e.target.value })}
         spellCheck={false} placeholder="JSON / TOML" style={{ minHeight: 200, padding: '12px 16px', whiteSpace: 'pre', overflow: 'auto' }} />
     </section>
@@ -207,11 +215,11 @@ export function Diff() {
                   ) : <span className="caret" />}
                   <span style={{ color: r.keyColor, whiteSpace: 'pre' }}><Vis text={r.keyText} /></span>
                   <span style={{ color: 'var(--faint)', whiteSpace: 'pre' }}>{r.colon}</span>
-                  <span style={{ color: r.valColor, wordBreak: 'break-all', textDecoration: r.deco }}><Vis text={r.valText} /></span>
+                  <span style={{ color: r.valColor, wordBreak: 'break-all', whiteSpace: 'pre-wrap', textDecoration: r.deco }}><Vis text={r.valText} /></span>
                   {r.isChg && (
                     <>
                       <span style={{ color: 'var(--faint)', padding: '0 8px' }}>→</span>
-                      <span style={{ color: r.newColor, wordBreak: 'break-all', fontWeight: 500 }}><Vis text={r.newText} /></span>
+                      <span style={{ color: r.newColor, wordBreak: 'break-all', whiteSpace: 'pre-wrap', fontWeight: 500 }}><Vis text={r.newText} /></span>
                     </>
                   )}
                   <span className="meta" style={{ lineHeight: '24px', whiteSpace: 'normal' }}>{r.meta}</span>
@@ -227,17 +235,17 @@ export function Diff() {
                 <span style={{ display: 'flex', alignItems: 'baseline', gap: 10, flex: '0 1 280px', minWidth: 0, flexWrap: 'wrap' }}>
                   <span className="mono" style={{ width: 14, flex: 'none', fontSize: 13, fontWeight: 700, color: it.color }}>{it.mark}</span>
                   <button className="mono path-btn" onClick={() => copy(it.path)} title={T.copyPath}
-                    style={{ border: 0, background: 'transparent', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 500, textAlign: 'left', wordBreak: 'break-all' }}><Vis text={it.path} /></button>
+                    style={{ border: 0, background: 'transparent', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 500, textAlign: 'left', wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}><Vis text={it.path} /></button>
                   {it.pathB && (
                     <button className="mono path-btn" onClick={() => copy(it.pathB!)} title={T.copyPath}
-                      style={{ border: 0, background: 'transparent', padding: 0, cursor: 'pointer', fontSize: 12, color: 'var(--faint)', textAlign: 'left', wordBreak: 'break-all' }}>→ <Vis text={it.pathB} /></button>
+                      style={{ border: 0, background: 'transparent', padding: 0, cursor: 'pointer', fontSize: 12, color: 'var(--faint)', textAlign: 'left', wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>→ <Vis text={it.pathB} /></button>
                   )}
                 </span>
                 <span className="mono" style={{ flex: '1 1 280px', minWidth: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '4px 8px', fontSize: 13 }}>
-                  {it.oldText != null && <span style={{ color: it.fmt ? 'var(--mut)' : 'var(--del)', textDecoration: it.fmt ? 'none' : 'line-through', wordBreak: 'break-all' }}><Vis text={it.oldText} /></span>}
+                  {it.oldText != null && <span style={{ color: it.fmt ? 'var(--mut)' : 'var(--del)', textDecoration: it.fmt ? 'none' : 'line-through', wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}><Vis text={it.oldText} /></span>}
                   {it.oldText != null && it.newText != null && <span style={{ color: 'var(--faint)' }}>→</span>}
-                  {it.newText != null && <span style={{ color: it.fmt ? 'var(--mut)' : 'var(--add)', wordBreak: 'break-all' }}><Vis text={it.newText} /></span>}
-                  {it.fmt && <span style={{ color: 'var(--faint)', fontSize: 12, fontFamily: "'Geist Sans', 'Geist', sans-serif" }}>{it.fmt}</span>}
+                  {it.newText != null && <span style={{ color: it.fmt ? 'var(--mut)' : 'var(--add)', wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}><Vis text={it.newText} /></span>}
+                  {it.note && <span style={{ color: 'var(--faint)', fontSize: 12, fontFamily: "'Geist Sans', 'Geist', sans-serif" }}>{it.note}</span>}
                 </span>
               </div>
             ))}

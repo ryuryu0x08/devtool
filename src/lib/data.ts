@@ -108,6 +108,43 @@ export function canon(v: unknown, o: CmpOpts = {}): string {
   return 'u' + String(v);
 }
 
+export type ValKind = 'null' | 'bool' | 'str' | 'num' | 'int' | 'float' | 'odt' | 'ldt' | 'ld' | 'lt' | 'arr' | 'obj';
+
+/** Type of a value; integer vs float only when the comparison distinguishes them (`typed`). */
+export function kindOf(v: unknown, typed = false): ValKind {
+  if (v === null) return 'null';
+  if (v instanceof Num) return typed ? v.kind : 'num';
+  if (v instanceof DateTime) {
+    const date = /^\d{4}-\d{2}-\d{2}/.test(v.raw), time = /\d{2}:\d{2}/.test(v.raw);
+    return !time ? 'ld' : !date ? 'lt' : /([Zz]|[+-]\d{2}:\d{2})$/.test(v.raw) ? 'odt' : 'ldt';
+  }
+  if (typeof v === 'string') return 'str';
+  if (typeof v === 'boolean') return 'bool';
+  return Array.isArray(v) ? 'arr' : 'obj';
+}
+
+/** The moment an offset date-time names, or null when it can't be computed. */
+function instant(raw: string): string | null {
+  const m = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$/.exec(dateKey(raw));
+  const ms = m ? Date.parse(m[1] + m[3]) : NaN;
+  // Offsets are whole minutes, so the fraction beyond the second is the same in every offset.
+  return Number.isNaN(ms) ? null : ms + '.' + (m![2] ?? '');
+}
+
+/**
+ * Why a changed pair can look alike: a change of type (TOML 1 → 1.0, "1979-05-27" → 1979-05-27),
+ * or the same instant written with another UTC offset. Null when the texts speak for themselves.
+ */
+export function changeNote(a: unknown, b: unknown, typed = false): { kinds: [ValKind, ValKind] } | { sameInstant: true } | null {
+  const ka = kindOf(a, typed), kb = kindOf(b, typed);
+  if (ka !== kb) return { kinds: [ka, kb] };
+  if (ka === 'odt') {
+    const ia = instant((a as DateTime).raw);
+    if (ia !== null && ia === instant((b as DateTime).raw)) return { sameInstant: true };
+  }
+  return null;
+}
+
 /** Append a key or index to a JSONPath-like path (`$.a[0]["x y"]`). */
 export function cp(path: string, k: string | number, arr: boolean): string {
   if (arr) return path + '[' + k + ']';
@@ -203,7 +240,8 @@ export function decodeUtf8(bytes: ArrayBuffer | Uint8Array): string | null {
   try { return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes); } catch { return null; }
 }
 
-export interface ErrInfo { msg: string; line: number | null; col: number | null; lineText: string; caret: string }
+/** Error with its position; `before` / `at` / `after` are the error line split at the offending character. */
+export interface ErrInfo { msg: string; line: number | null; col: number | null; before: string; at: string; after: string }
 
 /** Extract line / column from parser errors and build a caret marker. */
 export function errInfo(e: unknown, src: string): ErrInfo {
@@ -218,16 +256,23 @@ export function errInfo(e: unknown, src: string): ErrInfo {
     line = err.line;
     col = err.column || null;
   }
-  let lineText = '', caret = '';
+  let before = '', at = '', after = '';
   if (line) {
-    // Tabs become single spaces so the caret lines up.
-    const Ln = (src.split('\n')[line - 1] || '').replace(/[\t\r]/g, ' ');
-    const c = Math.max(1, col || 1);
-    const st = c > 60 ? c - 40 : 0;
-    lineText = (st ? '…' : '') + Ln.slice(st, st + 110);
-    caret = ' '.repeat(Math.max(0, c - 1 - st + (st ? 1 : 0))) + '^';
+    // The offending character is marked in place rather than by a caret on the next line,
+    // which can't line up under wide (CJK) characters or marked invisible ones.
+    const Ln = (src.split('\n')[line - 1] || '').replace(/\r$/, '');
+    const i = Math.max(0, (col || 1) - 1);
+    const low = (k: number) => /[\udc00-\udfff]/.test(Ln[k] || '');
+    let st = i > 60 ? i - 40 : 0;
+    if (low(st)) st--;
+    const cp = Ln.codePointAt(i);
+    at = cp === undefined ? '' : String.fromCodePoint(cp);
+    before = (st ? '…' : '') + Ln.slice(st, i);
+    const rest = Ln.slice(i + at.length);
+    const end = low(i + at.length + 70) ? 71 : 70;
+    after = rest.length > end ? rest.slice(0, end) + '…' : rest;
   }
-  return { msg: msg.split('\n')[0], line, col, lineText, caret };
+  return { msg: msg.split('\n')[0], line, col, before, at, after };
 }
 
 export type DiffSt = 'same' | 'add' | 'del' | 'chg' | 'mod';

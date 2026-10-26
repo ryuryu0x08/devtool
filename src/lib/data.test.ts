@@ -1,7 +1,7 @@
 // "Nothing changes silently": formatting keeps every token, conversions refuse what the
 // target can't hold exactly, and the diff never rounds or hides a difference.
 import { describe, expect, it } from 'vitest';
-import { ConvertError, MAX_DEPTH, Num, canon, changePair, clipboardUnsafe, decodeUtf8, diffNode, errInfo, numKey, wellFormed, type DiffNode, type DiffOpts } from './data';
+import { ConvertError, MAX_DEPTH, Num, canon, changeNote, changePair, clipboardUnsafe, decodeUtf8, diffNode, errInfo, numKey, wellFormed, type DiffNode, type DiffOpts } from './data';
 import { codeText, qrModel } from './qr';
 import { astEqual, dupKeys, jsonValue, parseJsonAst, printJson, sortAst, toJsonText } from './json';
 import { VerifyError, formatToml, parseTomlDoc, toTomlText, tomlValue, verifyToml } from './toml';
@@ -66,6 +66,21 @@ describe('JSON formatting keeps every token', () => {
     expect(at('[01]')).toEqual([1, 3]);
     expect(at('"\\x"')).toEqual([1, 3]);
     expect(at('{"a":')).toEqual([1, 6]);
+  });
+  it('splits the error line at the offending character (no caret to misalign)', () => {
+    const at = (s: string) => {
+      try { parseJsonAst(s); return null; } catch (e) { const i = errInfo(e, s); return [i.before, i.at, i.after]; }
+    };
+    expect(at('{"名称":"值",}')).toEqual(['{"名称":"值",', '}', '']);
+    expect(at('{"a":\u00a01}')).toEqual(['{"a":', '\u00a0', '1}']);
+    expect(at('["😀",x]')).toEqual(['["😀",', 'x', ']']);
+    expect(at('{"a":')).toEqual(['{"a":', '', '']);
+    expect(at('{"a":1,\r\n}')).toEqual(['', '}', '']);
+    // Long lines are cut around the error, never inside a surrogate pair.
+    const [b, c, a] = at('["' + '😀'.repeat(50) + '",' + 'x' + ',"' + '😀'.repeat(60) + '"]')!;
+    expect(c).toBe('x');
+    expect(b.startsWith('…') && a.endsWith('…')).toBe(true);
+    expect(wellFormed(b) && wellFormed(a)).toBe(true);
   });
 });
 
@@ -330,6 +345,55 @@ describe('diff: case matrix (nothing missed, every difference visible)', () => {
     const A = parseTomlDoc('a = 1\n[t]\nx = 1'), B = parseTomlDoc('"a" = 1\n[\'t\']\nx = 1');
     const d = diffNode(A.value, B.value, null, '$', { typed: true, rawA: A.raw, rawB: B.raw, keysA: A.keys, keysB: B.keys });
     expect(d.ch!.map((c) => c.keyFmt?.join('→'))).toEqual(['a→"a"', "t→'t'"]);
+  });
+});
+
+describe('diff: TOML and JSON ⇄ TOML case matrix', () => {
+  const doc = (s: string) => {
+    try { const j = jsonValue(parseJsonAst(s).ast); return { ...j, toml: false }; } catch { const t = parseTomlDoc(s); return { v: t.value, raw: t.raw, keys: t.keys, toml: true }; }
+  };
+  /** Result per leaf, as the Diff tool computes it, with the note a change row carries. */
+  const run = (a: string, b: string) => {
+    const A = doc(a), B = doc(b), typed = A.toml && B.toml, same = A.toml === B.toml;
+    const d = diffNode(A.v, B.v, null, '$', { typed, rawA: A.raw, rawB: B.raw, keysA: same ? A.keys : undefined, keysB: same ? B.keys : undefined });
+    const out: string[] = [];
+    const walk = (n: DiffNode) => {
+      if (n.ch) return n.ch.forEach(walk);
+      if (n.st === 'chg') {
+        const note = changeNote(n.a, n.b, typed);
+        out.push('chg ' + n.path + (!note ? '' : 'sameInstant' in note ? ' (same instant)' : ` (${note.kinds.join('→')})`));
+      } else if (n.st !== 'same') out.push(n.st + ' ' + n.path);
+      else if (n.fmt) out.push('fmt ' + n.path);
+    };
+    walk(d);
+    return out;
+  };
+  it.each([
+    ['JSON string vs TOML date', '{"d":"1979-05-27"}', 'd = 1979-05-27', ['chg $.d (str→ld)']],
+    ['JSON 1 vs TOML 1.0 (JSON has no int / float)', '{"n":1}', 'n = 1.0', ['fmt $.n']],
+    ['TOML 1 vs 1.0 (int vs float)', 'n = 1', 'n = 1.0', ['chg $.n (int→float)']],
+    ['TOML 1 vs 2 (no note needed)', 'n = 1', 'n = 2', ['chg $.n']],
+    ['JSON 1e2 vs TOML 100', '{"n":1e2}', 'n = 100', ['fmt $.n']],
+    ['JSON -0 vs TOML 0', '{"n":-0}', 'n = 0', ['fmt $.n']],
+    ['Z vs +00:00', 't = 1979-05-27T07:32:00Z', 't = 1979-05-27T07:32:00+00:00', ['fmt $.t']],
+    ['same instant, other offset', 't = 1979-05-27T07:32:00Z', 't = 1979-05-27T15:32:00+08:00', ['chg $.t (same instant)']],
+    ['same instant across midnight, with fraction', 't = 1979-05-27T23:30:00.5-01:00', 't = 1979-05-28 00:30:00.50Z', ['chg $.t (same instant)']],
+    ['different instant', 't = 1979-05-27T07:32:00Z', 't = 1979-05-27T07:32:00+08:00', ['chg $.t']],
+    ['local vs offset date-time', 't = 1979-05-27T07:32:00', 't = 1979-05-27T07:32:00Z', ['chg $.t (ldt→odt)']],
+    ['local date vs local date-time', 't = 1979-05-27', 't = 1979-05-27T00:00:00', ['chg $.t (ld→ldt)']],
+    ['local time: trailing zero fraction', 't = 07:32:00', 't = 07:32:00.000', ['fmt $.t']],
+    ['multi-line string vs escape', 's = """a\nb"""', '{"s":"a\\nb"}', ['fmt $.s']],
+    ['runs of spaces are a change', '{"s":"a  b"}', '{"s":"a b"}', ['chg $.s']],
+    ['dotted JSON key vs TOML dotted key', '{"a.b":1}', 'a.b = 1', ['del $["a.b"]', 'add $.a']],
+    ['nested JSON object vs TOML dotted key', '{"a":{"b":1}}', 'a.b = 1', []],
+    ['empty table vs empty object', '{"x":{}}', '[x]', []],
+    ['inf vs +inf', 'n = inf', 'n = +inf', ['fmt $.n']],
+    ['nan vs nan', 'n = nan', 'n = nan', []],
+    ['nan vs -nan (sign of nan is not a value)', 'n = nan', 'n = -nan', ['fmt $.n']],
+    ['string "1" vs number 1', '{"a":"1"}', '{"a":1}', ['chg $.a (str→num)']],
+    ['TOML array of tables: element added', '[[p]]\nx = 1\n', '[[p]]\nx = 1\n[[p]]\nx = 2\n', ['add $.p[1]']],
+  ])('%s', (_name, a, b, expected) => {
+    expect(run(a, b)).toEqual(expected);
   });
 });
 

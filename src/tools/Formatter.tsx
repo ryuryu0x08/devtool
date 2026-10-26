@@ -23,7 +23,7 @@ type Result =
   | { lang: 'json'; ast: JNode; text: string; st: { n: number; d: number }; dupes: string[]; bom: boolean }
   | { lang: 'toml'; doc: TomlDoc; value: Obj; text: string; st: { n: number; d: number }; bom: boolean };
 
-const plainErr = (msg: string): ErrInfo => ({ msg, line: null, col: null, lineText: '', caret: '' });
+const plainErr = (msg: string): ErrInfo => ({ msg, line: null, col: null, before: '', at: '', after: '' });
 
 /**
  * Parse, re-print and verify. The output is only shown if re-parsing it gives back the
@@ -263,7 +263,7 @@ export function Formatter({ lang }: { lang: FmtLang }) {
           <div className="card-head" style={{ padding: '6px 10px 6px 16px', flexWrap: 'wrap' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500, minWidth: 0 }}>
               <span style={{ width: 7, height: 7, flex: 'none', borderRadius: '50%', background: statusColor }} />
-              <span style={{ wordBreak: 'break-word' }}>{status}</span>
+              <span style={{ wordBreak: 'break-word' }}><Vis text={status} /></span>
             </span>
             {isTree && ok && (
               <div style={{ display: 'flex', gap: 2 }}>
@@ -303,11 +303,11 @@ export function Formatter({ lang }: { lang: FmtLang }) {
             {ok && S.view === 'text' && <pre style={{ margin: 0, padding: '4px 16px', font: 'inherit', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}><Vis text={ok.text} /></pre>}
             {err && (
               <div style={{ margin: '6px 16px', padding: '14px 16px', borderRadius: 10, background: 'var(--delBg)', color: 'var(--del)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <span style={{ fontWeight: 600, fontSize: 13, fontFamily: "'Geist Sans', 'Geist', sans-serif" }}>{status}</span>
-                <span style={{ font: "12.5px/1.5 'Geist Mono', monospace", color: 'var(--ink)', opacity: 0.8, wordBreak: 'break-word' }}>{err.msg}</span>
-                {err.lineText && (
-                  <pre style={{ margin: 0, font: "12.5px/1.5 'Geist Mono', monospace", color: 'var(--ink)', whiteSpace: 'pre', overflow: 'auto' }}>
-                    {err.lineText + '\n'}<span style={{ color: 'var(--del)', fontWeight: 700 }}>{err.caret}</span>
+                <span style={{ fontWeight: 600, fontSize: 13, fontFamily: "'Geist Sans', 'Geist', sans-serif" }}><Vis text={status} /></span>
+                <span style={{ font: "12.5px/1.5 'Geist Mono', monospace", color: 'var(--ink)', opacity: 0.8, wordBreak: 'break-word' }}><Vis text={err.msg} /></span>
+                {err.line && (
+                  <pre style={{ margin: 0, font: "12.5px/1.5 'Geist Mono', monospace", color: 'var(--ink)', whiteSpace: 'pre', overflow: 'auto', padding: '2px 0' }}>
+                    <Vis text={err.before} /><mark className="err-at">{err.at ? <Vis text={err.at} /> : ' '}</mark><Vis text={err.after} />
                   </pre>
                 )}
               </div>
@@ -318,7 +318,7 @@ export function Formatter({ lang }: { lang: FmtLang }) {
           </div>
           {hasSel && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px 8px 16px', borderTop: '1px solid var(--line)', background: 'var(--sub)', flexWrap: 'wrap' }}>
-              <span className="mono" style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--acc)', wordBreak: 'break-all', flex: 1, minWidth: 120 }}>{tree!.sel[sel].path}</span>
+              <span className="mono" style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--acc)', wordBreak: 'break-all', whiteSpace: 'pre-wrap', flex: 1, minWidth: 120 }}><Vis text={tree!.sel[sel].path} /></span>
               <button className="btn" onClick={() => copy(tree!.sel[sel].path)} style={{ height: 28, padding: '0 10px', borderRadius: 7, fontSize: 12, fontWeight: 400 }}>{T.copyPath}</button>
               <button className="btn" onClick={copySelValue} style={{ height: 28, padding: '0 10px', borderRadius: 7, fontSize: 12, fontWeight: 400 }}>{T.copyValue}</button>
               <button className="ghost" onClick={() => setSel('')} aria-label={T.closeSel} title={T.closeSel} style={{ width: 28, height: 28, borderRadius: 7, color: 'var(--faint)' }}>×</button>

@@ -68,9 +68,17 @@ export function wallToMs(y: number, mo: number, d: number, h: number, mi: number
   return resolveWall(y, mo, d, h, mi, s, msp, tz).ms;
 }
 
+/**
+ * hh:mm of an offset, with :ss when it has seconds (local mean time before standard zones,
+ * e.g. Shanghai +08:05:43 until 1901): rounding to minutes would name a different instant.
+ */
+function offHms(off: number): string {
+  const a = Math.abs(Math.round(off / 1000)), sec = a % 60;
+  return pad2(Math.floor(a / 3600)) + ':' + pad2(Math.floor(a / 60) % 60) + (sec ? ':' + pad2(sec) : '');
+}
+
 export function offLabel(off: number): string {
-  const m = Math.round(off / 60000), a = Math.abs(m);
-  return 'UTC' + (m < 0 ? '−' : '+') + pad2(Math.floor(a / 60)) + ':' + pad2(a % 60);
+  return 'UTC' + (off < 0 ? '−' : '+') + offHms(off);
 }
 
 /** Fraction of a second: milliseconds plus any finer digits (`sub`), trailing zeros dropped (min 3 digits). */
@@ -88,10 +96,9 @@ export function fmtWall(ms: number, tz: string, withMs = false, sub = ''): strin
 }
 
 export function fmtISO(ms: number, tz: string, sub = ''): string {
-  const p = tzParts(ms, tz);
-  const m = Math.round(tzOffset(ms, tz) / 60000), a = Math.abs(m);
+  const p = tzParts(ms, tz), off = tzOffset(ms, tz);
   return yearStr(p.y) + '-' + pad2(p.m) + '-' + pad2(p.d) + 'T' + pad2(p.h) + ':' + pad2(p.mi) + ':' + pad2(p.s) + '.' +
-    fracStr(p.ms, sub) + (m < 0 ? '-' : '+') + pad2(Math.floor(a / 60)) + ':' + pad2(a % 60);
+    fracStr(p.ms, sub) + (off < 0 ? '-' : '+') + offHms(off);
 }
 
 /** Exact decimal text of `ms + 0.sub` milliseconds, scaled by 10^-shift (3 → seconds). */
@@ -122,7 +129,7 @@ export type TsResult = { ms: number; sub: string; u: TsUnit; dig: number } | { e
 
 /** Parse a numeric timestamp; `unit: 'auto'` picks the unit from the digit count. */
 export function parseTs(raw: string, unit: TsUnit | 'auto'): TsResult {
-  const s = String(raw).trim().replace(/[,_\s]/g, '');
+  const s = halfWidth(String(raw)).trim().replace(/[,_\s]/g, '');
   if (!s) return null;
   if (!/^-?\d+(\.\d+)?$/.test(s)) return { err: 'tsErr' };
   const neg = s[0] === '-';
@@ -185,17 +192,22 @@ const EN_DATE = new RegExp(
 const US_ZONES: Record<string, number> = { est: -300, edt: -240, cst: -360, cdt: -300, mst: -420, mdt: -360, pst: -480, pdt: -420 };
 
 /** Minutes east of UTC for Z / UTC / GMT / ±hh[:mm] / GMT±hhmm / US zone names; null if out of range. */
-function offsetMinutes(off: string): number | null {
+/** Offset text → milliseconds (Z, ±hh, ±hhmm, ±hh:mm, ±hh:mm:ss, GMT+0800, EST…). */
+function offsetMs(off: string): number | null {
   const o = off.toLowerCase();
   if (o === 'z') return 0;
-  if (o in US_ZONES) return US_ZONES[o];
-  const m = o.match(/^(?:gmt|utc)?(?:([+-])(\d{2}):?(\d{2})?)?$/);
+  if (o in US_ZONES) return US_ZONES[o] * 60000;
+  const m = o.match(/^(?:gmt|utc)?(?:([+-])(\d{2})(?::?(\d{2})(?::(\d{2}))?)?)?$/);
   if (!m) return null;
   if (!m[1]) return 0;
-  const h = +m[2], mi = +(m[3] || 0);
-  if (h > 23 || mi > 59) return null;
-  return (m[1] === '-' ? -1 : 1) * (h * 60 + mi);
+  const h = +m[2], mi = +(m[3] || 0), sec = +(m[4] || 0);
+  if (h > 23 || mi > 59 || sec > 59) return null;
+  return (m[1] === '-' ? -1 : 1) * ((h * 60 + mi) * 60 + sec) * 1000;
 }
+
+/** Full-width ASCII (typed with a Chinese IME in full-width mode: １７９３, ：, －) → ASCII. */
+export const halfWidth = (s: string) =>
+  s.replace(/[\uff01-\uff5e]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/\u3000/g, ' ');
 
 const REL: Record<string, number> = {
   today: 0, '今天': 0, '今日': 0, tomorrow: 1, '明天': 1, '明日': 1,
@@ -204,7 +216,7 @@ const REL: Record<string, number> = {
 
 /** Parse a human-entered date/time in `tz`. */
 export function parseTime(raw: string, tz: string, now: number): TimeResult {
-  const s = String(raw || '').trim();
+  const s = halfWidth(String(raw || '')).trim();
   if (!s) return null;
   const low = s.toLowerCase();
   if (/^(now|现在|此刻)$/.test(low)) return { ms: now };
@@ -231,7 +243,7 @@ export function parseTime(raw: string, tz: string, now: number): TimeResult {
     if (mo < 1 || mo > 12 || d < 1 || d > daysIn(y, mo)) return { err: true };
     let rest = restIn.replace(/\s*\([^)]*\)\s*$/, '').trim();
     let off: string | null = null;
-    const om = rest.match(/(z|utc|gmt|(?:gmt|utc)?[+-]\d{2}(?::?\d{2})?|[ecmp][sd]t)$/i);
+    const om = rest.match(/(z|utc|gmt|(?:gmt|utc)?[+-]\d{2}(?::\d{2}(?::\d{2})?|\d{2})?|[ecmp][sd]t)$/i);
     if (om) {
       off = om[1];
       rest = rest.slice(0, -om[1].length).trim();
@@ -239,9 +251,9 @@ export function parseTime(raw: string, tz: string, now: number): TimeResult {
     const t = parseClock(rest);
     if (!t) return { err: true };
     if (off === null) return wall(y, mo, d, t);
-    const mins = offsetMinutes(off);
-    if (mins === null) return { err: true };
-    return { ms: utc(y, mo, d, t[0], t[1], t[2], t[3]) - mins * 60000, sub: t[4], note: off };
+    const offMs = offsetMs(off);
+    if (offMs === null) return { err: true };
+    return { ms: utc(y, mo, d, t[0], t[1], t[2], t[3]) - offMs, sub: t[4], note: off };
   };
   m = s.match(/^(\d{4})[-/.年]?(\d{1,2})[-/.月]?(\d{1,2})日?(?:[T\s]*(.*))?$/i);
   if (m) return dated(+m[1], +m[2], +m[3], m[4] || '');

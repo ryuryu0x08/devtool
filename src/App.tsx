@@ -9,10 +9,13 @@ import { smolParse } from './lib/toml';
 import { clipboardUnsafe, decodeUtf8 } from './lib/data';
 import { MobileBar, Sidebar } from './components/Sidebar';
 import { Palette } from './components/Palette';
+import { Vis } from './components/Vis';
 import { Timestamp } from './tools/Timestamp';
 import { QrGen, QrScan } from './tools/Qr';
 import { Formatter } from './tools/Formatter';
 import { Diff } from './tools/Diff';
+
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg|ico|avif|heic|heif|tiff?)$/i;
 
 const reducer = (s: State, p: Patch): State => ({ ...s, ...(typeof p === 'function' ? p(s) : p) });
 
@@ -58,6 +61,7 @@ export function App() {
     // The system clipboard may truncate at NUL or replace lone surrogates: say so.
     const done = () => (clipboardUnsafe(text) ? toast(t.copyRisky, 5000) : toast(msg || t.copied));
     const fallback = () => {
+      const prev = document.activeElement;
       const ta = document.createElement('textarea');
       ta.value = text;
       ta.style.position = 'fixed';
@@ -67,6 +71,8 @@ export function App() {
       let ok = false;
       try { ok = document.execCommand('copy'); } catch { /* unsupported */ }
       ta.remove();
+      // select() took focus; give it back so the user's caret stays where it was.
+      if (prev instanceof HTMLElement && prev !== document.body) prev.focus();
       // Never claim success when nothing was copied.
       if (ok) done();
       else toast(t.copyFail, 5000);
@@ -109,7 +115,8 @@ export function App() {
 
   const decodeFile = useCallback(async (file: File, name?: string) => {
     const t = dictFor(ref.current.lang);
-    if (!file || !/^image\//.test(file.type)) { toast(t.notImage); return; }
+    // Browsers give no type for files without a known extension: try to read those as images too.
+    if (!file || (file.type && !/^image\//.test(file.type))) { toast(t.notImage); return; }
     const old = ref.current.scan;
     if (old?.src) URL.revokeObjectURL(old.src);
     const src = URL.createObjectURL(file);
@@ -129,11 +136,12 @@ export function App() {
 
   const handleFiles = useCallback((files: File[]) => {
     const t = dictFor(ref.current.lang);
-    const file = files.find((x) => /^image\//.test(x.type) || /\.(json|toml|txt)$/i.test(x.name));
+    const isImage = (x: File) => /^image\//.test(x.type) || (!x.type && IMAGE_EXT.test(x.name));
+    const file = files.find((x) => isImage(x) || /\.(json|toml|txt)$/i.test(x.name));
     if (!file) { toast(t.unsupportedFile, 5000); return; }
     // Only one file is opened; say which when several were dropped.
     const note = files.length > 1 ? f(t.onlyFirst, { n: file.name }) : undefined;
-    if (/^image\//.test(file.type)) {
+    if (isImage(file)) {
       decodeFile(file);
       if (note) toast(note, 5000);
       return;
@@ -261,12 +269,15 @@ export function App() {
     return () => clearTimeout(t);
   }, INPUT_KEYS.map((k) => S[k]));
 
-  // On desktop, focus the tool's main input after switching tools.
+  // On desktop, focus the tool's main input after switching tools, unless the user is already
+  // typing elsewhere (moving focus then would send their keystrokes or paste to the wrong field).
   useEffect(() => {
     if (!ref.current.wide) return;
     const t = setTimeout(() => {
       const el = document.querySelector<HTMLElement>('[data-autofocus]');
-      if (el && document.activeElement !== el && !ref.current.palette) el.focus();
+      const a = document.activeElement;
+      const typing = a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement || a instanceof HTMLSelectElement || (a instanceof HTMLElement && a.isContentEditable);
+      if (el && !typing && !ref.current.palette) el.focus();
     }, 40);
     return () => clearTimeout(t);
   }, [S.tool]);
@@ -297,7 +308,7 @@ export function App() {
         )}
         {S.toast && (
           <div className="toast">
-            {S.toast}
+            <Vis text={S.toast} />
             {S.undo && (
               <button className="toast-undo" onClick={() => { clearTimeout(toastTimer.current); set({ ...S.undo!, toast: '', undo: null }); }}>{T.undo}</button>
             )}
