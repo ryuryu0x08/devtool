@@ -1,25 +1,44 @@
-# CODING AGENTS: READ THIS FIRST
+# 工具箱 · Toolbox
 
-This is a **handoff bundle** from Claude Design (claude.ai/design).
+面向开发者的跨端（PC + 移动端）工具箱，按 Claude Design 交付的高保真原型（`design/project/Toolbox.dc.html`，1a 经典侧栏方向）实现。
 
-A user mocked up designs in HTML/CSS/JS using an AI design tool, then exported this bundle so a coding agent can implement the designs for real.
+## 功能
 
-## What you should do — IMPORTANT
+- **时间戳转换**：秒 / 毫秒 / 微秒 / 纳秒自动识别；时区可搜索切换，默认本机时区，记住上次选择与最近使用；时间输入支持 `2026-10-26 14:30`、`明天 9点`、`下午3点半`、`10/26 9:00`、`now` 等写法，↑↓ 逐段调整，快捷按钮 ±1 时 / ±1 天。
+- **生成二维码**：实时生成，支持中文，容错等级 L/M/Q/H，下载 PNG、复制图片。
+- **识别二维码**：粘贴、拖入或选择图片，一图多码并在图上标号；图片仅在本地处理。
+- **JSON / TOML 格式化**：结构视图可折叠、按层级折叠，点击行复制路径或值；缩进、按 key 排序、压缩复制、JSON ⇄ TOML 互转；错误定位到行列。
+- **JSON 对比**：语义对比（忽略 key 顺序和空白），可忽略数组顺序、仅显示差异，合并视图 / 差异清单；也支持 TOML 输入。
+- **全局**：⌘K / Ctrl K 或 `/` 搜索工具（中文、英文、拼音首字母）；⌘B 收起侧栏；在空白处粘贴内容自动打开对应工具；拖入图片或 .json / .toml 文件；中英切换；浅色 / 深色 / 跟随系统；输入与偏好保存在本地。
 
-**Read the chat transcripts first.** There are 1 chat transcript(s) in `chats/`. The transcripts show the full back-and-forth between the user and the design assistant — they tell you **what the user actually wants** and **where they landed** after iterating. Don't skip them. The final HTML files are the output, but the chat is where the intent lives.
+所有依赖（字体、二维码、TOML 解析）都打包在本地，可离线使用。
 
-**Read `project/Toolbox.dc.html` in full.** The user had this file open when they triggered the handoff, so it's almost certainly the primary design they want built. Read it top to bottom — don't skim. Then **follow its imports**: open every file it pulls in (shared components, CSS, scripts) so you understand how the pieces fit together before you start implementing.
+## 开发
 
-**If anything is ambiguous, ask the user to confirm before you start implementing.** It's much cheaper to clarify scope up front than to build the wrong thing.
+```bash
+npm install
+npm run dev      # 本地开发
+npm run build    # 类型检查 + 构建到 dist/
+npm test         # 单元测试（时间解析、语义对比等）
+```
 
-## About the design files
+构建产物是纯静态文件（`base: './'`），可部署到任意静态托管。
 
-The design medium is **HTML/CSS/JS** — these are prototypes, not production code. Your job is to **recreate them pixel-perfectly** in whatever technology makes sense for the target codebase (React, Vue, native, whatever fits). Match the visual output; don't copy the prototype's internal structure unless it happens to fit.
+## 目录
 
-**Don't render these files in a browser or take screenshots unless the user asks you to.** Everything you need — dimensions, colors, layout rules — is spelled out in the source. Read the HTML and CSS directly; a screenshot won't tell you anything they don't.
+```
+src/
+  App.tsx              应用外壳：全局快捷键、智能粘贴、拖放、持久化
+  store.tsx            状态定义、localStorage 读写、Context
+  i18n.ts              工具注册表、分类与中英文文案（新增工具从这里开始）
+  components/          侧栏 / 移动端顶栏、命令面板、分段控件
+  tools/               各工具页面
+  lib/                 时间解析、数据对比、二维码等纯函数
+design/                Claude Design 交付的原型与对话记录
+```
 
-## Bundle contents
+### 新增工具
 
-- `README.md` — this file
-- `chats/` — conversation transcripts (read these!)
-- `project/` — the `工具箱应用设计方案` project files (HTML prototypes, assets, components)
+1. 在 `src/i18n.ts` 的 `TOOLS` 中添加一项（`id`、分类、图标、中英文名称、搜索关键词）；新分类同时加到 `CATS` 和 `CAT_ORDER`。
+2. 在 `src/tools/` 下实现组件，通过 `useApp()` 读取状态和文案。
+3. 在 `src/App.tsx` 中按 `S.tool` 渲染该组件。
