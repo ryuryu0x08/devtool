@@ -2,43 +2,53 @@ import { useMemo } from 'react';
 import { SAMPLE_A, SAMPLE_B, f, type Dict } from '../i18n';
 import { useApp } from '../store';
 import { Seg, Toggle } from '../components/Seg';
-import { diffNode, isCont, preview, prim, type DiffNode } from '../lib/data';
+import { diffNode, errInfo, isCont, preview, prim, type DiffNode, type ErrInfo } from '../lib/data';
 import { parseJson } from '../lib/json';
 import { parseToml } from '../lib/toml';
 
-type Parsed = { empty: true } | { bad: true } | { v: unknown; lang: 'JSON' | 'TOML' };
+type Parsed = { empty: true } | { bad: ErrInfo } | { v: unknown; lang: 'JSON' | 'TOML'; dupes: string[] };
 
 function parseAny(src: string): Parsed {
   if (!src.trim()) return { empty: true };
-  try { return { v: parseJson(src), lang: 'JSON' }; } catch { /* try TOML */ }
-  try { return { v: parseToml(src), lang: 'TOML' }; } catch { /* neither */ }
-  return { bad: true };
+  const dupes: string[] = [];
+  let jsonErr: unknown;
+  try { return { v: parseJson(src, dupes), lang: 'JSON', dupes }; } catch (e) { jsonErr = e; }
+  try { return { v: parseToml(src), lang: 'TOML', dupes: [] }; } catch (e) {
+    // Report the error from whichever parser got further — that's the format the text is meant to be.
+    const j = errInfo(jsonErr, src, 'json'), t = errInfo(e, src, 'toml');
+    const at = (x: ErrInfo) => (x.line ?? 0) * 1e6 + (x.col ?? 0);
+    return { bad: at(t) > at(j) ? t : j };
+  }
 }
 
 interface DRow {
   indent: number; keyText: string; keyColor: string; colon: string; mark: string; markColor: string; bg: string;
   caret: string; togglePath?: string; meta: string; deco: string; isChg: boolean; newText: string; valText: string; valColor: string;
 }
-interface DItem { mark: string; color: string; path: string; oldText: string | null; newText: string | null }
+interface DItem { mark: string; color: string; path: string; pathB: string | null; oldText: string | null; newText: string | null }
 
 function buildDiff(root: DiffNode, col: Record<string, boolean>, onlyDiff: boolean, T: Dict) {
   const rows: DRow[] = [], list: DItem[] = [];
   let nA = 0, nD = 0, nC = 0;
   const coll = (nd: DiffNode) => {
-    if (nd.st === 'add') { nA++; list.push({ mark: '+', color: 'var(--add)', path: nd.path, oldText: null, newText: preview(nd.b) }); }
-    else if (nd.st === 'del') { nD++; list.push({ mark: '−', color: 'var(--del)', path: nd.path, oldText: preview(nd.a), newText: null }); }
-    else if (nd.st === 'chg') { nC++; list.push({ mark: '~', color: 'var(--chg)', path: nd.path, oldText: preview(nd.a), newText: preview(nd.b) }); }
+    if (nd.st === 'add') { nA++; list.push({ mark: '+', color: 'var(--add)', path: nd.path, pathB: null, oldText: null, newText: preview(nd.b) }); }
+    else if (nd.st === 'del') { nD++; list.push({ mark: '−', color: 'var(--del)', path: nd.path, pathB: null, oldText: preview(nd.a), newText: null }); }
+    else if (nd.st === 'chg') {
+      nC++;
+      // After array insertions / removals the element sits at a different index in B.
+      list.push({ mark: '~', color: 'var(--chg)', path: nd.path, pathB: nd.pathB && nd.pathB !== nd.path ? nd.pathB : null, oldText: preview(nd.a), newText: preview(nd.b) });
+    }
     else if (nd.st === 'mod') nd.ch!.forEach(coll);
   };
   coll(root);
   const cnt = (nd: DiffNode): number => (nd.st === 'mod' ? nd.ch!.reduce((a, c) => a + cnt(c), 0) : nd.st === 'same' ? 0 : 1);
-  const base = (key: DiffNode['key'], depth: number, isIdx: boolean): DRow => ({
-    indent: depth * 18, keyText: key === null ? '' : isIdx ? String(key) : JSON.stringify(key), keyColor: isIdx ? 'var(--faint)' : 'var(--ink)',
+  const base = (key: DiffNode['key'], depth: number, isIdx: boolean, keyB: DiffNode['key'] = key): DRow => ({
+    indent: depth * 18, keyText: key === null ? '' : !isIdx ? JSON.stringify(key) : keyB === key || keyB == null ? String(key) : key + '→' + keyB, keyColor: isIdx ? 'var(--faint)' : 'var(--ink)',
     colon: key === null ? '' : ': ', mark: '', markColor: 'var(--faint)', bg: 'transparent', caret: '', meta: '', deco: 'none',
     isChg: false, newText: '', valText: '', valColor: 'var(--ink)',
   });
   const walk = (nd: DiffNode, depth: number, isIdx: boolean) => {
-    const b = base(nd.key, depth, isIdx);
+    const b = base(nd.key, depth, isIdx, nd.keyB);
     if (nd.st === 'mod') {
       const arr = nd.kind === 'arr';
       const isC = !!col[nd.path];
@@ -71,7 +81,11 @@ export function Diff() {
   const { S, set, T, copy } = useApp();
   const A = useMemo(() => parseAny(S.diffA), [S.diffA]);
   const B = useMemo(() => parseAny(S.diffB), [S.diffB]);
-  const st = (x: Parsed): [string, string] => ('empty' in x ? [T.empty, 'var(--faint)'] : 'bad' in x ? [T.invalid, 'var(--del)'] : ['✓ ' + x.lang, 'var(--add)']);
+  const st = (x: Parsed): [string, string] =>
+    'empty' in x ? [T.empty, 'var(--faint)']
+      : 'bad' in x ? [T.invalid + (x.bad.line ? ' · ' + f(T.errAt, { l: x.bad.line, c: x.bad.col ?? 1 }) : ''), 'var(--del)']
+        : x.dupes.length ? ['✓ ' + x.lang + ' · ' + f(T.dupKeys, { n: x.dupes.length, p: x.dupes[0] }), 'var(--chg)']
+          : ['✓ ' + x.lang, 'var(--add)'];
   const [aS, aC] = st(A), [bS, bC] = st(B);
   const ready = 'v' in A && 'v' in B;
   const root = useMemo(() => (ready ? diffNode(A.v, B.v, null, '$', S.ignoreOrder) : null), [ready, A, B, S.ignoreOrder]);
@@ -149,6 +163,10 @@ export function Diff() {
                   <span className="mono" style={{ width: 14, flex: 'none', fontSize: 13, fontWeight: 700, color: it.color }}>{it.mark}</span>
                   <button className="mono path-btn" onClick={() => copy(it.path)} title={T.copyPath}
                     style={{ border: 0, background: 'transparent', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 500, textAlign: 'left', wordBreak: 'break-all' }}>{it.path}</button>
+                  {it.pathB && (
+                    <button className="mono path-btn" onClick={() => copy(it.pathB!)} title={T.copyPath}
+                      style={{ border: 0, background: 'transparent', padding: 0, cursor: 'pointer', fontSize: 12, color: 'var(--faint)', textAlign: 'left', wordBreak: 'break-all' }}>→ {it.pathB}</button>
+                  )}
                 </span>
                 <span className="mono" style={{ flex: '1 1 280px', minWidth: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '4px 8px', fontSize: 13 }}>
                   {it.oldText != null && <span style={{ color: 'var(--del)', textDecoration: 'line-through', wordBreak: 'break-all' }}>{it.oldText}</span>}

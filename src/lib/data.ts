@@ -178,8 +178,12 @@ export function errInfo(e: unknown, src: string, lang: 'json' | 'toml'): ErrInfo
 
 export type DiffSt = 'same' | 'add' | 'del' | 'chg' | 'mod';
 export interface DiffNode {
+  /** Key / index and path in A (in B for added nodes). */
   key: string | number | null;
   path: string;
+  /** The same in B, which differs from A for array elements after insertions / removals. */
+  keyB?: string | number | null;
+  pathB?: string;
   st: DiffSt;
   a?: unknown;
   b?: unknown;
@@ -220,24 +224,29 @@ function lcsPairs(ka: string[], kb: string[]): [number, number][] {
  * aligned on equal elements (so an insertion doesn't mark everything after it as
  * changed); unmatched elements in between are compared pairwise. With `io` (ignore
  * order) array elements are matched as a multiset instead.
- * Paths of removed / changed elements use A's index, added ones B's index.
+ * Every node carries its location in A (`key`, `path`) and in B (`keyB`, `pathB`).
  */
-export function diffNode(a: unknown, b: unknown, key: string | number | null, path: string, io: boolean): DiffNode {
-  if (a === undefined) return { key, path, st: 'add', b };
-  if (b === undefined) return { key, path, st: 'del', a };
+export function diffNode(
+  a: unknown, b: unknown, key: string | number | null, path: string, io: boolean,
+  keyB: string | number | null = key, pathB = path,
+): DiffNode {
+  if (a === undefined) return { key: keyB, path: pathB, keyB, pathB, st: 'add', b };
+  if (b === undefined) return { key, path, keyB: key, pathB: path, st: 'del', a };
+  const at = { key, path, keyB, pathB, a, b };
   if (isObj(a) && isObj(b)) {
     const ks = Object.keys(a);
     Object.keys(b).forEach((k) => { if (!Object.prototype.hasOwnProperty.call(a, k)) ks.push(k); });
-    const ch = ks.map((k) => diffNode(own(a, k), own(b, k), k, cp(path, k, false), io));
-    return { key, path, a, b, kind: 'obj', ch, st: ch.every((c) => c.st === 'same') ? 'same' : 'mod' };
+    const ch = ks.map((k) => diffNode(own(a, k), own(b, k), k, cp(path, k, false), io, k, cp(pathB, k, false)));
+    return { ...at, kind: 'obj', ch, st: ch.every((c) => c.st === 'same') ? 'same' : 'mod' };
   }
   if (Array.isArray(a) && Array.isArray(b)) {
     const ch: DiffNode[] = [];
     const sub = (i: number | undefined, j: number | undefined) => {
-      const idx = (i ?? j)!;
-      ch.push(diffNode(i !== undefined ? a[i] : undefined, j !== undefined ? b[j] : undefined, idx, cp(path, idx, true), io));
+      const ia = (i ?? j)!, jb = (j ?? i)!;
+      ch.push(diffNode(i !== undefined ? a[i] : undefined, j !== undefined ? b[j] : undefined, ia, cp(path, ia, true), io, jb, cp(pathB, jb, true)));
     };
-    const same = (i: number, j: number) => ch.push({ key: i, path: cp(path, i, true), st: 'same', a: a[i], b: b[j] });
+    const same = (i: number, j: number) =>
+      ch.push({ key: i, path: cp(path, i, true), keyB: j, pathB: cp(pathB, j, true), st: 'same', a: a[i], b: b[j] });
     const ka = a.map((x) => canon(x, io)), kb = b.map((x) => canon(x, io));
     if (io) {
       const pool = new Map<string, number[]>();
@@ -261,8 +270,7 @@ export function diffNode(a: unknown, b: unknown, key: string | number | null, pa
       }
       gap(a.length, b.length);
     }
-    return { key, path, a, b, kind: 'arr', ch, st: ch.every((c) => c.st === 'same') ? 'same' : 'mod' };
+    return { ...at, kind: 'arr', ch, st: ch.every((c) => c.st === 'same') ? 'same' : 'mod' };
   }
-  if (canon(a, io) === canon(b, io)) return { key, path, st: 'same', a, b };
-  return { key, path, st: 'chg', a, b };
+  return { ...at, st: canon(a, io) === canon(b, io) ? 'same' : 'chg' };
 }

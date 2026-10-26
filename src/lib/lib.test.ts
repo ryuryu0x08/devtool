@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fmtWall, parseTime, parseTs, wallToMs } from './time';
+import { fmtISO, fmtWall, parseTime, parseTs, wallToMs } from './time';
 import { ConvertError, canon, diffNode, errInfo, sortDeep, stringifyJson, type DiffNode } from './data';
 import { parseJson } from './json';
 import { jsonToToml, parseToml, stringifyToml } from './toml';
@@ -146,5 +146,49 @@ describe('TOML', () => {
   });
   it('refuses nan / inf when converting to JSON', () => {
     expect(() => stringifyJson(parseToml('a = nan'))).toThrow(ConvertError);
+  });
+});
+
+describe('review round 2', () => {
+  it('reports both A and B locations for moved array elements', () => {
+    const d = diff('[1,{"x":1}]', '[0,1,{"x":2}]');
+    const chg = d.ch!.find((c) => c.st === 'mod')!.ch![0];
+    expect(d.ch!.map((c) => c.st)).toEqual(['add', 'same', 'mod']);
+    expect([chg.st, chg.path, chg.pathB]).toEqual(['chg', '$[1].x', '$[2].x']);
+  });
+  it('lists duplicate JSON keys and accepts a BOM', () => {
+    const dupes: string[] = [];
+    expect(stringifyJson(parseJson('﻿{"a":1,"a":2,"b":[{"c":1,"c":2}]}', dupes))).toBe('{"a":2,"b":[{"c":2}]}');
+    expect(dupes).toEqual(['$.a', '$.b[0].c']);
+  });
+  it('rejects impossible dates', () => {
+    const ok = (s: string) => { const r = parseTime(s, SH, NOW); return !!r && 'ms' in r; };
+    expect(ok('2026-02-31')).toBe(false);
+    expect(ok('2026-02-29')).toBe(false);
+    expect(ok('2024-02-29')).toBe(true);
+    expect(ok('10/32')).toBe(false);
+    expect(ok('13/01')).toBe(false);
+  });
+  it('accepts long fractions, short offsets, years before 100', () => {
+    const ms = (s: string) => { const r = parseTime(s, SH, NOW); return r && 'ms' in r ? r.ms : null; };
+    expect(ms('2026-10-26T14:30:00.123456Z')).toBe(Date.UTC(2026, 9, 26, 14, 30, 0, 123));
+    expect(ms('2026-10-26 14:30+08')).toBe(Date.UTC(2026, 9, 26, 6, 30));
+    expect(fmtWall(ms('0050-03-01 12:00')!, SH)).toBe('0050-03-01 12:00:00');
+  });
+  it('reads zone-less English dates in the selected zone', () => {
+    const r = parseTime('Oct 26 2026 14:30', SH, NOW);
+    expect(r && 'ms' in r && fmtWall(r.ms, SH)).toBe('2026-10-26 14:30:00');
+    const g = parseTime('Mon, 26 Oct 2026 14:30:00 GMT', SH, NOW);
+    expect(g && 'ms' in g && g.ms).toBe(Date.UTC(2026, 9, 26, 14, 30));
+  });
+  it('converts fractional timestamps exactly', () => {
+    expect(parseTs('1700000000.001', 'auto')).toMatchObject({ ms: 1700000000001 });
+    expect(parseTs('1.005', 's')).toMatchObject({ ms: 1005 });
+    expect(parseTs('-1.5', 's')).toMatchObject({ ms: -1500 });
+    expect(parseTs('-0.0001', 's')).toMatchObject({ ms: -1 });
+    expect(parseTs('1793000000123456789', 'auto')).toMatchObject({ u: 'ns', ms: 1793000000123 });
+  });
+  it('formats BCE years with a sign', () => {
+    expect(fmtISO(Date.UTC(-100, 0, 1), 'UTC')).toBe('-000100-01-01T00:00:00.000+00:00');
   });
 });

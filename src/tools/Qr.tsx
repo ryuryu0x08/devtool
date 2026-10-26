@@ -20,13 +20,14 @@ export function QrGen() {
   };
   const copyImg = () => {
     if (!model) return;
-    qrCanvas(model).toBlob((b) => {
-      try {
-        navigator.clipboard.write([new ClipboardItem({ 'image/png': b! })]).then(() => toast(T.imgCopied), () => toast(T.imgCopyFail));
-      } catch {
-        toast(T.imgCopyFail);
-      }
-    });
+    const cv = qrCanvas(model);
+    // Pass a promise so clipboard.write runs inside the click (Safari rejects it from a toBlob callback).
+    const png = new Promise<Blob>((res, rej) => cv.toBlob((b) => (b ? res(b) : rej(new Error('toBlob failed')))));
+    try {
+      navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]).then(() => toast(T.imgCopied), () => toast(T.imgCopyFail));
+    } catch {
+      toast(T.imgCopyFail);
+    }
   };
 
   return (

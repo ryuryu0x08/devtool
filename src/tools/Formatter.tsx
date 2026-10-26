@@ -18,13 +18,14 @@ export function convertMsg(e: unknown, T: Dict): string {
 type Result =
   | { empty: true }
   | { err: ErrInfo }
-  | { v: unknown; text: string; st: { n: number; d: number } };
+  | { v: unknown; text: string; st: { n: number; d: number }; dupes: string[] };
 
 function compute(lang: FmtLang, src: string, indent: string, sortKeys: boolean): Result {
   if (!src.trim()) return { empty: true };
   let v: unknown;
+  const dupes: string[] = [];
   try {
-    v = lang === 'json' ? parseJson(src) : parseToml(src);
+    v = lang === 'json' ? parseJson(src, dupes) : parseToml(src);
   } catch (e) {
     return { err: errInfo(e, src, lang) };
   }
@@ -35,7 +36,7 @@ function compute(lang: FmtLang, src: string, indent: string, sortKeys: boolean):
   } catch (e) {
     return { err: { msg: String((e as Error).message || e), line: null, col: null, lineText: '', caret: '' } };
   }
-  return { v, text, st: stats(v) };
+  return { v, text, st: stats(v), dupes };
 }
 
 interface Row {
@@ -144,8 +145,8 @@ export function Formatter({ lang }: { lang: FmtLang }) {
   const sel = S.sel[lang];
   const hasSel = !!tree && !!sel && sel in tree.pv;
 
-  const status = ok ? f(T.valid, { L, n: ok.st.n, d: ok.st.d }) : err ? (err.line ? f(T.errAt, { l: err.line, c: err.col ?? 1 }) : T.errNoPos) : T.empty;
-  const statusColor = ok ? 'var(--add)' : err ? 'var(--del)' : 'var(--faint)';
+  const status = ok ? f(T.valid, { L, n: ok.st.n, d: ok.st.d }) + (ok.dupes.length ? ' · ' + f(T.dupKeys, { n: ok.dupes.length, p: ok.dupes[0] }) : '') : err ? (err.line ? f(T.errAt, { l: err.line, c: err.col ?? 1 }) : T.errNoPos) : T.empty;
+  const statusColor = ok ? (ok.dupes.length ? 'var(--chg)' : 'var(--add)') : err ? 'var(--del)' : 'var(--faint)';
   const taH = S.wide ? 480 : 220;
 
   const convert = () => {

@@ -1,5 +1,5 @@
 // Lossless JSON parser: numbers that a JS number would alter are kept as JsonNum.
-import { JsonNum, setKey, type Obj } from './data';
+import { JsonNum, cp, setKey, type Obj } from './data';
 
 export class JsonSyntaxError extends SyntaxError {
   constructor(message: string, readonly pos: number) {
@@ -11,8 +11,11 @@ const NUM = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
 const ESC: Record<string, string> = { '"': '"', '\\': '\\', '/': '/', b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' };
 const LIT: [string, unknown][] = [['true', true], ['false', false], ['null', null]];
 
-function parse(s: string): unknown {
-  let i = 0;
+function parse(s: string, dupes?: string[]): unknown {
+  // A leading BOM (common in files saved on Windows) is not part of the document.
+  let i = s.charCodeAt(0) === 0xfeff ? 1 : 0;
+  const stack: (string | number)[] = [];
+  const pathOf = () => stack.reduce<string>((p, k) => cp(p, k, typeof k === 'number'), '$');
   const fail = (msg?: string): never => {
     throw new JsonSyntaxError(msg ?? (i >= s.length ? 'Unexpected end of JSON input' : 'Unexpected token ' + JSON.stringify(s[i])), i);
   };
@@ -65,7 +68,10 @@ function parse(s: string): unknown {
         ws();
         if (s[i] !== ':') fail();
         i++;
+        stack.push(k);
+        if (dupes && Object.prototype.hasOwnProperty.call(o, k)) dupes.push(pathOf());
         setKey(o, k, val());
+        stack.pop();
         ws();
         if (s[i] === ',') { i++; continue; }
         if (s[i] === '}') { i++; return o; }
@@ -78,7 +84,9 @@ function parse(s: string): unknown {
       ws();
       if (s[i] === ']') { i++; return arr; }
       for (;;) {
+        stack.push(arr.length);
         arr.push(val());
+        stack.pop();
         ws();
         if (s[i] === ',') { i++; continue; }
         if (s[i] === ']') { i++; return arr; }
@@ -104,13 +112,16 @@ function parse(s: string): unknown {
   return v;
 }
 
-/** Like JSON.parse, but keeps number text exact and reports the error offset in `pos`. */
-export function parseJson(s: string): unknown {
+/**
+ * Like JSON.parse, but keeps number text exact and reports the error offset in `pos`.
+ * Paths of duplicate keys (the last value wins, as in JSON.parse) are added to `dupes`.
+ */
+export function parseJson(s: string, dupes?: string[]): unknown {
   try {
-    return parse(s);
+    return parse(s, dupes);
   } catch (e) {
     // Extremely deep nesting can overflow our recursion; the native parser copes.
-    if (e instanceof RangeError) return JSON.parse(s);
+    if (e instanceof RangeError) return JSON.parse(s.replace(/^\uFEFF/, ''));
     throw e;
   }
 }

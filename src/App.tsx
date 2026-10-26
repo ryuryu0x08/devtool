@@ -96,7 +96,7 @@ export function App() {
     set({ tool: 'qrscan', scan: { src, name: nm, busy: true, codes: [], w: 1, h: 1 }, palette: false });
     let img: HTMLImageElement;
     try { img = await loadImage(src); } catch {
-      set({ scan: { src, name: nm, busy: false, codes: [], w: 1, h: 1 } });
+      if (ref.current.scan?.src === src) set({ scan: { src, name: nm, busy: false, codes: [], w: 1, h: 1 } });
       return;
     }
     const codes = await scanImage(img);

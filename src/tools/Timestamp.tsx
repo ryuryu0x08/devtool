@@ -3,7 +3,7 @@ import { COMMON_TZ, TZ_ZH, f } from '../i18n';
 import { localTz, lsSet, useApp } from '../store';
 import { Seg } from '../components/Seg';
 import {
-  fmtISO, fmtWall, hasMs, offLabel, parseTime, parseTs, relTime, tzOffset, tzParts, wallToMs, type TsUnit,
+  daysIn, fmtISO, fmtWall, hasMs, offLabel, parseTime, parseTs, relTime, tzOffset, tzParts, utc, wallToMs, type TsUnit,
 } from '../lib/time';
 
 interface Zone { id: string; hay: string }
@@ -157,22 +157,27 @@ export function Timestamp() {
 
   const setMs = (ms: number) => set({ tmIn: fmtWall(ms, tz) });
   const dayStart = (n: number) => {
-    const t = new Date(Date.UTC(np.y, np.m - 1, np.d + n));
+    const t = new Date(utc(np.y, np.m, np.d + n));
     return wallToMs(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate(), 0, 0, 0, 0, tz);
   };
   const baseMs = () => {
     const x = parseTime(S.tmIn, tz, Date.now());
     return hasMs(x) ? x.ms : Date.now();
   };
+  // ±1 day keeps the wall-clock time (24 h would drift by an hour across DST).
+  const shiftDays = (ms: number, n: number) => {
+    const p = tzParts(ms, tz);
+    return wallToMs(p.y, p.m, p.d + n, p.h, p.mi, p.s, p.ms, tz);
+  };
   const quick: [string, () => void][] = [
     [T.q.now, () => setMs(Date.now())],
     [T.q.today, () => setMs(dayStart(0))],
     [T.q.tomorrow, () => setMs(dayStart(1))],
     [T.q.month, () => setMs(wallToMs(np.y, np.m, 1, 0, 0, 0, 0, tz))],
-    [T.q.m1d, () => setMs(baseMs() - 864e5)],
+    [T.q.m1d, () => setMs(shiftDays(baseMs(), -1))],
     [T.q.m1h, () => setMs(baseMs() - 36e5)],
     [T.q.p1h, () => setMs(baseMs() + 36e5)],
-    [T.q.p1d, () => setMs(baseMs() + 864e5)],
+    [T.q.p1d, () => setMs(shiftDays(baseMs(), 1))],
   ];
 
   /** ↑ / ↓ adjusts the segment under the caret (canonical format) or minutes; ⇧ adjusts hours. */
@@ -189,8 +194,8 @@ export function Timestamp() {
     const a = [p.y, p.m, p.d, p.h, p.mi, p.s];
     a[seg] += dir;
     if (seg <= 1) {
-      const dt = new Date(Date.UTC(a[0], a[1] - 1, 1));
-      const dim = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, 0)).getUTCDate();
+      const dt = new Date(utc(a[0], a[1], 1));
+      const dim = daysIn(dt.getUTCFullYear(), dt.getUTCMonth() + 1);
       if (a[2] > dim) a[2] = dim;
     }
     set({ tmIn: fmtWall(wallToMs(a[0], a[1], a[2], a[3], a[4], a[5], 0, tz), tz) });
