@@ -1,7 +1,7 @@
 // "Nothing changes silently": formatting keeps every token, conversions refuse what the
 // target can't hold exactly, and the diff never rounds or hides a difference.
 import { describe, expect, it } from 'vitest';
-import { ConvertError, MAX_DEPTH, Num, canon, decodeUtf8, diffNode, errInfo, numKey, type DiffNode, type DiffOpts } from './data';
+import { ConvertError, MAX_DEPTH, Num, canon, changePair, decodeUtf8, diffNode, errInfo, numKey, type DiffNode, type DiffOpts } from './data';
 import { astEqual, dupKeys, jsonValue, parseJsonAst, printJson, sortAst, toJsonText } from './json';
 import { VerifyError, formatToml, parseTomlDoc, toTomlText, tomlValue, verifyToml } from './toml';
 
@@ -243,5 +243,86 @@ describe('helpers', () => {
     expect(decodeUtf8(new Uint8Array([0xed, 0xa0, 0x80]))).toBeNull(); // encoded surrogate
     expect(decodeUtf8(new Uint8Array([0xef, 0xbb, 0xbf, 0x61]))).toBe('\uFEFFa'); // BOM kept, reported later
     expect(decodeUtf8(new TextEncoder().encode('中文'))).toBe('中文');
+  });
+});
+
+describe('diff: case matrix (nothing missed, every difference visible)', () => {
+  const run = (a: string, b: string, o: DiffOpts = {}) => {
+    const A = jsonValue(parseJsonAst(a).ast), B = jsonValue(parseJsonAst(b).ast);
+    const d = diffNode(A.v, B.v, null, '$', { rawA: A.raw, rawB: B.raw, keysA: A.keys, keysB: B.keys, ...o });
+    const out: string[] = [];
+    const walk = (n: DiffNode) => {
+      if (n.keyFmt) out.push('key ' + n.path + ' ' + n.keyFmt.join('→'));
+      if (n.ch) n.ch.forEach(walk);
+      else if (n.st !== 'same') out.push(n.st + ' ' + n.path);
+      else if (n.fmt) out.push('fmt ' + n.path);
+    };
+    walk(d);
+    return out;
+  };
+  it.each([
+    ['field added', '{"a":1}', '{"a":1,"b":2}', ['add $.b']],
+    ['field removed', '{"a":1,"b":2}', '{"a":1}', ['del $.b']],
+    ['nested field added', '{"a":{"x":1}}', '{"a":{"x":1,"y":null}}', ['add $.a.y']],
+    ['element appended', '[1,2]', '[1,2,3]', ['add $[2]']],
+    ['element prepended', '[1,2]', '[0,1,2]', ['add $[0]']],
+    ['element inserted in the middle', '[1,3]', '[1,2,3]', ['add $[1]']],
+    ['element removed from the middle', '[1,2,3]', '[1,3]', ['del $[1]']],
+    ['several elements added and removed', '[1,2,3,4,5]', '[0,1,3,5,6]', ['add $[0]', 'del $[1]', 'del $[3]', 'add $[4]']],
+    ['element changed inside', '[{"id":1,"v":1},{"id":2}]', '[{"id":1,"v":2},{"id":2}]', ['chg $[0].v']],
+    ['one duplicate fewer', '[1,1,1]', '[1,1]', ['del $[2]']],
+    ['empty → non-empty array', '{"a":[]}', '{"a":[1]}', ['add $.a[0]']],
+    ['array emptied', '{"a":[1,2]}', '{"a":[]}', ['del $.a[0]', 'del $.a[1]']],
+    ['type: object → array', '{"a":{}}', '{"a":[]}', ['chg $.a']],
+    ['type: number → string', '{"a":0}', '{"a":"0"}', ['chg $.a']],
+    ['type: null → 0 / false / ""', '[null,null,null]', '[0,false,""]', ['chg $[0]', 'chg $[1]', 'chg $[2]']],
+    ['null vs missing', '{"a":null}', '{}', ['del $.a']],
+    ['empty string vs missing', '{"a":""}', '{}', ['del $.a']],
+    ['root type changed', '[]', '{}', ['chg $']],
+    ['root scalar changed', '1', '2', ['chg $']],
+    ['big integers', '[12345678901234567890]', '[12345678901234567891]', ['chg $[0]']],
+    ['decimals beyond double', '[0.1]', '[0.10000000000000000555]', ['chg $[0]']],
+    ['huge exponents', '[1e400]', '[1e401]', ['chg $[0]']],
+    ['-0 vs 0 (same value)', '[-0]', '[0]', ['fmt $[0]']],
+    ['1.0 vs 1 (same value)', '[1.0]', '[1]', ['fmt $[0]']],
+    ['escape vs character (same value)', '["\\u00e9"]', '["é"]', ['fmt $[0]']],
+    ['zero-width space', '["ab"]', '["a\\u200bb"]', ['chg $[0]']],
+    ['NFC vs NFD', '["\\u00e9"]', '["e\\u0301"]', ['chg $[0]']],
+    ['trailing space', '["a"]', '["a "]', ['chg $[0]']],
+    ['CRLF vs LF in a string', '["a\\r\\nb"]', '["a\\nb"]', ['chg $[0]']],
+    ['key spelled with an escape', '{"a":1}', '{"\\u0061":1}', ['key $.a "a"→"\\u0061"']],
+    ['key order only', '{"a":1,"b":2}', '{"b":2,"a":1}', []],
+    ['whitespace only', '{"a":[1,2]}', '{ "a" : [ 1 , 2 ] }', []],
+  ])('%s', (_name, a, b, expected) => {
+    expect(run(a, b)).toEqual(expected);
+  });
+  it('reorder without "ignore order" shows the moved element as removed + added', () => {
+    expect(run('[1,2,3]', '[3,1,2]')).toEqual(['add $[0]', 'del $[2]']);
+    expect(run('[1,2,3]', '[3,1,2]', { io: true })).toEqual([]);
+  });
+
+  it('long strings: the window shows the actual difference', () => {
+    const [ta, tb] = changePair('x'.repeat(200) + 'A' + 'y'.repeat(50), 'x'.repeat(200) + 'B' + 'y'.repeat(50));
+    expect(ta).toContain('A');
+    expect(tb).toContain('B');
+    expect(ta.startsWith('…')).toBe(true);
+  });
+  it('invisible characters and normalization differences are shown escaped', () => {
+    expect(changePair('ab', 'a​b')).toEqual(['"ab"', '"a\\u200bb"']);
+    expect(changePair('a b', 'a b')).toEqual(['"a b"', '"a\\u00a0b"']);
+    expect(changePair('é', 'é')).toEqual(['"\\u00e9"', '"e\\u0301"']);
+    // Ordinary text is left readable.
+    expect(changePair('中文', '中文!')).toEqual(['"中文"', '"中文!"']);
+  });
+  it('JSON vs TOML: equal values written differently are visible too', () => {
+    const J = jsonValue(parseJsonAst('{"n":1.0,"s":"x","h":255}').ast), T = parseTomlDoc("n = 1.0\ns = 'x'\nh = 0xFF");
+    const d = diffNode(J.v, T.value, null, '$', { rawA: J.raw, rawB: T.raw });
+    expect(d.st).toBe('same');
+    expect(d.ch!.filter((c) => c.fmt).map((c) => c.path)).toEqual(['$.s', '$.h']);
+  });
+  it('TOML: key spelling differences are visible', () => {
+    const A = parseTomlDoc('a = 1\n[t]\nx = 1'), B = parseTomlDoc('"a" = 1\n[\'t\']\nx = 1');
+    const d = diffNode(A.value, B.value, null, '$', { typed: true, rawA: A.raw, rawB: B.raw, keysA: A.keys, keysB: B.keys });
+    expect(d.ch!.map((c) => c.keyFmt?.join('→'))).toEqual(['a→"a"', "t→'t'"]);
   });
 });

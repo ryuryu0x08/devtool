@@ -41,6 +41,8 @@ export interface TomlDoc {
   value: Obj;
   /** Source text of every scalar by path. */
   raw: Map<string, string>;
+  /** Source text of every key by path (where it is first written). */
+  keys: Map<string, string>;
   comments: string[];
   bom: boolean;
 }
@@ -290,11 +292,13 @@ function parseCst(s: string): { items: Item[]; bom: boolean } {
 }
 
 /** Build the value model (and raw-text map) the way a TOML parser would. */
-function build(items: Item[]): { value: Obj; raw: Map<string, string> } {
+function build(items: Item[]): { value: Obj; raw: Map<string, string>; keys: Map<string, string> } {
   const root: Obj = {};
-  const raw = new Map<string, string>();
+  const raw = new Map<string, string>(), keys = new Map<string, string>();
+  const keyAt = (p: string, k: Key) => { if (!keys.has(p)) keys.set(p, k.raw); };
   const descend = (t: Obj, path: string, k: Key): [Obj, string] => {
     const p = cp(path, k.k, false);
+    keyAt(p, k);
     const c = own(t, k.k);
     if (c === undefined) {
       const o: Obj = {};
@@ -316,7 +320,9 @@ function build(items: Item[]): { value: Obj; raw: Map<string, string> } {
     let tt = t, pp = path;
     for (const k of key.slice(0, -1)) [tt, pp] = descend(tt, pp, k);
     const last = key[key.length - 1];
-    setKey(tt, last.k, toVal(v, cp(pp, last.k, false)));
+    const lp = cp(pp, last.k, false);
+    keyAt(lp, last);
+    setKey(tt, last.k, toVal(v, lp));
   };
   let cur = root, curPath = '$';
   for (const it of items) {
@@ -326,6 +332,7 @@ function build(items: Item[]): { value: Obj; raw: Map<string, string> } {
       for (const k of it.key.slice(0, -1)) [t, p] = descend(t, p, k);
       const last = it.key[it.key.length - 1];
       if (it.aot) {
+        keyAt(cp(p, last.k, false), last);
         let arr = own(t, last.k) as Obj[] | undefined;
         if (!arr) { arr = []; setKey(t, last.k, arr); }
         const el: Obj = {};
@@ -335,7 +342,7 @@ function build(items: Item[]): { value: Obj; raw: Map<string, string> } {
       } else [cur, curPath] = descend(t, p, last);
     }
   }
-  return { value: root, raw };
+  return { value: root, raw, keys };
 }
 
 function collectComments(items: Item[]): string[] {
@@ -388,9 +395,9 @@ function crossCheck(mine: unknown, ref: unknown, path: string) {
 export function parseTomlDoc(s: string): TomlDoc {
   const ref = smolParse(s);
   const { items, bom } = parseCst(s);
-  const { value, raw } = build(items);
+  const { value, raw, keys } = build(items);
   crossCheck(value, ref, '$');
-  return { items, value, raw, comments: collectComments(items), bom };
+  return { items, value, raw, keys, comments: collectComments(items), bom };
 }
 
 const keyText = (k: Key[]) => k.map((x) => x.raw).join('.');

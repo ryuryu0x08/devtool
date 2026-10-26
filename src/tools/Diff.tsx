@@ -2,14 +2,14 @@ import { useMemo } from 'react';
 import { SAMPLE_A, SAMPLE_B, f, type Dict } from '../i18n';
 import { useApp } from '../store';
 import { Seg, Toggle } from '../components/Seg';
-import { ConvertError, diffNode, errInfo, isCont, preview, prim, type DiffNode, type ErrInfo } from '../lib/data';
+import { ConvertError, changePair, diffNode, errInfo, isCont, preview, prim, windowPair, type DiffNode, type ErrInfo } from '../lib/data';
 import { jsonValue, parseJsonAst } from '../lib/json';
 import { TomlMismatch, TomlSyntaxError, parseTomlDoc } from '../lib/toml';
 
 type Parsed =
   | { empty: true }
   | { bad: ErrInfo }
-  | { v: unknown; lang: 'JSON' | 'TOML'; raw: Map<string, string>; bom: boolean };
+  | { v: unknown; lang: 'JSON' | 'TOML'; raw: Map<string, string>; keys: Map<string, string>; bom: boolean };
 
 const plainErr = (msg: string): ErrInfo => ({ msg, line: null, col: null, lineText: '', caret: '' });
 
@@ -19,8 +19,8 @@ function parseAny(src: string, T: Dict): Parsed {
   try {
     const { ast, bom } = parseJsonAst(src);
     try {
-      const { v, raw } = jsonValue(ast);
-      return { v, raw, lang: 'JSON', bom };
+      const { v, raw, keys } = jsonValue(ast);
+      return { v, raw, keys, lang: 'JSON', bom };
     } catch (e) {
       // Duplicate keys: which value counts is undefined, so don't guess.
       if (e instanceof ConvertError) return { bad: plainErr(f(T.cv.dupKey, { p: e.path })) };
@@ -29,7 +29,7 @@ function parseAny(src: string, T: Dict): Parsed {
   } catch (e) { jsonErr = e; }
   try {
     const doc = parseTomlDoc(src);
-    return { v: doc.value, raw: doc.raw, lang: 'TOML', bom: doc.bom };
+    return { v: doc.value, raw: doc.raw, keys: doc.keys, lang: 'TOML', bom: doc.bom };
   } catch (e) {
     if (e instanceof TomlMismatch) return { bad: plainErr(f(T.tomlMismatch, { p: e.path })) };
     // Report the error from whichever parser got further — that's the format the text is meant to be.
@@ -44,22 +44,34 @@ interface DRow {
   indent: number; keyText: string; keyColor: string; colon: string; mark: string; markColor: string; bg: string;
   caret: string; togglePath?: string; meta: string; deco: string; isChg: boolean; newText: string; newColor: string; valText: string; valColor: string;
 }
-interface DItem { mark: string; color: string; path: string; pathB: string | null; oldText: string | null; newText: string | null; fmt: boolean }
+interface DItem { mark: string; color: string; path: string; pathB: string | null; oldText: string | null; newText: string | null; fmt: string }
 
 function buildDiff(root: DiffNode, col: Record<string, boolean>, onlyDiff: boolean, T: Dict) {
   const rows: DRow[] = [], list: DItem[] = [];
   let nA = 0, nD = 0, nC = 0, nF = 0;
   const moved = (nd: DiffNode) => (nd.pathB && nd.pathB !== nd.path ? nd.pathB : null);
   const coll = (nd: DiffNode) => {
-    if (nd.st === 'add') { nA++; list.push({ mark: '+', color: 'var(--add)', path: nd.path, pathB: null, oldText: null, newText: preview(nd.b), fmt: false }); }
-    else if (nd.st === 'del') { nD++; list.push({ mark: '−', color: 'var(--del)', path: nd.path, pathB: null, oldText: preview(nd.a), newText: null, fmt: false }); }
-    // After array insertions / removals the element sits at a different index in B.
-    else if (nd.st === 'chg') { nC++; list.push({ mark: '~', color: 'var(--chg)', path: nd.path, pathB: moved(nd), oldText: preview(nd.a), newText: preview(nd.b), fmt: false }); }
-    else if (nd.fmt) { nF++; list.push({ mark: '≈', color: 'var(--mut)', path: nd.path, pathB: moved(nd), oldText: nd.fmt[0], newText: nd.fmt[1], fmt: true }); }
+    if (nd.keyFmt) {
+      nF++;
+      list.push({ mark: '≈', color: 'var(--mut)', path: nd.path, pathB: moved(nd), oldText: nd.keyFmt[0], newText: nd.keyFmt[1], fmt: T.keyFmtOnly });
+    }
+    if (nd.st === 'add') { nA++; list.push({ mark: '+', color: 'var(--add)', path: nd.path, pathB: null, oldText: null, newText: preview(nd.b), fmt: '' }); }
+    else if (nd.st === 'del') { nD++; list.push({ mark: '−', color: 'var(--del)', path: nd.path, pathB: null, oldText: preview(nd.a), newText: null, fmt: '' }); }
+    else if (nd.st === 'chg') {
+      nC++;
+      const [ta, tb] = changePair(nd.a, nd.b);
+      // After array insertions / removals the element sits at a different index in B.
+      list.push({ mark: '~', color: 'var(--chg)', path: nd.path, pathB: moved(nd), oldText: ta, newText: tb, fmt: '' });
+    } else if (nd.fmt) {
+      nF++;
+      const [ta, tb] = windowPair(nd.fmt[0], nd.fmt[1]);
+      list.push({ mark: '≈', color: 'var(--mut)', path: nd.path, pathB: moved(nd), oldText: ta, newText: tb, fmt: T.fmtOnly });
+    }
     nd.ch?.forEach(coll);
   };
   coll(root);
-  const cnt = (nd: DiffNode): number => (nd.ch ? nd.ch.reduce((a, c) => a + cnt(c), 0) : nd.st === 'same' ? (nd.fmt ? 1 : 0) : 1);
+  const cnt = (nd: DiffNode): number =>
+    (nd.keyFmt ? 1 : 0) + (nd.ch ? nd.ch.reduce((a, c) => a + cnt(c), 0) : nd.st === 'same' ? (nd.fmt ? 1 : 0) : 1);
   const base = (key: DiffNode['key'], depth: number, isIdx: boolean, keyB: DiffNode['key'] = key): DRow => ({
     indent: depth * 18, keyText: key === null ? '' : !isIdx ? JSON.stringify(key) : keyB === key || keyB == null ? String(key) : key + '→' + keyB,
     keyColor: isIdx ? 'var(--faint)' : 'var(--ink)', colon: key === null ? '' : ': ', mark: '', markColor: 'var(--faint)', bg: 'transparent',
@@ -67,6 +79,7 @@ function buildDiff(root: DiffNode, col: Record<string, boolean>, onlyDiff: boole
   });
   const walk = (nd: DiffNode, depth: number, isIdx: boolean) => {
     const b = base(nd.key, depth, isIdx, nd.keyB);
+    if (nd.keyFmt) Object.assign(b, { keyText: nd.keyFmt[0] + ' → ' + nd.keyFmt[1], mark: '≈', markColor: 'var(--mut)', meta: T.keyFmtOnly });
     // Containers with changes, or with values only written differently, are expanded.
     if (nd.ch && (nd.st === 'mod' || nd.hasFmt)) {
       const arr = nd.kind === 'arr';
@@ -85,7 +98,8 @@ function buildDiff(root: DiffNode, col: Record<string, boolean>, onlyDiff: boole
     }
     if (nd.st === 'same') {
       if (nd.fmt) {
-        rows.push({ ...b, mark: '≈', markColor: 'var(--mut)', bg: 'var(--sub)', valText: nd.fmt[0], valColor: 'var(--mut)', isChg: true, newText: nd.fmt[1], newColor: 'var(--mut)', meta: T.fmtOnly });
+        const [ta, tb] = windowPair(nd.fmt[0], nd.fmt[1]);
+        rows.push({ ...b, mark: '≈', markColor: 'var(--mut)', bg: 'var(--sub)', valText: ta, valColor: 'var(--mut)', isChg: true, newText: tb, newColor: 'var(--mut)', meta: [b.meta, T.fmtOnly].filter(Boolean).join(' · ') });
         return;
       }
       const [t, c] = isCont(nd.a) ? [preview(nd.a), 'var(--mut)'] : prim(nd.a);
@@ -94,7 +108,8 @@ function buildDiff(root: DiffNode, col: Record<string, boolean>, onlyDiff: boole
     }
     if (nd.st === 'add') { rows.push({ ...b, mark: '+', markColor: 'var(--add)', bg: 'var(--addBg)', valText: preview(nd.b), valColor: 'var(--add)' }); return; }
     if (nd.st === 'del') { rows.push({ ...b, mark: '−', markColor: 'var(--del)', bg: 'var(--delBg)', valText: preview(nd.a), valColor: 'var(--del)', deco: 'line-through' }); return; }
-    rows.push({ ...b, mark: '~', markColor: 'var(--chg)', bg: 'var(--chgBg)', valText: preview(nd.a), valColor: 'var(--del)', deco: 'line-through', isChg: true, newText: preview(nd.b) });
+    const [ta, tb] = changePair(nd.a, nd.b);
+    rows.push({ ...b, mark: '~', markColor: 'var(--chg)', bg: 'var(--chgBg)', valText: ta, valColor: 'var(--del)', deco: 'line-through', isChg: true, newText: tb });
   };
   walk(root, 0, false);
   return { rows, list, nA, nD, nC, nF };
@@ -113,8 +128,12 @@ export function Diff() {
   const root = useMemo(() => {
     if (!('v' in A) || !('v' in B)) return null;
     const same = A.lang === B.lang;
-    // TOML distinguishes 1 from 1.0; JSON doesn't. Source text is only comparable within one format.
-    return diffNode(A.v, B.v, null, '$', { io: S.ignoreOrder, typed: A.lang === 'TOML' && same, rawA: same ? A.raw : undefined, rawB: same ? B.raw : undefined });
+    // TOML distinguishes 1 from 1.0; JSON doesn't. Value spellings are compared across formats too
+    // (1.0 vs 1, 'x' vs "x"); key spellings only within one format (bare TOML keys vs quoted JSON keys).
+    return diffNode(A.v, B.v, null, '$', {
+      io: S.ignoreOrder, typed: A.lang === 'TOML' && same, rawA: A.raw, rawB: B.raw,
+      keysA: same ? A.keys : undefined, keysB: same ? B.keys : undefined,
+    });
   }, [A, B, S.ignoreOrder]);
   const d = useMemo(() => (root && (root.st !== 'same' || root.hasFmt) ? buildDiff(root, S.dCol, S.onlyDiff, T) : null), [root, S.dCol, S.onlyDiff, T]);
 
@@ -201,7 +220,7 @@ export function Diff() {
                   {it.oldText != null && <span style={{ color: it.fmt ? 'var(--mut)' : 'var(--del)', textDecoration: it.fmt ? 'none' : 'line-through', wordBreak: 'break-all' }}>{it.oldText}</span>}
                   {it.oldText != null && it.newText != null && <span style={{ color: 'var(--faint)' }}>→</span>}
                   {it.newText != null && <span style={{ color: it.fmt ? 'var(--mut)' : 'var(--add)', wordBreak: 'break-all' }}>{it.newText}</span>}
-                  {it.fmt && <span style={{ color: 'var(--faint)', fontSize: 12, fontFamily: "'Geist Sans', 'Geist', sans-serif" }}>{T.fmtOnly}</span>}
+                  {it.fmt && <span style={{ color: 'var(--faint)', fontSize: 12, fontFamily: "'Geist Sans', 'Geist', sans-serif" }}>{it.fmt}</span>}
                 </span>
               </div>
             ))}

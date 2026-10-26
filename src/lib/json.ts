@@ -186,7 +186,7 @@ export function dupKeys(n: JNode, path = '$', out: string[] = []): string[] {
   return out;
 }
 
-export interface JsonValue { v: unknown; raw: Map<string, string> }
+export interface JsonValue { v: unknown; raw: Map<string, string>; keys: Map<string, string> }
 
 /**
  * Value model of a tree, plus the source text of every scalar by path.
@@ -194,14 +194,18 @@ export interface JsonValue { v: unknown; raw: Map<string, string> }
  * converting them would silently pick one.
  */
 export function jsonValue(n: JNode): JsonValue {
-  const raw = new Map<string, string>();
+  const raw = new Map<string, string>(), keys = new Map<string, string>();
   const dup = dupKeys(n);
   if (dup.length) throw new ConvertError('dupKey', dup[0]);
   const w = (x: JNode, path: string): unknown => {
     switch (x.t) {
       case 'obj': {
         const o: Obj = {};
-        x.e.forEach((e) => setKey(o, e.k, w(e.v, cp(path, e.k, false))));
+        x.e.forEach((e) => {
+          const p = cp(path, e.k, false);
+          keys.set(p, e.kRaw);
+          setKey(o, e.k, w(e.v, p));
+        });
         return o;
       }
       case 'arr': return x.e.map((e, i) => w(e, cp(path, i, true)));
@@ -210,7 +214,7 @@ export function jsonValue(n: JNode): JsonValue {
       case 'lit': raw.set(path, x.raw); return x.raw === 'null' ? null : x.raw === 'true';
     }
   };
-  return { v: w(n, '$'), raw };
+  return { v: w(n, '$'), raw, keys };
 }
 
 /**

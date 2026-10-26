@@ -114,13 +114,24 @@ export function cp(path: string, k: string | number, arr: boolean): string {
   return /^[A-Za-z_$][\w$]*$/.test(s) ? path + '.' + s : path + '[' + JSON.stringify(s) + ']';
 }
 
+const esc = (c: string) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0');
+
+/**
+ * Quoted string for display. Invisible characters (zero-width, BOM, bidi controls,
+ * non-ASCII spaces, line separators) are shown escaped; with `ascii` all non-ASCII is.
+ */
+export function showStr(s: string, ascii = false): string {
+  const q = JSON.stringify(s).replace(/[\p{Cf}\p{Zs}\p{Zl}\p{Zp}]/gu, (c) => (c === ' ' ? c : esc(c)));
+  return ascii ? q.replace(/[^\x20-\x7e]/g, esc) : q;
+}
+
 /** Display text and color for a scalar (source text for numbers and dates). */
 export function prim(v: unknown): [string, string] {
   if (v === null) return ['null', 'var(--faint)'];
   if (v instanceof Num) return [v.raw, 'var(--num)'];
   if (v instanceof DateTime) return [v.raw, 'var(--date)'];
   switch (typeof v) {
-    case 'string': return [JSON.stringify(v), 'var(--str)'];
+    case 'string': return [showStr(v), 'var(--str)'];
     case 'boolean': return [String(v), 'var(--bool)'];
     default: return [String(v), 'var(--ink)'];
   }
@@ -135,6 +146,24 @@ export function preview(v: unknown): string {
   };
   const s = out(v);
   return s.length > 90 ? s.slice(0, 88) + '…' : s;
+}
+
+/** Two long texts cut to a window around their first difference, so the change is visible. */
+export function windowPair(ta: string, tb: string, max = 90): [string, string] {
+  if (ta.length <= max && tb.length <= max) return [ta, tb];
+  let p = 0;
+  while (p < ta.length && p < tb.length && ta[p] === tb[p]) p++;
+  const st = Math.max(0, p - 30);
+  const cut = (t: string) => (st ? '…' : '') + t.slice(st, st + max - 10) + (t.length > st + max - 10 ? '…' : '');
+  return [cut(ta), cut(tb)];
+}
+
+/** Display of a changed pair: full scalars windowed around the difference; strings that only
+ *  differ in Unicode normalization (é vs e + ◌́) are shown as escapes. */
+export function changePair(a: unknown, b: unknown): [string, string] {
+  if (isCont(a) || isCont(b)) return [preview(a), preview(b)];
+  if (typeof a === 'string' && typeof b === 'string' && a.normalize('NFC') === b.normalize('NFC')) return windowPair(showStr(a, true), showStr(b, true));
+  return windowPair(prim(a)[0], prim(b)[0]);
 }
 
 export function stats(v: unknown): { n: number; d: number } {
@@ -199,7 +228,9 @@ export interface DiffNode {
   ch?: DiffNode[];
   /** Equal values written differently (e.g. 1.0 vs 1, 0xFF vs 255): source text of A and B. */
   fmt?: [string, string];
-  /** This node or a descendant has `fmt`. */
+  /** The key itself is written differently (e.g. "a" vs "\u0061"). */
+  keyFmt?: [string, string];
+  /** This node or a descendant has `fmt` / `keyFmt`. */
   hasFmt?: boolean;
 }
 
@@ -207,6 +238,9 @@ export interface DiffOpts extends CmpOpts {
   /** Source text of scalars by path, to report representation-only differences. */
   rawA?: Map<string, string>;
   rawB?: Map<string, string>;
+  /** Source text of object keys by path (same format only). */
+  keysA?: Map<string, string>;
+  keysB?: Map<string, string>;
 }
 
 /** Index pairs of equal elements (longest common subsequence after trimming shared ends). */
@@ -259,7 +293,16 @@ export function diffNode(
   if (isObj(a) && isObj(b)) {
     const ks = Object.keys(a);
     Object.keys(b).forEach((k) => { if (!hasOwn(a, k)) ks.push(k); });
-    const ch = ks.map((k) => diffNode(own(a, k), own(b, k), k, cp(path, k, false), o, k, cp(pathB, k, false)));
+    const ch = ks.map((k) => {
+      const pa = cp(path, k, false), pb = cp(pathB, k, false);
+      const c = diffNode(own(a, k), own(b, k), k, pa, o, k, pb);
+      const ka = o.keysA?.get(pa), kb = o.keysB?.get(pb);
+      if (c.st !== 'add' && c.st !== 'del' && ka !== undefined && kb !== undefined && ka !== kb) {
+        c.keyFmt = [ka, kb];
+        c.hasFmt = true;
+      }
+      return c;
+    });
     return done({ ...at, kind: 'obj', ch, st: ch.every((c) => c.st === 'same') ? 'same' : 'mod' });
   }
   if (Array.isArray(a) && Array.isArray(b)) {
