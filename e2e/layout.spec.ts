@@ -156,3 +156,33 @@ test('text size: the tool area scales as a whole, the sidebar stays; remembered;
   await expect(page.locator('.zoom-btn.pct')).toHaveText('100%');
   expect(Math.abs((await headH()) - h0)).toBeLessThan(0.5);
 });
+
+test.describe('a lower window', () => {
+  test.use({ viewport: { width: 1440, height: 600 } });
+  test('a short carry switches, a label says where it lands; dropped below, the result is in view', async ({ page }) => {
+    await open(page, 'TOML 格式化');
+    await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('tb.prefs') || '{}'); p.o = { ...p.o, 'ui.zoom': 140 }; localStorage.setItem('tb.prefs', JSON.stringify(p)); });
+    await page.reload();
+    await page.getByRole('button', { name: '示例' }).first().click();
+    const hint = page.locator('.split-hint');
+    const g = (await page.locator('.split-grip').boundingBox())!;
+    const x = g.x + g.width / 2, y = g.y + g.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x - 20, y + 90, { steps: 6 });
+    expect(await layout(page)).toBe('col');
+    await expect(hint).toHaveText('松开 · 放在下方');
+    // Back up as far as it came down: beside again (measured from where it switched).
+    await page.mouse.move(x - 20, y, { steps: 6 });
+    expect(await layout(page)).toBe('row');
+    await expect(hint).toHaveText('松开 · 放在右侧');
+    await page.mouse.move(x - 20, y + 90, { steps: 6 });
+    expect(await layout(page)).toBe('col');
+    await page.mouse.up();
+    await expect(hint).toHaveCount(0);
+    // Stacked: the result's top is on screen, below a shorter input.
+    await expect.poll(async () => { const b = await box(page, 1); return b.y > 0 && b.y < 300; }).toBe(true);
+    await page.evaluate(() => scrollTo(0, 0));
+    expect((await box(page, 1)).y).toBeLessThan(page.viewportSize()!.height);
+  });
+});

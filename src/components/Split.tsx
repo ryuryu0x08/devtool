@@ -1,7 +1,8 @@
 // Input and result side by side or stacked, chosen per tool and remembered. The gap between them
 // is dragged to share the width. The result is picked up by its handle and carried: it follows
-// the pointer, and the layout switches as soon as it crosses over, the input pane moving to
-// make room; on release it settles into its place. A click on the handle switches too.
+// the pointer, and the layout switches as soon as it is carried a short way down (below) or up
+// or right (beside), the input pane moving to make room; a label on it says where it will land.
+// On release it settles into its place, scrolled into view. A click on the handle switches too.
 // Narrow screens always stack.
 import { useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
 import { useApp } from '../store';
@@ -14,6 +15,9 @@ const STACK_BELOW = 720;
 const MIN_PANE = 280;
 const GAP = 16;
 const EASE = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+/** Screen px the result is carried, from where it was picked up or last switched, to switch:
+ *  down for below; up, or right (a bit farther), for beside. */
+const SWITCH = 72;
 
 type Mode = 'row' | 'col';
 
@@ -127,15 +131,19 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
     window.addEventListener('pointercancel', up);
   };
 
-  /** The layout for the carried result's top edge here: pulled about 120 px down, it goes below;
-   *  brought back up level with the input (within 80 px of its top) on the right, it goes beside.
-   *  The two thresholds differ, so it doesn't flicker between them. */
-  const decide = (cur: Mode, x: number, top: number): Mode => {
-    const ra = prev.current?.a ?? paneA.current!.getBoundingClientRect();
-    const rc = box.current!.getBoundingClientRect();
-    const down = Math.min(ra.height * 0.45, 120);
-    if (cur === 'row') return top > ra.top + down ? 'col' : 'row';
-    return top < ra.top + down - 40 && x > rc.left + rc.width * 0.4 ? 'row' : 'col';
+  /** The layout for the result carried by (dx, dy) since it was picked up or last switched. Measured
+   *  from the last switch, so going back takes the same deliberate move and it doesn't flicker. */
+  const decide = (cur: Mode, dx: number, dy: number): Mode => {
+    if (cur === 'row') return dy > SWITCH ? 'col' : 'row';
+    return dy < -SWITCH || dx > SWITCH * 1.5 ? 'row' : 'col';
+  };
+
+  /** A stacked result that landed mostly below the window is scrolled up into view. */
+  const reveal = () => {
+    const s = slotB.current;
+    if (!s) return;
+    const top = s.getBoundingClientRect().top, h = innerHeight;
+    if (top > h * 0.6) scrollBy({ top: top - h * 0.35, behavior: reduced() ? 'auto' : 'smooth' });
   };
 
   const onGrip = (e: RPointerEvent<HTMLButtonElement>) => {
@@ -144,6 +152,8 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
     const rf = floatB.current!.getBoundingClientRect();
     const g = { fx: (e.clientX - rf.left) / rf.width, oy: e.clientY - rf.top, w: rf.width, x: e.clientX, y: e.clientY };
     let moved = false, tgt: Mode = shown;
+    /** Where it was picked up or last switched. */
+    const from = { x: e.clientX, y: e.clientY };
     const move = (ev: PointerEvent) => {
       if (!moved) {
         if (Math.hypot(ev.clientX - g.x, ev.clientY - g.y) < 5) return;
@@ -156,8 +166,8 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
       }
       g.x = ev.clientX;
       g.y = ev.clientY;
-      const next = decide(tgt, ev.clientX, ev.clientY - g.oy);
-      if (next !== tgt) { tgt = next; animate.current = true; setTarget(next); }
+      const next = decide(tgt, ev.clientX - from.x, ev.clientY - from.y);
+      if (next !== tgt) { tgt = next; from.x = ev.clientX; from.y = ev.clientY; animate.current = true; setTarget(next); }
       place();
     };
     const up = (ev: PointerEvent) => {
@@ -179,6 +189,7 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
         f.style.width = '';
         if (!cancel && t && !reduced()) f.animate([{ transform: t, width: w }, { transform: 'none', width: slotB.current!.getBoundingClientRect().width / z + 'px' }], { duration: 260, easing: EASE });
       }
+      if (!cancel && tgt === 'col') requestAnimationFrame(reveal);
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -207,6 +218,7 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
               </svg>
             </button>
           )}
+          {carrying && <div className="split-hint" aria-hidden="true">{shown === 'row' ? T.ui.dropBeside : T.ui.dropBelow}</div>}
           {b}
         </div>
       </div>

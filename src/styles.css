@@ -253,6 +253,14 @@ button.caret { border: 0; background: transparent; padding: 0; font: inherit; fo
 .split-pane.holding::before {
   content: ''; position: absolute; inset: 0; border: 2px dashed var(--acc); border-radius: 14px; background: var(--accRing); pointer-events: none;
 }
+/* Where the carried result will land. */
+.split-hint {
+  position: absolute; top: -40px; left: 50%; transform: translateX(-50%); z-index: 3; white-space: nowrap; pointer-events: none;
+  padding: 4px 12px; border-radius: 999px; background: var(--acc); color: var(--accInk); font-size: 12.5px; font-weight: 600;
+  box-shadow: 0 6px 18px var(--shadow);
+}
+/* Stacked, the input is kept short enough that the result shows below it. */
+.split.col > .split-pane:first-child textarea { min-height: min(240px, 30vh) !important; }
 body.dragging-x, body.dragging-x * { cursor: col-resize !important; user-select: none; }
 body.dragging-move, body.dragging-move * { cursor: grabbing !important; user-select: none; }
 /* Cron visual editor */
