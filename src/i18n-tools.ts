@@ -83,6 +83,15 @@ export const zhT = {
     unixOr: '「日」和「星期」都指定时，满足其中一个就执行（Unix cron 的规则）', andRule: '「日」和「星期」都指定时，两者都满足才执行（{d} 的规则）',
     e: { count: '字段数不对：这条规则需要 {w} 个字段，现在是 {n} 个', value: '{i}的「{t}」超出范围或无法识别', range: '{i}的范围「{t}」起点大于终点', step: '{i}的步长「{t}」不对', special: '{i}的「{t}」不是 Unix cron 的写法（L、W、# 只在 Spring / Quartz 里有）', question: '「?」只能用在日或星期字段，且 Unix cron 不支持', quartzQ: 'Quartz 要求「日」和「星期」中有一个写成「?」' },
     fields: { sec: '秒', min: '分', hour: '时', dom: '日', mon: '月', dow: '星期', year: '年' },
+    b: {
+      title: '可视化编辑', hint: '选好后上面的表达式自动生成；改表达式，这里也跟着变', start: '先选一种频率，表达式会自动生成',
+      freq: { minute: '每分钟', everyN: '每隔几分钟', hourly: '每小时', daily: '每天', weekly: '每周', monthly: '每月', yearly: '每年', custom: '高级' },
+      every: '每隔', minutes: '分钟', hours: '小时', atMinute: '在第', minuteUnit: '分', at: '时间', workdays: '工作日', weekend: '周末',
+      lastDay: '最后一天', lastDayUnix: 'Unix cron 没有「最后一天」；要用它，请在上面的规则里选 Spring 或 Quartz', day: '日期', dayOf: '{n} 日', monthOf: '{n} 月',
+      modes: { every: '每个', list: '指定', range: '范围', step: '间隔', raw: '原样' }, from: '从', to: '到', startAt: '开始于',
+      rawNote: '这一项的写法编辑器拆不开，保持原样；可以直接修改', quartzOne: 'Quartz 中「日」和「星期」只能指定一个，指定其中一个时另一个自动写成「?」',
+      keepOne: '至少保留一个', cant: '表达式的字段数和所选规则不一致，修正后才能用可视化编辑', year: '年（原样保留）',
+    },
   },
   color: {
     ph: '如 #3d6df2、rgb(61 109 242)、hsl(224 87% 59%)、oklch(58% 0.19 264)、tomato', notColor: '无法识别为颜色', pick: '取色',
@@ -178,6 +187,15 @@ export const enT: ToolDict = {
     unixOr: 'With both day of month and day of week set, either one matching is enough (Unix cron rule)', andRule: 'With both day of month and day of week set, both must match ({d} rule)',
     e: { count: 'Wrong number of fields: these rules need {w}, this has {n}', value: '“{t}” in {i} is out of range or not recognised', range: 'Range “{t}” in {i} starts after it ends', step: 'Step “{t}” in {i} is wrong', special: '“{t}” in {i} isn’t Unix cron syntax (L, W, # are Spring / Quartz only)', question: '“?” only works in the day fields, and not in Unix cron', quartzQ: 'Quartz needs “?” in either day of month or day of week' },
     fields: { sec: 'second', min: 'minute', hour: 'hour', dom: 'day of month', mon: 'month', dow: 'day of week', year: 'year' },
+    b: {
+      title: 'Visual editor', hint: 'The expression above is written as you choose; edit the expression and this follows', start: 'Pick how often, and the expression is written for you',
+      freq: { minute: 'Every minute', everyN: 'Every few minutes', hourly: 'Hourly', daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly', custom: 'Advanced' },
+      every: 'Every', minutes: 'minutes', hours: 'hours', atMinute: 'at minute', minuteUnit: 'past the hour', at: 'Time', workdays: 'Weekdays', weekend: 'Weekend',
+      lastDay: 'Last day', lastDayUnix: 'Unix cron has no “last day”; choose Spring or Quartz above to use it', day: 'Day', dayOf: 'day {n}', monthOf: '{n}',
+      modes: { every: 'Every', list: 'Pick', range: 'Range', step: 'Step', raw: 'As written' }, from: 'from', to: 'to', startAt: 'starting at',
+      rawNote: 'The editor can’t break this field down, so it is kept as written; you can edit it here', quartzOne: 'Quartz allows only one of day of month and day of week; choosing one writes “?” in the other',
+      keepOne: 'Keep at least one', cant: 'The expression doesn’t have the number of fields these rules need; fix it to use the editor', year: 'Year (kept as written)',
+    },
   },
   color: {
     ph: 'e.g. #3d6df2, rgb(61 109 242), hsl(224 87% 59%), oklch(58% 0.19 264), tomato', notColor: 'Not a colour', pick: 'Pick',

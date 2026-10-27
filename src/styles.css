@@ -255,3 +255,21 @@ button.caret { border: 0; background: transparent; padding: 0; font: inherit; fo
 }
 body.dragging-x, body.dragging-x * { cursor: col-resize !important; user-select: none; }
 body.dragging-move, body.dragging-move * { cursor: grabbing !important; user-select: none; }
+/* Cron visual editor */
+.cron-freq { display: flex; flex-wrap: wrap; gap: 6px; }
+.cron-row { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 10px; align-items: start; }
+.cron-row-label { font-size: 12.5px; color: var(--mut); line-height: 32px; white-space: nowrap; }
+.cron-row-body, .cron-inline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; min-width: 0; }
+.cron-sep { margin-left: 6px; }
+.cron-chips { display: grid; gap: 4px; width: 100%; max-width: 560px; }
+.chip-btn { height: 30px; min-width: 0; white-space: nowrap; overflow: hidden; padding: 0 4px; border: 1px solid var(--line); border-radius: 7px; background: var(--card); color: var(--ink); font-size: 12.5px; cursor: pointer; font-variant-numeric: tabular-nums; }
+.chip-btn:hover { border-color: var(--line2); background: var(--sub); }
+.chip-btn.on { border-color: var(--acc); background: var(--acc); color: var(--accInk); font-weight: 600; }
+.cron-quick { display: flex; gap: 6px; flex-wrap: wrap; width: 100%; }
+.cron-last.on { border-color: var(--acc); background: var(--accSoft); color: var(--acc); }
+.field.cron-sel { width: auto; height: 32px; font-size: 13px; padding: 0 8px; font-weight: 400; }
+.field.cron-time { width: 136px; height: 36px; font-size: 15px; padding: 0 10px; font-weight: 500; }
+.cron-adv { display: flex; flex-direction: column; gap: 4px; }
+.cron-field { display: flex; flex-direction: column; gap: 8px; padding: 10px 0; border-top: 1px solid var(--line); }
+.cron-field-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.cron-field-head .cron-row-label { width: 56px; }

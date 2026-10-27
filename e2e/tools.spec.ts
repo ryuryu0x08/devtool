@@ -326,6 +326,47 @@ test.describe('generators and time', () => {
     await expect(errBox(page)).toContainText('Quartz 要求「日」和「星期」中有一个写成「?」');
   });
 
+  test('Cron visual editor: clicks write the expression; a typed expression shows in the editor', async ({ page }) => {
+    await open(page, 'Cron 表达式');
+    const radio = (name: string) => page.getByRole('radio', { name, exact: true });
+    const chip = (group: string, name: string) => page.getByRole('group', { name: group }).getByRole('button', { name, exact: true });
+    await radio('每周').click();
+    await expect(input(page)).toHaveValue('0 9 * * 1');
+    await page.getByRole('button', { name: '工作日' }).click();
+    await page.locator('input[type=time]').fill('18:30');
+    await expect(input(page)).toHaveValue('30 18 * * 1-5');
+    await expect(page.locator('.cron-desc')).toHaveText('每个工作日（周一至周五） 18:30');
+    await chip('星期', '三').click();
+    await expect(input(page)).toHaveValue('30 18 * * 1,2,4,5');
+    // Switching keeps the time.
+    await radio('每天').click();
+    await expect(input(page)).toHaveValue('30 18 * * *');
+    await radio('每隔几分钟').click();
+    await page.getByRole('combobox', { name: '分钟' }).selectOption('15');
+    await expect(input(page)).toHaveValue('*/15 * * * *');
+    // Typed: the editor follows.
+    await input(page).fill('0 9 1,15 * *');
+    await expect(radio('每月')).toHaveAttribute('aria-checked', 'true');
+    await expect(chip('日期', '15')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('button', { name: '最后一天' })).toBeDisabled();
+    // Quartz: "?" and Sunday = 1; the last day of the month is offered.
+    await seg(page, 'Quartz').click();
+    await input(page).fill('');
+    await radio('每周').click();
+    await expect(input(page)).toHaveValue('0 0 9 ? * 2');
+    await radio('每月').click();
+    await page.getByRole('button', { name: '最后一天' }).click();
+    await expect(input(page)).toHaveValue('0 0 9 L * ?');
+    // Advanced: any field on its own.
+    await radio('高级').click();
+    const hour = page.locator('.cron-field', { has: page.locator('.cron-row-label', { hasText: /^时$/ }) });
+    await hour.locator('.seg button', { hasText: '范围' }).click();
+    await hour.getByRole('combobox', { name: '到' }).selectOption('17');
+    await expect(input(page)).toHaveValue('0 0 9-17 L * ?');
+    await input(page).fill('* * *');
+    await expect(page.locator('.cron-builder')).toContainText('字段数和所选规则不一致');
+  });
+
   test('Timestamp: a ULID or a Snowflake ID gives its time', async ({ page }) => {
     await open(page);
     await input(page).fill('01ARYZ6S41TSV4RRFFQ69G5FAV');

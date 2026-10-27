@@ -6,6 +6,7 @@ import { Seg } from '../components/Seg';
 import { Kv, KvRows } from '../components/Kv';
 import { ErrLine, Grid, OutCard, Toolbar, useOpt } from '../components/Panes';
 import { TzPicker, useNow } from './Timestamp';
+import { CronBuilder } from './CronBuilder';
 import { errInfo, type ErrInfo } from '../lib/data';
 import { fmtWall, offLabel, tzOffset, tzParts } from '../lib/time';
 import { CronError, describe, guessDialect, nextRuns, parseCron, type Cron as CronT, type Dialect } from '../lib/cron';
@@ -80,6 +81,7 @@ export function Cron() {
           <TzPicker now={now} />
         </Toolbar>
       </section>
+      <CronBuilder expr={expr} dialect={dialect} onExpr={(e) => set({ cronIn: e })} />
       {r && ('c' in r ? (
         <OutCard className="cron-out" status={f(T.cron.next, { n: r.next.runs.length || 10, z: zoneLabel })} notes={notes}>
           <button className="hero cron-desc" title={T.clickCopy} onClick={() => copy(r.c.reboot ? T.cron.reboot : r.desc)} style={{ marginBottom: 8 }}>

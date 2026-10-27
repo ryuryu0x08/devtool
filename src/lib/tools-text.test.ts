@@ -9,7 +9,8 @@ import { countText } from './count';
 import { processLines } from './textproc';
 import { looksUuid, parseUuid, uuid4, uuid7 } from './uuid';
 import { looksUlid, snowflakeTime, ulidTime } from './ids';
-import { CronError, describe as describeCron, guessDialect, looksCron, nextRuns, parseCron } from './cron';
+import { CronError, describe as describeCron, guessDialect, looksCron, nextRuns, parseCron, type Dialect } from './cron';
+import { presetOf, readExpr, toPreset, writeExpr, writePart } from './cronbuild';
 import { contrast, formats, looksColor, parseColor, toOklch } from './color';
 
 describe('text diff', () => {
@@ -224,5 +225,45 @@ describe('colours', () => {
     expect(looksColor('#abc')).toBe(true);
     expect(looksColor('#abcde')).toBe(false);
     expect(parseColor('rgb(1 2)')).toBeNull();
+  });
+});
+
+describe('cron editor model', () => {
+  // The same schedule: every field allows the same values (and the same L / W / # rules).
+  const same = (a: string, b: string, d: Dialect) => {
+    const x = parseCron(a, d).f, y = parseCron(b, d).f;
+    for (const k of ['sec', 'min', 'hour', 'dom', 'mon', 'dow', 'year'] as const) {
+      const pick = (f: typeof x.min) => JSON.stringify([f.vals, f.last, f.nearestW, f.lastW, f.nth, f.star]);
+      expect(pick(y[k]), `${a} → ${b}: ${k}`).toBe(pick(x[k]));
+    }
+  };
+  it('reading and writing back keeps the schedule', () => {
+    const cases: [string, Dialect][] = [
+      ['* * * * *', 'unix'], ['*/5 * * * *', 'unix'], ['30 9 * * 1-5', 'unix'], ['0 0 1,15 * *', 'unix'], ['0 0 1 1 *', 'unix'],
+      ['5 */2 * * *', 'unix'], ['0 8-18/2 * * mon-fri', 'unix'], ['0 0 * * 7', 'unix'], ['15 3 1-7 jan,jul *', 'unix'], ['@daily', 'unix'], ['@weekly', 'unix'],
+      ['0 30 9 * * MON-FRI', 'spring'], ['*/10 * * * * *', 'spring'], ['0 0 12 ? * 2-6', 'quartz'], ['0 0 12 L * ?', 'quartz'], ['0 15 10 ? * 6L', 'quartz'],
+      ['0 0 12 1W * ?', 'quartz'], ['0 0 12 ? * 2#1 2030', 'quartz'], ['0 0/15 8-17 ? * MON-FRI', 'quartz'],
+    ];
+    for (const [e, d] of cases) same(e, writeExpr(readExpr(e, d)!, d), d);
+  });
+  it('recognises the simple forms', () => {
+    const p = (e: string, d: Dialect = 'unix') => presetOf(readExpr(e, d)!);
+    expect([p('* * * * *'), p('*/15 * * * *'), p('7 * * * *'), p('7 */3 * * *'), p('0 9 * * *'), p('0 9 * * 1-5'), p('0 9 1,15 * *'), p('0 9 1 1,7 *')])
+      .toEqual(['minute', 'everyN', 'hourly', 'hourly', 'daily', 'weekly', 'monthly', 'yearly']);
+    expect([p('0 9-17 * * *'), p('0 9 * * 1#2'), p('5 0 9 * * *', 'spring'), p('0 0 9 L * ?', 'quartz')]).toEqual(['custom', 'custom', 'custom', 'monthly']);
+    expect(readExpr('* * *', 'unix')).toBeNull();
+  });
+  it('switching form keeps the time and chosen days; Quartz gets its "?" and Sunday = 1', () => {
+    const w = (p: Parameters<typeof toPreset>[0], e: string, d: Dialect = 'unix') => writeExpr(toPreset(p, readExpr(e, d)), d);
+    expect(w('weekly', '30 7 * * *')).toBe('30 7 * * 1');
+    expect(w('daily', '30 7 * * 1-5')).toBe('30 7 * * *');
+    expect(w('monthly', '30 7 * * *')).toBe('30 7 1 * *');
+    expect(w('yearly', '30 7 15 * *')).toBe('30 7 15 1 *');
+    expect(w('hourly', '30 7 * * *')).toBe('30 * * * *');
+    expect(w('everyN', '30 7 * * *')).toBe('*/5 * * * *');
+    expect(w('weekly', '0 30 7 * * ?', 'quartz')).toBe('0 30 7 ? * 2');
+    expect(w('daily', '0 30 7 * * ?', 'quartz')).toBe('0 30 7 * * ?');
+    expect(writePart({ k: 'list', v: [5, 1, 2, 3, 6] }, 'dom', 'unix')).toBe('1-3,5,6');
+    expect(writePart({ k: 'list', v: [0, 6] }, 'dow', 'quartz')).toBe('1,7');
   });
 });

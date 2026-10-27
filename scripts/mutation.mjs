@@ -122,6 +122,13 @@ const M = [
   ['layout: the layout waits for the drop instead of switching while carried', 'src/components/Split.tsx', '      if (next !== tgt) { tgt = next; setTarget(next); }', '      if (next !== tgt) tgt = next;', 'each tool remembers'],
   ['bases: the other boxes do not follow', 'src/tools/BytesTools.tsx', '    if (!ok) return \'\';\n    const t = writeInt(ok.v, baseOf(k));', "    if (!ok) return '';\n    const t = writeInt(ok.v, Number(src === 'n' ? custom : src));", 'editing any one updates'],
   ['bases: a click does not select the number', 'src/tools/BytesTools.tsx', 'onFocus={(e) => { e.currentTarget.select(); fresh.current = true; }}', 'onFocus={() => { fresh.current = true; }}', 'editing any one updates'],
+  // Cron visual editor.
+  ['cron editor: Quartz written without "?"', 'src/lib/cronbuild.ts', "    if (m.dow.k === 'every') f[5] = '?';\n    else f[3] = '?';", '', 'unit'],
+  ['cron editor: Quartz weekdays not shifted (Sunday = 1)', 'src/lib/cronbuild.ts', "const dowOut = (v: number, d: Dialect) => String(d === 'quartz' ? v + 1 : v);", 'const dowOut = (v: number) => String(v);', 'unit'],
+  ['cron editor: "0/15" rewritten as "*/15"', 'src/lib/cronbuild.ts', "    case 'step': return (p.star && p.from === LIMITS[kind][0] ? '*' : out(p.from)) + '/' + p.n;", "    case 'step': return (p.from === LIMITS[kind][0] ? '*' : out(p.from)) + '/' + p.n;", 'unit'],
+  ['cron editor: switching form loses the time', 'src/lib/cronbuild.ts', '  const minute: Part = one(c.min) !== null ? c.min : zero;', '  const minute: Part = zero;', 'unit'],
+  ['cron editor: a range ends before it starts', 'src/tools/CronBuilder.tsx', "Math.min(hi, a + (k === 'dow' ? 4 : 1))", "Math.min(hi, lo + (k === 'dow' ? 4 : 1))", 'Cron visual editor'],
+  ['cron editor: a typed expression is not shown in the editor', 'src/tools/CronBuilder.tsx', "  const preset: Preset | null = empty ? null : !model ? null : adv ? 'custom' : presetOf(model);", "  const preset: Preset | null = empty ? null : !model ? null : 'custom';", 'Cron visual editor'],
 ];
 
 const args = process.argv.slice(2);
