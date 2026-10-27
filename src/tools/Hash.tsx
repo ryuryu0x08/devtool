@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { f } from '../i18n';
 import { useApp } from '../store';
 import { Seg } from '../components/Seg';
+import { Kv } from '../components/Kv';
 import { Source } from '../components/Source';
 import { useSettled } from '../components/useSettled';
 import { textBytes } from '../lib/data';
@@ -28,7 +29,7 @@ function useHashJob(blob: Blob | null) {
 }
 
 export function Hash() {
-  const { S, set, T, copy, replace } = useApp();
+  const { S, set, T, replace } = useApp();
   const file = S.hashFile;
   const [text, pending] = useSettled(S.hashIn);
   const bytes = useMemo(() => (file ? null : textBytes(text, S.hashEol)), [file, text, S.hashEol]);
@@ -51,7 +52,7 @@ export function Hash() {
         onText={(v) => set({ hashIn: v, ...(v ? {} : { hashCr: false }) })}
         file={file} onFile={(fl) => set({ hashFile: fl, hashCr: false })}
         eol={S.hashEol} onEol={(e) => set({ hashEol: e })} cr={S.hashCr} onCr={() => set({ hashCr: true })}
-        onClear={() => { set({ hashFile: null, hashCr: false }); replace({ hashIn: '' }); }} />
+        onClear={() => replace({ hashIn: '', hashFile: null, hashCr: false })} />
 
       <section className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div className="card-head" style={{ height: 44 }}>
@@ -63,16 +64,10 @@ export function Hash() {
           {d ? (
             <>
               <span className="mono" style={{ fontSize: 12, color: 'var(--faint)', padding: '6px 0' }}>{file ? f(T.fileOf, { n: file.size.toLocaleString('en-US') }) : f(T.utf8Of, { n: total.toLocaleString('en-US') })}</span>
+              {/* Each row copies its value when clicked, like the timestamp results. */}
               {ALGOS.map((a) => {
-                const v = fmtDigest(d[a], S.hashFmt);
                 const hit = check && 'algo' in check && check.algo === a;
-                return (
-                  <div key={a} data-algo={a} style={{ display: 'flex', alignItems: 'baseline', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
-                    <span style={{ width: 64, flex: 'none', fontSize: 12.5, fontWeight: 600, color: hit ? (check.ok ? 'var(--add)' : 'var(--del)') : 'var(--mut)' }}>{ALGO_NAME[a]}</span>
-                    <span className="mono hash-val" style={{ flex: 1, minWidth: 0, fontSize: 13, wordBreak: 'break-all' }}>{v}</span>
-                    <button className="btn sm" onClick={() => copy(v)}>{T.copy}</button>
-                  </div>
-                );
+                return <Kv key={a} data-algo={a} label={ALGO_NAME[a]} value={fmtDigest(d[a], S.hashFmt)} labelColor={hit ? (check.ok ? 'var(--add)' : 'var(--del)') : undefined} />;
               })}
             </>
           ) : (

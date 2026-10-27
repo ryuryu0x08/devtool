@@ -7,6 +7,8 @@ import { hasMs, parseTime } from './lib/time';
 import { loadImage, scanImage } from './lib/qr';
 import { smolParse } from './lib/toml';
 import { clipboardUnsafe, decodeUtf8, normEol } from './lib/data';
+import { b64decode, looksB64 } from './lib/b64';
+import { hashLike } from './lib/hash';
 import { MobileBar, Sidebar } from './components/Sidebar';
 import { Palette } from './components/Palette';
 import { Vis } from './components/Vis';
@@ -18,6 +20,8 @@ import { Base64 } from './tools/Base64';
 import { Hash } from './tools/Hash';
 
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg|ico|avif|heic|heif|tiff?)$/i;
+/** Files held in memory (Base64 / Hash): replacing one can be undone like replacing text. */
+const FILE_KEYS: (keyof State)[] = ['hashFile', 'b64File'];
 
 const reducer = (s: State, p: Patch): State => ({ ...s, ...(typeof p === 'function' ? p(s) : p) });
 
@@ -43,14 +47,15 @@ export function App() {
   }, []);
 
   // Sample / clear / convert / smart paste / file drop replace what the user typed: never without a way back.
+  // Undo restores everything the patch changed; it is offered when typed text or a file is lost.
   const replace = useCallback((patch: Partial<State>, msg?: string) => {
     const s = ref.current;
     const prev: Partial<State> = { tool: s.tool };
     let lost = false;
-    for (const k of INPUT_KEYS) {
-      if (!(k in patch)) continue;
+    for (const k of Object.keys(patch) as (keyof State)[]) {
       (prev as Record<string, unknown>)[k] = s[k];
-      if (s[k].trim() && s[k] !== patch[k]) lost = true;
+      if ((INPUT_KEYS as (keyof State)[]).includes(k) && (s[k] as string).trim() && s[k] !== patch[k]) lost = true;
+      if (FILE_KEYS.includes(k) && s[k] && s[k] !== patch[k]) lost = true;
     }
     set(patch);
     const t = dictFor(s.lang);
@@ -99,6 +104,7 @@ export function App() {
     if (/^-?\d{9,19}(\.\d+)?$/.test(s)) return 'ts';
     if (/^[[{]/.test(s)) { try { JSON.parse(s); return 'json'; } catch { /* not JSON */ } }
     if (/^\s*(\[[^\]\n]+\]|[\w."'-]+\s*=)/m.test(s)) { try { smolParse(s); return 'toml'; } catch { /* not TOML */ } }
+    if (looksB64(s)) return 'b64';
     if (s.length < 40 && /\d/.test(s) && hasMs(parseTime(s, ref.current.tz, Date.now()))) return 'tm';
     return null;
   }, []);
@@ -111,7 +117,8 @@ export function App() {
     else if (d === 'tm') { tool = 'ts'; patch = { tmIn: s.trim() }; }
     else if (d === 'json') { tool = 'json'; patch = { json: s, sel: { ...ref.current.sel, json: '' } }; }
     else if (d === 'toml') { tool = 'toml'; patch = { toml: s, sel: { ...ref.current.sel, toml: '' } }; }
-    else { tool = 'qrgen'; patch = { qrText: s }; }
+    else if (d === 'b64') { const n = normEol(s); tool = 'b64'; patch = { b64In: n.text, b64Cr: n.cr, b64File: null, b64Mode: 'dec' }; }
+    else { tool = 'qrgen'; patch = { qrText: normEol(s).text }; }
     replace({ ...patch, tool, palette: false, pq: '' }, silent ? undefined : f(dictFor(ref.current.lang).routed, { t: toolName(tool) }));
   }, [detect, replace, toolName]);
 
@@ -136,7 +143,7 @@ export function App() {
     set({ scan: { src, name: nm, busy: false, codes, w: img.naturalWidth, h: img.naturalHeight } });
   }, [toast]);
 
-  /** Base64 and Hash take any file as bytes; decoding Base64 reads a text file into the input. */
+  /** Base64 and Hash take any file as bytes; decoding Base64 reads a file of Base64 text into the input. */
   const byteFile = useCallback((file: File, note?: string) => {
     const s = ref.current, t = dictFor(s.lang);
     if (s.tool === 'hash') set({ hashFile: file, hashCr: false });
@@ -144,22 +151,77 @@ export function App() {
     else {
       file.arrayBuffer().then((buf) => {
         const text = decodeUtf8(buf);
-        if (text === null) { set({ b64Mode: 'enc', b64File: file, b64Cr: false }); toast(t.b64.notText, 6000); return; }
-        const n = normEol(text);
-        replace({ b64In: n.text }, note);
+        let decodable = false;
+        try { decodable = text !== null && !!b64decode(text); } catch { /* not Base64 */ }
+        if (decodable) { replace({ b64In: normEol(text!).text, b64Cr: false }, note); return; }
+        set({ b64Mode: 'enc', b64File: file, b64Cr: false });
+        toast(t.b64.notText, 6000);
       }, () => toast(t.readFail, 5000));
       return;
     }
     if (note) toast(note, 5000);
   }, [replace, toast]);
 
+  /** Comparing: fill the side not edited last, so pasting twice fills A, then B. */
+  const fillDiff = useCallback((raw: string, note?: string) => {
+    const s = ref.current, t = dictFor(s.lang);
+    const side = s.diffLast === 'diffA' ? 'diffB' : 'diffA';
+    replace({ [side]: normEol(raw).text, diffLast: side }, [note, f(t.filledSide, { s: side === 'diffA' ? 'A' : 'B' })].filter(Boolean).join(' · '));
+  }, [replace]);
+
+  /**
+   * Text pasted on a blank area, or read from a dropped .txt, stays in the current tool when that
+   * tool can use it. Returns false when it should be routed to a tool by its content instead.
+   */
+  const takeText = useCallback((raw: string, note?: string): boolean => {
+    const s = ref.current, t = dictFor(s.lang);
+    const n = normEol(raw);
+    const msg = (...m: string[]) => [note, ...m].filter(Boolean).join(' · ') || undefined;
+    switch (s.tool) {
+      case 'qrgen':
+        replace({ qrText: n.text }, msg());
+        return true;
+      case 'hash':
+        // A checksum pasted while there is something to check is checked, not hashed.
+        if (hashLike(n.text) && (s.hashFile || s.hashIn)) replace({ hashCheck: n.text.trim() }, msg(t.hs.toCheck));
+        else replace({ hashIn: n.text, hashFile: null, hashCr: n.cr }, msg());
+        return true;
+      case 'b64': {
+        const mode = looksB64(n.text) ? 'dec' : 'enc';
+        replace({ b64In: n.text, b64File: null, b64Cr: n.cr, b64Mode: mode },
+          msg(mode !== s.b64Mode ? f(t.b64.switched, { m: mode === 'dec' ? t.b64.dec : t.b64.enc }) : ''));
+        return true;
+      }
+      case 'diff': {
+        const d = detect(raw);
+        if (d !== 'json' && d !== 'toml' && !/^\s*[[{]/.test(raw)) return false;
+        fillDiff(raw, note);
+        return true;
+      }
+    }
+    return false;
+  }, [detect, fillDiff, replace]);
+
   const handleFiles = useCallback((files: File[]) => {
-    const t = dictFor(ref.current.lang);
-    if (ref.current.tool === 'b64' || ref.current.tool === 'hash') {
-      if (files.length) byteFile(files[0], files.length > 1 ? f(t.onlyFirst, { n: files[0].name }) : undefined);
+    const s0 = ref.current, t = dictFor(s0.lang);
+    if (!files.length) return;
+    if (s0.tool === 'b64' || s0.tool === 'hash') {
+      byteFile(files[0], files.length > 1 ? f(t.onlyFirst, { n: files[0].name }) : undefined);
       return;
     }
     const isImage = (x: File) => /^image\//.test(x.type) || (!x.type && IMAGE_EXT.test(x.name));
+    const isData = (x: File) => /\.(json|toml)$/i.test(x.name);
+    // Comparing: one .json / .toml fills the next side; two fill A and B at once.
+    if (s0.tool === 'diff' && files.some(isData)) {
+      const two = files.filter(isData).slice(0, 2);
+      Promise.all(two.map((x) => x.arrayBuffer())).then((bufs) => {
+        const texts = bufs.map((b) => decodeUtf8(b));
+        if (texts.some((x) => x === null)) { toast(t.notUtf8, 5000); return; }
+        if (two.length === 2) replace({ diffA: normEol(texts[0]!).text, diffB: normEol(texts[1]!).text, diffLast: 'diffB' }, f(t.diffFiles, { a: two[0].name, b: two[1].name }));
+        else fillDiff(texts[0]!, files.length > 1 ? f(t.onlyFirst, { n: two[0].name }) : undefined);
+      }, () => toast(t.readFail, 5000));
+      return;
+    }
     const file = files.find((x) => isImage(x) || /\.(json|toml|txt)$/i.test(x.name));
     if (!file) { toast(t.unsupportedFile, 5000); return; }
     // Only one file is opened; say which when several were dropped.
@@ -175,9 +237,9 @@ export function App() {
       if (s === null) { toast(t.notUtf8, 5000); return; }
       if (/\.toml$/i.test(file.name)) replace({ toml: s, sel: { ...ref.current.sel, toml: '' }, tool: 'toml' }, note);
       else if (/\.json$/i.test(file.name)) replace({ json: s, sel: { ...ref.current.sel, json: '' }, tool: 'json' }, note);
-      else routeText(s);
+      else if (!takeText(s, note)) routeText(s);
     });
-  }, [byteFile, decodeFile, replace, routeText, toast]);
+  }, [byteFile, decodeFile, fillDiff, replace, routeText, takeText, toast]);
 
   // Global listeners: resize, system theme, shortcuts, smart paste, drag & drop.
   useEffect(() => {
@@ -206,35 +268,20 @@ export function App() {
     };
 
     const onPaste = (e: ClipboardEvent) => {
+      const s = ref.current;
+      const bytes = s.tool === 'b64' || s.tool === 'hash';
       // Text wins: apps like Office put a picture of the selection next to the text.
       const text = e.clipboardData?.getData('text') || '';
-      const s = ref.current;
-      // Base64 and Hash keep what is pasted on a blank area (any file, or the text itself).
-      if (s.tool === 'b64' || s.tool === 'hash') {
-        if (isField(e.target)) return;
-        if (!text) {
-          const file = Array.from(e.clipboardData?.items || []).find((it) => it.kind === 'file')?.getAsFile();
-          if (file) { e.preventDefault(); byteFile(file); }
-          return;
-        }
-        e.preventDefault();
-        const n = normEol(text);
-        if (s.tool === 'hash') { set({ hashFile: null, hashCr: n.cr }); replace({ hashIn: n.text }); }
-        else { set({ b64File: null, b64Cr: n.cr }); replace({ b64In: n.text }); }
-        return;
-      }
-      if (!text.trim()) {
-        for (const it of Array.from(e.clipboardData?.items || [])) {
-          if (it.type?.startsWith('image/')) {
-            const file = it.getAsFile();
-            if (file) { e.preventDefault(); decodeFile(file, dictFor(ref.current.lang).pasted); return; }
-          }
-        }
+      // No text: a file. Base64 / Hash take any file (whitespace is content there); others scan images.
+      if (bytes ? !text : !text.trim()) {
+        const items = Array.from(e.clipboardData?.items || []);
+        const file = items.find((it) => (bytes ? it.kind === 'file' : it.type?.startsWith('image/')))?.getAsFile();
+        if (file) { e.preventDefault(); if (bytes) byteFile(file); else decodeFile(file, dictFor(s.lang).pasted); }
         return;
       }
       if (isField(e.target) || !CONFIG.smartPaste) return;
       e.preventDefault();
-      routeText(text);
+      if (!takeText(text)) routeText(text);
     };
 
     let depth = 0;
@@ -267,7 +314,7 @@ export function App() {
       window.removeEventListener('drop', dDrop);
       mq?.removeEventListener('change', onMq);
     };
-  }, [byteFile, decodeFile, replace, routeText, handleFiles]);
+  }, [byteFile, decodeFile, routeText, takeText, handleFiles]);
 
   // Theme on <html> so body background and native controls follow it.
   useLayoutEffect(() => {
@@ -343,7 +390,7 @@ export function App() {
         {S.dragOver && (
           <div className="drop-overlay">
             <span style={{ fontSize: 20, fontWeight: 600, color: 'var(--acc)' }}>{T.dropHere}</span>
-            <span style={{ fontSize: 13, color: 'var(--mut)' }}>{S.tool === 'b64' || S.tool === 'hash' ? T.dropAny : T.dropHereSub}</span>
+            <span style={{ fontSize: 13, color: 'var(--mut)' }}>{S.tool === 'b64' || S.tool === 'hash' ? T.dropAny : S.tool === 'diff' ? T.dropDiff : T.dropHereSub}</span>
           </div>
         )}
         {S.toast && (

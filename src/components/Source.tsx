@@ -20,6 +20,8 @@ export function Source(p: {
   text: string; onText: (s: string) => void;
   file?: File | null; onFile?: (f: File | null) => void;
   eol?: Eol; onEol?: (e: Eol) => void; cr?: boolean; onCr?: () => void;
+  /** Text pasted into the empty box (the whole input), for tools that pick a mode from it. */
+  onFirstPaste?: (text: string) => void;
   onClear: () => void;
 }) {
   const { T } = useApp();
@@ -45,7 +47,11 @@ export function Source(p: {
       ) : (
         <textarea data-autofocus="1" className="area" value={p.text} spellCheck={false} placeholder={p.placeholder}
           onChange={(e) => p.onText(e.target.value)}
-          onPaste={(e) => { if (e.clipboardData.getData('text').includes('\r')) p.onCr?.(); }}
+          onPaste={(e) => {
+            const t = e.clipboardData.getData('text');
+            if (t.includes('\r')) p.onCr?.();
+            if (!p.text && t) p.onFirstPaste?.(t);
+          }}
           style={{ flex: 1, minHeight: 220, padding: '14px 16px', font: "13px/1.65 'Geist Mono', monospace", whiteSpace: 'pre-wrap', wordBreak: 'break-all' }} />
       )}
       {eolBar && (

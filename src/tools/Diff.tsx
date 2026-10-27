@@ -160,7 +160,7 @@ export function Diff() {
         <span style={{ fontWeight: 600 }}>{label}</span><span style={{ fontSize: 12, color }}>{status}</span>
       </div>
       {msg && <div style={{ padding: '6px 16px', fontSize: 12, color: 'var(--del)', background: 'var(--delBg)', wordBreak: 'break-word' }}><Vis text={msg} /></div>}
-      <textarea data-autofocus={auto ? '1' : undefined} className="area" value={value} onChange={(e) => set({ [key]: e.target.value })}
+      <textarea data-autofocus={auto ? '1' : undefined} className="area" value={value} onChange={(e) => set({ [key]: e.target.value, diffLast: key })}
         spellCheck={false} placeholder="JSON / TOML" style={{ minHeight: 200, padding: '12px 16px', whiteSpace: 'pre', overflow: 'auto' }} />
     </section>
   );
@@ -171,7 +171,7 @@ export function Diff() {
         <Toggle on={S.ignoreOrder} label={T.ignoreOrder} onClick={() => set((s) => ({ ignoreOrder: !s.ignoreOrder }))} />
         <Toggle on={S.onlyDiff} label={T.onlyDiff} onClick={() => set((s) => ({ onlyDiff: !s.onlyDiff }))} />
         <span className="sep" />
-        <button className="btn" onClick={() => set((s) => ({ diffA: s.diffB, diffB: s.diffA }))}>⇄ {T.swap}</button>
+        <button className="btn" onClick={() => set((s) => ({ diffA: s.diffB, diffB: s.diffA, diffLast: s.diffLast === 'diffA' ? 'diffB' : s.diffLast === 'diffB' ? 'diffA' : null }))}>⇄ {T.swap}</button>
         <button className="btn" onClick={() => replace({ diffA: SAMPLE_A, diffB: SAMPLE_B })}>{T.sample}</button>
         <button className="btn" onClick={() => replace({ diffA: '', diffB: '' })}>{T.clear}</button>
       </div>

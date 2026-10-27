@@ -53,6 +53,8 @@ export interface State {
   onlyDiff: boolean;
   diffView: 'tree' | 'list';
   dCol: Record<string, boolean>;
+  /** Side edited last: the next paste or dropped file fills the other one. */
+  diffLast: 'diffA' | 'diffB' | null;
   b64In: string;
   b64Mode: 'enc' | 'dec';
   b64Url: boolean;
@@ -154,6 +156,7 @@ export function initState(): State {
     onlyDiff: pr.onlyDiff !== false,
     diffView: oneOf(pr.diffView, ['tree', 'list'] as const, 'tree'),
     dCol: {},
+    diffLast: null,
     b64In: inp.b64In ?? '',
     b64Mode: oneOf(pr.b64Mode, ['enc', 'dec'] as const, 'enc'),
     b64Url: pr.b64Url === true,
@@ -180,7 +183,7 @@ export interface Ctx {
   replace: (patch: Partial<State>, msg?: string) => void;
   toolName: (id: ToolId) => string;
   routeText: (text: string, silent?: boolean) => void;
-  detect: (text: string) => 'ts' | 'tm' | 'json' | 'toml' | null;
+  detect: (text: string) => 'ts' | 'tm' | 'json' | 'toml' | 'b64' | null;
   decodeFile: (file: File, name?: string) => void;
 }
 

@@ -6,7 +6,7 @@ import { Source } from '../components/Source';
 import { useSettled } from '../components/useSettled';
 import { Vis, countInvisible } from '../components/Vis';
 import { decodeUtf8, errInfo, textBytes, type ErrInfo } from '../lib/data';
-import { B64Error, b64decode, b64encode, hexDump, sniff, type B64Note } from '../lib/b64';
+import { B64Error, b64decode, b64encode, hexDump, looksB64, sniff, type B64Note } from '../lib/b64';
 import { toHex } from '../lib/hash';
 
 /** Files above this are refused: the Base64 text would be too large to show or copy. */
@@ -40,7 +40,7 @@ function download(bytes: Uint8Array, name: string, mime: string) {
 type Dec = { bytes: Uint8Array; notes: B64Note[]; mime?: string; text: string | null } | { err: B64Error; info: ErrInfo } | null;
 
 export function Base64() {
-  const { S, set, T, copy, replace } = useApp();
+  const { S, set, T, copy, replace, toast } = useApp();
   const enc = S.b64Mode === 'enc';
   const file = enc ? S.b64File : null;
   const [text, pending] = useSettled(S.b64In);
@@ -114,7 +114,12 @@ export function Base64() {
           onText={(v) => set({ b64In: v, ...(v ? {} : { b64Cr: false }) })}
           file={file} onFile={(fl) => set({ b64File: fl, b64Cr: false })}
           eol={S.b64Eol} onEol={enc ? (e) => set({ b64Eol: e }) : undefined} cr={enc && S.b64Cr} onCr={() => set({ b64Cr: true })}
-          onClear={() => { set({ b64File: null, b64Cr: false }); replace({ b64In: '' }); }} />
+          onFirstPaste={(t) => {
+            // Pasting into the empty box: Base64 / a data URL is decoded, anything else encoded.
+            const m = looksB64(t) ? 'dec' : 'enc';
+            if (m !== S.b64Mode) { set({ b64Mode: m }); toast(f(T.b64.switched, { m: m === 'dec' ? T.b64.dec : T.b64.enc }), 3000); }
+          }}
+          onClear={() => replace({ b64In: '', b64File: null, b64Cr: false })} />
 
         <section className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div className="card-head" style={{ height: 44, gap: 8 }}>

@@ -24,6 +24,8 @@ export function QrGen() {
     const cv = qrCanvas(model);
     // Pass a promise so clipboard.write runs inside the click (Safari rejects it from a toBlob callback).
     const png = new Promise<Blob>((res, rej) => cv.toBlob((b) => (b ? res(b) : rej(new Error('toBlob failed')))));
+    // Putting an image on the clipboard can take seconds: say it has started.
+    toast(T.imgCopying, 60_000);
     try {
       navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]).then(() => toast(T.imgCopied), () => toast(T.imgCopyFail));
     } catch {
@@ -45,7 +47,9 @@ export function QrGen() {
           placeholder={T.qrPh} style={{ minHeight: 300, padding: 16, fontSize: 14 }} />
       </section>
       <section className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18 }}>
-        <div style={{ width: '100%', maxWidth: 300, aspectRatio: '1', background: '#ffffff', border: '1px solid var(--line)', borderRadius: 12, padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {/* The code itself copies the image when clicked. */}
+        <button className="qr-box" onClick={copyImg} disabled={!model} title={model ? T.copyImg : undefined} aria-label={T.qrImgLabel}
+          style={{ width: '100%', maxWidth: 300, aspectRatio: '1', background: '#ffffff', border: '1px solid var(--line)', borderRadius: 12, padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: model ? 'pointer' : 'default', font: 'inherit' }}>
           {model ? (
             <svg viewBox={`0 0 ${model.n} ${model.n}`} shapeRendering="crispEdges" style={{ width: '100%', height: '100%', display: 'block' }}>
               <path d={model.d} fill="#111111" />
@@ -53,7 +57,7 @@ export function QrGen() {
           ) : (
             <span style={{ fontSize: 13, color: m ? 'oklch(0.52 0.18 25)' : '#8f8e89', textAlign: 'center' }}>{!m ? T.qrEmpty : 'err' in m && m.err === 'bad' ? T.qrBadText : T.qrTooLong}</span>
           )}
-        </div>
+        </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
           <span style={{ fontSize: 12.5, color: 'var(--mut)' }}>{T.ec}</span>
           <Seg<Ec> mono value={S.qrEc} onChange={(l) => set({ qrEc: l })}
@@ -125,7 +129,7 @@ export function QrScan() {
                     <span style={{ fontSize: 12, color: 'var(--mut)', padding: '2px 8px', borderRadius: 999, background: 'var(--seg)' }}>{T.kinds[k]}</span>
                     {c.enc && <span style={{ fontSize: 12, color: 'var(--chg)', padding: '2px 8px', borderRadius: 999, background: 'var(--chgBg)' }}>{c.enc === 'browser' ? T.decodedByBrowser : f(T.decodedAs, { e: c.enc })}</span>}
                   </div>
-                  <div style={{ font: "14px/1.55 'Geist Mono','PingFang SC',monospace", wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}><Vis text={c.text} /></div>
+                  <button className="qr-text" onClick={() => copy(c.text)} title={T.clickCopy}><Vis text={c.text} /></button>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button className="btn inv" onClick={() => copy(c.text)} style={{ padding: '0 14px', fontSize: 12.5 }}>{T.copy}</button>
                     {k === 'url' && (

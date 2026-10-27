@@ -199,3 +199,16 @@ export function checkHash(input: string, d: Digests): Check | null {
   if (!bytes || !algo || (isHex && form === 'b64')) return { unknown: true, hexLen: isHex ? s.length : undefined };
   return { ok: d[algo].every((x, i) => x === bytes![i]), algo, form };
 }
+
+/**
+ * A pasted line that is a hash to check, not text to hash: 32 / 40 / 64 hex digits (optionally
+ * "md5:" / "sha256:" prefixed, or followed by a file name as md5sum / sha256sum print), a BSD
+ * checksum line, or an SRI value ("sha256-…").
+ */
+export function hashLike(s: string): boolean {
+  const t = s.trim();
+  if (!t || t.includes('\n')) return false;
+  return /^(?:(?:md5|sha-?1|sha-?256)\s*[:=]?\s*)?(?:[0-9a-f]{32}|[0-9a-f]{40}|[0-9a-f]{64})(?:\s+\*?\S.*)?$/i.test(t)
+    || /^(?:md5|sha-?1|sha-?256)\s*\(.*\)\s*=\s*[0-9a-f]{32,64}$/i.test(t)
+    || /^sha(?:1|256)-[A-Za-z0-9+/]{27,43}={0,2}$/.test(t);
+}

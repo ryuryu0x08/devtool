@@ -87,6 +87,12 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
   padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; text-align: left;
 }
 .kv:hover { background: var(--sub); }
+.qr-box:not(:disabled):hover { box-shadow: 0 0 0 3px var(--accRing); }
+.qr-text {
+  display: block; width: calc(100% + 16px); margin: 0 -8px; padding: 6px 8px; border: 0; border-radius: 8px; background: transparent;
+  color: inherit; text-align: left; cursor: pointer; font: 14px/1.55 'Geist Mono', 'PingFang SC', monospace; word-break: break-all; white-space: pre-wrap;
+}
+.qr-text:hover { background: var(--sub); }
 .kv .k { font-size: 12.5px; color: var(--mut); }
 .kv .v { font: 13.5px 'Geist Mono', 'PingFang SC', monospace; word-break: break-all; }
 .kv .c { font-size: 11px; color: var(--faint); }

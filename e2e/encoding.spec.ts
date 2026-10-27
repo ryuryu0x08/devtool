@@ -6,7 +6,7 @@ import type { Page } from '@playwright/test';
 const input = (page: Page) => page.locator('textarea[data-autofocus]');
 const b64Out = (page: Page) => page.locator('pre.b64-out');
 const b64Status = (page: Page) => page.locator('.b64-status');
-const hashOf = (page: Page, algo: string) => page.locator(`[data-algo="${algo}"] .hash-val`);
+const hashOf = (page: Page, algo: string) => page.locator(`[data-algo="${algo}"] .v`);
 const node = (algo: string, b: Buffer | string) => createHash(algo).update(b).digest('hex');
 /** Same pattern in the page and here, so large files don't cross the test protocol. */
 const pattern = (n: number) => Buffer.from(Uint8Array.from({ length: n }, (_, i) => (i * 31 + (i >> 9)) & 255));
@@ -139,7 +139,7 @@ test.describe('Base64', () => {
     await expect(input(page)).toHaveValue('aGVsbG8=\n');
     await expect(b64Out(page)).toHaveText('hello');
     await drop(page, [{ name: 'p.bin', bytes: [0xff, 0xfe, 0] }]);
-    await expect(toast(page)).toHaveText('这个文件不是 UTF-8 文本，不能当作 Base64 解码；已切换到「编码」');
+    await expect(toast(page)).toHaveText('这个文件的内容不是 Base64，已切换到「编码」，按文件原样编码');
     await expect(b64Out(page)).toHaveText('//4A');
   });
 
@@ -170,7 +170,8 @@ test.describe('hash', () => {
     await expect(hashOf(page, 'sha256')).toHaveText(node('sha256', t).toUpperCase());
     await page.locator('.seg button', { hasText: /^Base64$/ }).click();
     await expect(hashOf(page, 'md5')).toHaveText(createHash('md5').update(t).digest('base64'));
-    await page.locator('[data-algo="sha1"] button').click();
+    // The whole row copies (no separate button to aim for).
+    await page.locator('[data-algo="sha1"] .k').click();
     await expect.poll(() => clipboard(page)).toBe(createHash('sha1').update(t).digest('base64'));
   });
 

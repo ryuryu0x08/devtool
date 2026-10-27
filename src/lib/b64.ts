@@ -1,5 +1,6 @@
 // Base64 (RFC 4648), standard and URL-safe alphabets. Decoding refuses what it can't read, with
 // the position, and reports everything it tolerated instead of passing over it silently.
+import { decodeUtf8 } from './data';
 
 const STD = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 const ENC_STD = Uint8Array.from(STD, (c) => c.charCodeAt(0));
@@ -89,6 +90,25 @@ export function b64decode(src: string): { bytes: Uint8Array; notes: B64Note[]; m
     if (vals[q + 2] & 3) notes.push({ k: 'bits' });
   }
   return { bytes: out, notes, mime: m ? m[1] : undefined };
+}
+
+/**
+ * Text that is meant to be decoded: a data URL, or Base64 that decodes cleanly to readable UTF-8
+ * text or a known file type. Ordinary words fail this ("username" decodes to invalid UTF-8).
+ */
+export function looksB64(s: string): boolean {
+  const t = s.trim();
+  if (/^data:[^,]*;base64,/i.test(t)) return true;
+  if (t.length < 8 || !/^[A-Za-z0-9+/_\-\s]+={0,2}$/.test(t)) return false;
+  try {
+    const r = b64decode(t);
+    if (!r || r.notes.some((n) => n.k === 'bits')) return false;
+    if (sniff(r.bytes)) return true;
+    const text = decodeUtf8(r.bytes);
+    return text !== null && !/[\u0000-\u0008\u000e-\u001f\u007f]/.test(text);
+  } catch {
+    return false;
+  }
 }
 
 /** File type from the first bytes, for the image preview and the download's file name. */

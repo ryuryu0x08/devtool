@@ -1,8 +1,8 @@
 // Hashes and Base64 checked against Node's own implementations (node:crypto, Buffer).
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { ALGOS, bitLen, checkHash, digestAll, fmtDigest, hashers, toHex, type Algo } from './hash';
-import { B64Error, b64decode, b64encode, hexDump, sniff } from './b64';
+import { ALGOS, bitLen, checkHash, digestAll, fmtDigest, hashLike, hashers, toHex, type Algo } from './hash';
+import { B64Error, b64decode, b64encode, hexDump, looksB64, sniff } from './b64';
 import { bytesLabel, normEol, textBytes } from './data';
 
 const NODE: Record<Algo, string> = { md5: 'md5', sha1: 'sha1', sha256: 'sha256' };
@@ -195,5 +195,38 @@ describe('text → bytes', () => {
     expect(bytesLabel(1536)).toBe('1.5 KB');
     expect(bytesLabel(25 * 1024 * 1024)).toBe('25.0 MB');
     expect(bytesLabel(3 * 1024 ** 3)).toBe('3.00 GB');
+  });
+});
+
+describe('guessing what pasted text is for (shortest path, never a wrong guess on ordinary text)', () => {
+  const sha = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';
+  it.each([
+    [sha, true], [sha.toUpperCase(), true], ['900150983cd24fb0d6963f7d28e17f72', true], ['a9993e364706816aba3e25717850c26c9cd0d89d', true],
+    ['sha256:' + sha, true], [sha + '  ubuntu-24.04.iso', true], ['900150983cd24fb0d6963f7d28e17f72 *setup.exe', true],
+    ['SHA256 (a.txt) = ' + sha, true], ['sha256-ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0=', true],
+    [sha.slice(1), false], ['hello world', false], ['abc', false], [sha + '\n' + sha, false], ['', false], ['0123456789abcdef', false],
+  ])('hashLike(%j) = %s', (s, want) => {
+    expect(hashLike(s)).toBe(want);
+  });
+  it.each([
+    ['aGVsbG8gd29ybGQ=', true], ['5L2g5aW977yM5LiW55WM', true], ['data:image/png;base64,iVBORw0KGgo=', true], ['data:,hello', false],
+    ['iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', true],
+    ['aGVs\nbG8g\nd29y\nbGQ=', true],
+    // Ordinary words and identifiers that happen to use only Base64 characters.
+    ['username', false], ['password', false], ['abcdefgh', false], ['HelloWorld', false], ['localhost', false], ['20261026', false],
+    ['Zm9v', false], ['hello world', false], ['{"a":1}', false], ['QR', false],
+    // Valid Base64 of binary that isn't a known file type.
+    [Buffer.from([0, 1, 2, 3, 4, 5, 6, 7, 8]).toString('base64'), false],
+  ])('looksB64(%j) = %s', (s, want) => {
+    expect(looksB64(s)).toBe(want);
+  });
+  it('random words of Base64 characters are almost never taken for Base64', () => {
+    const r = rng(9), A = 'abcdefghijklmnopqrstuvwxyz';
+    let hits = 0;
+    for (let i = 0; i < 5000; i++) {
+      const w = Array.from({ length: 8 + Math.floor(r() * 12) }, () => A[Math.floor(r() * 26)]).join('');
+      if (looksB64(w)) hits++;
+    }
+    expect(hits).toBeLessThan(25);
   });
 });

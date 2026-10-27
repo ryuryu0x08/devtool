@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { COMMON_TZ, TZ_ZH, f } from '../i18n';
 import { localTz, lsSet, useApp } from '../store';
 import { Seg } from '../components/Seg';
+import { KvRows } from '../components/Kv';
 import {
   daysIn, exactUnits, fmtISO, fmtWall, fracStr, hasMs, offLabel, parseTime, parseTs, relTime, resolveWall, tzOffset, tzParts, utc, type TsUnit,
 } from '../lib/time';
@@ -121,19 +122,6 @@ function TzPicker({ now }: { now: number }) {
         </>
       )}
     </div>
-  );
-}
-
-function KvRows({ rows }: { rows: [string, string][] }) {
-  const { T, copy } = useApp();
-  return (
-    <>
-      {rows.map(([label, value]) => (
-        <button key={label} className="kv" onClick={() => copy(value)}>
-          <span className="k">{label}</span><span className="v">{value}</span><span className="c">{T.copy}</span>
-        </button>
-      ))}
-    </>
   );
 }
 

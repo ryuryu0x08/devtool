@@ -5,7 +5,7 @@ import type { Page } from '@playwright/test';
 
 const fixture = (name: string) => fileURLToPath(new URL('./fixtures/' + name, import.meta.url));
 const qrText = (page: Page) => page.locator('textarea');
-const results = (page: Page) => page.locator('section .card div[style*="pre-wrap"]');
+const results = (page: Page) => page.locator('.qr-text');
 
 /** Generate a code, download the PNG, scan that file: the round trip through real pixels. */
 async function roundTrip(page: Page, text: string) {
@@ -37,8 +37,10 @@ test('text with no UTF-8 encoding is refused, too much text is explained', async
 
 test('copy image puts a PNG on the clipboard', async ({ page }) => {
   await open(page, '生成二维码');
-  await page.getByRole('button', { name: '复制图片' }).click();
-  await expect(toast(page)).toHaveText('图片已复制');
+  await page.getByRole('button', { name: '复制图片', exact: true }).click();
+  // Chrome sometimes takes ~7 s to put an image on the clipboard in a freshly opened page (measured here;
+  // repeated copies take ~0.1 s), so the wait is longer than for text.
+  await expect(toast(page)).toHaveText('图片已复制', { timeout: 15_000 });
   expect(await page.evaluate(async () => (await navigator.clipboard.read())[0].types)).toContain('image/png');
 });
 
@@ -92,4 +94,12 @@ test('copying text the clipboard may alter (NUL) warns', async ({ page }) => {
   await setValue(qrText(page), 'a\u0000b');
   await page.getByRole('button', { name: '复制文本' }).click();
   await expect(toast(page)).toHaveText('已复制；注意：内容含 NUL 或孤立代理字符，系统剪贴板可能改动它们');
+});
+
+test('copying an image says at once that it has started', async ({ page }) => {
+  await open(page, '生成二维码');
+  // A clipboard that never finishes: the click must still get an answer straight away.
+  await page.evaluate(() => { navigator.clipboard.write = () => new Promise(() => {}); });
+  await page.getByRole('button', { name: '复制图片', exact: true }).click();
+  await expect(toast(page)).toHaveText('正在复制图片…', { timeout: 1000 });
 });
