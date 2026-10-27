@@ -27,6 +27,7 @@ import { MobileBar, Sidebar } from './components/Sidebar';
 import { Palette } from './components/Palette';
 import { Vis } from './components/Vis';
 import { ToolBoundary } from './components/ToolBoundary';
+import { ZOOMS } from './components/Zoom';
 import { ErrLine } from './components/Panes';
 import { Timestamp } from './tools/Timestamp';
 import { QrGen, QrScan } from './tools/Qr';
@@ -76,6 +77,8 @@ export function App() {
   const lang = S.lang === 'en' ? 'en' : 'zh';
   const isMac = /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
   const dark = S.theme === 'dark' || (S.theme === 'auto' && S.sysDark);
+  // Text size of the tool area (components/Zoom.tsx); the sidebar keeps its size.
+  const zoom = ZOOMS.includes(S.o['ui.zoom'] as number) ? (S.o['ui.zoom'] as number) : 100;
 
   const toastTimer = useRef<number | undefined>(undefined);
   const toast = useCallback((msg: string, ms = 1500, undo: Partial<State> | null = null) => {
@@ -498,7 +501,7 @@ export function App() {
         {S.wide && <Sidebar />}
         <main className="main">
           {!S.wide && <MobileBar />}
-          <div className="content" style={{ padding: S.wide ? '26px 36px 56px' : '14px 14px 40px' }}>
+          <div className="content" style={{ padding: S.wide ? '26px 36px 56px' : '14px 14px 40px', zoom: zoom / 100 }}>
             <ToolBoundary key={S.tool} reset={(TOOL_INPUTS[S.tool] ?? []).map((k) => S[k])} fallback={(err, retry) => (
               <section className="card tool-crash" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <ErrLine msg={f(T.ui.crashed, { m: err.message || String(err) })} />

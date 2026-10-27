@@ -273,3 +273,12 @@ body.dragging-move, body.dragging-move * { cursor: grabbing !important; user-sel
 .cron-field { display: flex; flex-direction: column; gap: 8px; padding: 10px 0; border-top: 1px solid var(--line); }
 .cron-field-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .cron-field-head .cron-row-label { width: 56px; }
+/* Text size of the tool area (components/Zoom.tsx) */
+.zoom-ctl { display: flex; align-items: center; gap: 2px; padding: 2px; border-radius: 9px; background: var(--seg); width: max-content; }
+.zoom-ctl.vertical { flex-direction: column; }
+.zoom-btn { height: 26px; min-width: 30px; padding: 0 6px; border: 0; border-radius: 7px; background: transparent; color: var(--mut); font-size: 12px; font-weight: 500; cursor: pointer; font-variant-numeric: tabular-nums; }
+.zoom-btn:hover:not(:disabled) { background: var(--card); color: var(--ink); }
+.zoom-btn:disabled { opacity: 0.35; cursor: default; }
+.zoom-btn.pct { min-width: 46px; }
+.zoom-ctl.vertical .zoom-btn { min-width: 36px; padding: 0 2px; }
+.zoom-ctl.vertical .zoom-btn.pct { font-size: 10.5px; }

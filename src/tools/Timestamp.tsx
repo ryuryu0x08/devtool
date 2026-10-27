@@ -88,7 +88,8 @@ export function TzPicker({ now }: { now: number }) {
       </button>
       {S.tzOpen && (
         <>
-          <div onClick={close} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+          {/* Oversized so it still covers the screen when the tool area is zoomed out. */}
+          <div onClick={close} style={{ position: 'fixed', top: '-100vh', left: '-100vw', width: '300vw', height: '300vh', zIndex: 40 }} />
           <div className="pop" style={{ position: 'absolute', right: 0, top: 46, zIndex: 41, width: 340, maxWidth: 'calc(100vw - 28px)' }}>
             <div style={{ padding: 10, borderBottom: '1px solid var(--line)' }}>
               <input autoFocus value={S.tzQ} onChange={(e) => set({ tzQ: e.target.value })} placeholder={T.tzSearch}

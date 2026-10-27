@@ -2,6 +2,7 @@ import { CATS, CAT_ORDER, TOOLS } from '../i18n';
 import { useApp, type Theme } from '../store';
 import { Seg } from './Seg';
 import { LogoGlyph } from './Logo';
+import { ZoomControl } from './Zoom';
 
 const NEXT_THEME: Record<Theme, Theme> = { light: 'dark', dark: 'auto', auto: 'light' };
 
@@ -55,6 +56,7 @@ export function Sidebar() {
               <Seg size="sm" value={S.theme} onChange={(th) => set({ theme: th })}
                 opts={[{ value: 'light', label: T.theme.light }, { value: 'dark', label: T.theme.dark }, { value: 'auto', label: T.theme.auto }]} />
             </div>
+            <ZoomControl />
           </div>
         </div>
       ) : (
@@ -77,6 +79,7 @@ export function Sidebar() {
           <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
             <button className="rail-btn" onClick={c.toggleLang} title="中 / EN">{c.langBtn}</button>
             <button className="rail-btn" onClick={c.cycleTheme} title={c.themeTitle}>{c.themeShort}</button>
+            <ZoomControl vertical />
             <button className="ghost" onClick={c.toggleSide} aria-label={T.expand} title={T.expand + (isMac ? '  ⌘B' : '  Ctrl+B')}
               style={{ width: 44, height: 30, borderRadius: 8, color: 'var(--faint)', fontSize: 16 }}>»</button>
           </div>

@@ -118,7 +118,7 @@ const M = [
   ['layout: stacked panes stay half width', 'src/components/Split.tsx', "{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', rowGap: GAP }", "{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', rowGap: GAP }", 'each tool remembers'],
   ['layout: a pane can be squeezed to nothing', 'src/components/Split.tsx', '    return Math.min(1 - lo, Math.max(lo, r));', '    return r;', 'share the width'],
   ['layout: narrow screens keep side by side', 'src/components/Split.tsx', "  const shown: Mode = narrow ? 'col' : target ?? mode;", '  const shown: Mode = target ?? mode;', 'always stacked'],
-  ['layout: a carried result does not follow the pointer', 'src/components/Split.tsx', '    f.style.transform = `translate(${g.x - g.fx * g.w - rs.left}px, ${g.y - g.oy - rs.top}px)`;', '', 'each tool remembers'],
+  ['layout: a carried result does not follow the pointer', 'src/components/Split.tsx', "    f.style.transform = `translate(${(g.x - g.fx * g.w - rs.left) / z}px, ${(g.y - g.oy - rs.top) / z}px)`;", '', 'each tool remembers'],
   ['layout: the layout waits for the drop instead of switching while carried', 'src/components/Split.tsx', '      if (next !== tgt) { tgt = next; animate.current = true; setTarget(next); }', '      if (next !== tgt) tgt = next;', 'each tool remembers'],
   ['bases: the other boxes do not follow', 'src/tools/BytesTools.tsx', '    if (!ok) return \'\';\n    const t = writeInt(ok.v, baseOf(k));', "    if (!ok) return '';\n    const t = writeInt(ok.v, Number(src === 'n' ? custom : src));", 'editing any one updates'],
   ['bases: a click does not select the number', 'src/tools/BytesTools.tsx', "                  onFocus={(e) => e.currentTarget.select()}\n                  onMouseDown={(e) => {\n                    // The first click focuses and selects everything; a click in a focused box places the caret.\n                    const el = e.currentTarget;\n                    if (document.activeElement !== el) { e.preventDefault(); el.focus(); el.select(); }\n                  }} />", "                  />", 'editing any one updates'],
@@ -141,6 +141,9 @@ const M = [
   ["XML: nesting too deep shown as an unexpected failure", 'src/tools/FormatTools.tsx', "      if (e instanceof XmlError) return { err: { msg: f(T.xml.e[e.code], { a: e.arg }), info: errInfo(e, t) } };\n      if (tooDeep(e)) return { err: { msg: T.ui.tooDeep, info: null } };", "      if (e instanceof XmlError) return { err: { msg: f(T.xml.e[e.code], { a: e.arg }), info: errInfo(e, t) } };", 'nesting too deep'],
   ["layout: a cancelled carry keeps the layout it reached", 'src/components/Split.tsx', '      if (!cancel) setMode(tgt);', '      setMode(tgt);', 'system cancels'],
   ["result: a huge text is laid out whole", 'src/components/Panes.tsx', '  const cut = text.length > SHOW_CHARS;', '  const cut = false;', 'shown in part'],
+  // Text size.
+  ['text size: dragging ignores the zoom (the result drifts from the pointer)', 'src/components/Split.tsx', "    f.style.transform = `translate(${(g.x - g.fx * g.w - rs.left) / z}px, ${(g.y - g.oy - rs.top) / z}px)`;", "    f.style.transform = `translate(${g.x - g.fx * g.w - rs.left}px, ${g.y - g.oy - rs.top}px)`;", 'text size'],
+  ['text size: the sidebar scales too', 'src/App.tsx', "        {S.wide && <Sidebar />}", "        {S.wide && <div style={{ zoom: zoom / 100 }}><Sidebar /></div>}", 'text size'],
 ];
 
 const args = process.argv.slice(2);

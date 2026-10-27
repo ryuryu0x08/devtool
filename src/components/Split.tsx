@@ -6,6 +6,7 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
 import { useApp } from '../store';
 import { useOpt } from './Panes';
+import { useZoom } from './Zoom';
 
 /** Below this width the two panes don't fit side by side. */
 const STACK_BELOW = 720;
@@ -25,6 +26,9 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
   const key = id ?? S.tool;
   const [mode, setMode] = useOpt<Mode>('lay.' + key, 'row', ['row', 'col']);
   const [ratio, setRatio] = useOpt('split.' + key, 0.5);
+  // Rects and the pointer are in screen px; lengths written into styles here are scaled by the
+  // tool area's zoom, so they are divided by it.
+  const z = useZoom()[0] / 100;
   const box = useRef<HTMLDivElement>(null);
   const paneA = useRef<HTMLDivElement>(null);
   const slotB = useRef<HTMLDivElement>(null);
@@ -63,7 +67,7 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
     const g = grab.current, f = floatB.current, s = slotB.current;
     if (!g || !f || !s) return;
     const rs = s.getBoundingClientRect();
-    f.style.transform = `translate(${g.x - g.fx * g.w - rs.left}px, ${g.y - g.oy - rs.top}px)`;
+    f.style.transform = `translate(${(g.x - g.fx * g.w - rs.left) / z}px, ${(g.y - g.oy - rs.top) / z}px)`;
   };
 
   const measure = () => {
@@ -85,16 +89,16 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
     const p = prev.current;
     if (animate.current && p && p.shown !== shown && !reduced()) {
       const opts = { duration: 260, easing: EASE };
-      A.animate([{ width: p.a.width + 'px', transform: `translate(${p.a.left - ra.left}px, ${p.a.top - ra.top}px)` }, { width: ra.width + 'px', transform: 'none' }], opts);
+      A.animate([{ width: p.a.width / z + 'px', transform: `translate(${(p.a.left - ra.left) / z}px, ${(p.a.top - ra.top) / z}px)` }, { width: ra.width / z + 'px', transform: 'none' }], opts);
       // A carried result follows the pointer; it shrinks to fit a narrower slot, and grows only
       // when dropped. Otherwise it moves with the layout.
       const g = grab.current;
       if (g && rb.width < g.w) {
-        F.animate([{ width: g.w + 'px' }, { width: rb.width + 'px' }], opts);
+        F.animate([{ width: g.w / z + 'px' }, { width: rb.width / z + 'px' }], opts);
         g.w = rb.width;
-        F.style.width = g.w + 'px';
+        F.style.width = g.w / z + 'px';
       }
-      if (!g) F.animate([{ width: p.b.width + 'px', transform: `translate(${p.b.left - rb.left}px, ${p.b.top - rb.top}px)` }, { width: rb.width + 'px', transform: 'none' }], opts);
+      if (!g) F.animate([{ width: p.b.width / z + 'px', transform: `translate(${(p.b.left - rb.left) / z}px, ${(p.b.top - rb.top) / z}px)` }, { width: rb.width / z + 'px', transform: 'none' }], opts);
     }
     animate.current = false;
     if (grab.current) place();
@@ -146,7 +150,7 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
         moved = true;
         measure();
         grab.current = g;
-        floatB.current!.style.width = g.w + 'px';
+        floatB.current!.style.width = g.w / z + 'px';
         document.body.classList.add('dragging-move');
         setTarget(tgt);
       }
@@ -173,7 +177,7 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
       if (f) {
         f.style.transform = '';
         f.style.width = '';
-        if (!cancel && t && !reduced()) f.animate([{ transform: t, width: w }, { transform: 'none', width: slotB.current!.getBoundingClientRect().width + 'px' }], { duration: 260, easing: EASE });
+        if (!cancel && t && !reduced()) f.animate([{ transform: t, width: w }, { transform: 'none', width: slotB.current!.getBoundingClientRect().width / z + 'px' }], { duration: 260, easing: EASE });
       }
     };
     window.addEventListener('pointermove', move);

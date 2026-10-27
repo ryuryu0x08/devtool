@@ -123,3 +123,32 @@ test.describe('narrow screens', () => {
     await expect(page.locator('.split-gutter')).toHaveCount(0);
   });
 });
+
+test('text size: the tool area scales as a whole, the sidebar stays; remembered; dragging still follows the pointer', async ({ page }) => {
+  await open(page, 'URL 编解码');
+  const headH = () => page.evaluate(() => document.querySelector('.card-head span')!.getBoundingClientRect().height);
+  const navH = () => page.evaluate(() => document.querySelector('.nav-item')!.getBoundingClientRect().height);
+  const [h0, n0] = [await headH(), await navH()];
+  await page.getByRole('button', { name: '放大右侧内容' }).click();
+  await page.getByRole('button', { name: '放大右侧内容' }).click();
+  await expect(page.locator('.zoom-btn.pct')).toHaveText('125%');
+  expect((await headH()) / h0).toBeCloseTo(1.25, 1);
+  expect(await navH()).toBe(n0);
+  await page.reload();
+  await expect(page.locator('.zoom-btn.pct')).toHaveText('125%');
+  // Carried at 125 %: the result's centre stays under the pointer.
+  const g = (await page.locator('.split-grip').boundingBox())!;
+  await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(g.x + g.width / 2 - 120, g.y + 260, { steps: 8 });
+  const f = (await page.locator('.split-float').boundingBox())!;
+  expect(Math.abs(f.x + f.width / 2 - (g.x + g.width / 2 - 120))).toBeLessThan(3);
+  await page.mouse.up();
+  expect(await layout(page)).toBe('col');
+  // A click on the percentage goes back to 100 %; the smallest size disables A−.
+  await page.locator('.zoom-btn.pct').click();
+  expect(Math.abs((await headH()) - h0)).toBeLessThan(0.5);
+  for (let i = 0; i < 2; i++) await page.getByRole('button', { name: '缩小右侧内容' }).click();
+  await expect(page.locator('.zoom-btn.pct')).toHaveText('80%');
+  await expect(page.getByRole('button', { name: '缩小右侧内容' })).toBeDisabled();
+});
