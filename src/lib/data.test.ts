@@ -2,7 +2,8 @@
 // target can't hold exactly, and the diff never rounds or hides a difference.
 import { describe, expect, it } from 'vitest';
 import { ConvertError, MAX_DEPTH, Num, canon, changeNote, changePair, clipboardUnsafe, decodeUtf8, diffNode, errInfo, numKey, wellFormed, type DiffNode, type DiffOpts } from './data';
-import { codeText, qrModel } from './qr';
+import qrcode from 'qrcode-generator';
+import { QR_MAX_BYTES, codeText, qrModel } from './qr';
 import { astEqual, dupKeys, jsonValue, parseJsonAst, printJson, sortAst, toJsonText } from './json';
 import { VerifyError, formatToml, parseTomlDoc, toTomlText, tomlValue, verifyToml } from './toml';
 
@@ -423,5 +424,22 @@ describe('QR', () => {
     expect(qrModel('a\ud800b', 'M')).toEqual({ err: 'bad' });
     expect(qrModel('x'.repeat(5000), 'H')).toEqual({ err: 'long' });
     expect(qrModel('中文 😀', 'M')).toHaveProperty('d');
+  });
+  it('the size limit is the real capacity, checked without the library spending seconds on it', () => {
+    for (const ec of ['L', 'M', 'Q', 'H'] as const) {
+      const max = QR_MAX_BYTES[ec];
+      expect(qrModel('x'.repeat(max), ec), ec).toHaveProperty('d');
+      expect(qrModel('x'.repeat(max + 1), ec), ec).toEqual({ err: 'long' });
+      // The library agrees: one byte more does not fit.
+      const lib = qrcode(0, ec);
+      lib.addData('x'.repeat(max + 1), 'Byte');
+      expect(() => lib.make(), ec).toThrow();
+      // Multi-byte characters count as their UTF-8 bytes (中 is 3).
+      expect(qrModel('中'.repeat(Math.floor(max / 3)), ec), ec).toHaveProperty('d');
+      expect(qrModel('中'.repeat(Math.floor(max / 3) + 1), ec), ec).toEqual({ err: 'long' });
+    }
+    const t = performance.now();
+    expect(qrModel('x'.repeat(6_000_000), 'M')).toEqual({ err: 'long' });
+    expect(performance.now() - t).toBeLessThan(200);
   });
 });

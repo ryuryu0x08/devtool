@@ -126,7 +126,8 @@ test.describe('persistence', () => {
     await page.locator('textarea').fill('old text');
     await page.waitForTimeout(600);
     await setValue(page.locator('textarea'), 'x'.repeat(6_000_000));
-    await expect(toast(page)).toHaveText('内容过大，浏览器无法保存；刷新页面后不会保留');
+    // Laying out 6 MB of text takes the browser over a second, several when the machine is busy.
+    await expect(toast(page)).toHaveText('内容过大，浏览器无法保存；刷新页面后不会保留', { timeout: 20_000 });
     await page.reload();
     await expect(page.locator('textarea')).not.toHaveValue('old text');
   });

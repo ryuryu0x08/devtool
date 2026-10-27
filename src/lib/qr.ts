@@ -8,11 +8,16 @@ export interface QrModel { n: number; d: string }
 
 qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
 
+/** Most bytes a code holds (version 40, byte mode) at each error-correction level. */
+export const QR_MAX_BYTES: Record<Ec, number> = { L: 2953, M: 2331, Q: 1663, H: 1273 };
+
 /** Build an SVG path for the QR modules; `null` for empty text, `{err}` if it can't be encoded or doesn't fit. */
 export function qrModel(text: string, ec: Ec): QrModel | { err: 'bad' | 'long' } | null {
   if (!text) return null;
   // Lone surrogates have no UTF-8 encoding; the library would emit wrong bytes.
   if (!wellFormed(text)) return { err: 'bad' };
+  // Checked first: the library would take seconds to find that megabytes of text don't fit.
+  if (text.length > QR_MAX_BYTES[ec] || new TextEncoder().encode(text).length > QR_MAX_BYTES[ec]) return { err: 'long' };
   try {
     const qr = qrcode(0, ec);
     qr.addData(text, 'Byte');

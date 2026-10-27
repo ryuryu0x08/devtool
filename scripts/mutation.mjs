@@ -72,6 +72,7 @@ const M = [
   ['paste: CRLF in pasted text not reported', 'src/components/Source.tsx', "if (e.clipboardData.getData('text').includes('\\r')) p.onCr?.();", '', 'CRLF text says'],
   ['paste: blank-area paste leaves Base64 / Hash', 'src/App.tsx', "if (s.tool === 'b64' || s.tool === 'hash') {\n        if (isField(e.target)) return;", 'if (false) {\n        if (isField(e.target)) return;', 'blank area fills this tool'],
   // QR.
+  ['QR: huge text handed to the library (page freezes)', 'src/lib/qr.ts', "  if (text.length > QR_MAX_BYTES[ec] || new TextEncoder().encode(text).length > QR_MAX_BYTES[ec]) return { err: 'long' };", '', 'unit'],
   ['QR: GBK not tried', 'src/lib/qr.ts', "for (const enc of ['utf-8', 'gb18030', 'shift_jis']) {", "for (const enc of ['utf-8', 'shift_jis']) {", 'unit'],
   ['QR: no tiles (codes side by side missed)', 'src/lib/qr.ts', '  if (!tiles) return out;', '  return out;', 'several codes'],
   ['QR: files without a type refused', 'src/App.tsx', 'if (!file || (file.type && !/^image\\//.test(file.type)))', 'if (!file || !/^image\\//.test(file.type))', 'generate → download → scan'],

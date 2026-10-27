@@ -96,6 +96,23 @@ test('after switching tools the main input gets focus, but never steals it from 
   await expect(page.locator('textarea').nth(0)).not.toHaveValue(/MARK-7Q/);
 });
 
+test('the app mark replaces "TB" everywhere; the tab icon and touch icon load', async ({ page }) => {
+  await open(page);
+  await expect(page.locator('.logo svg')).toHaveCount(1);
+  await expect(page.locator('.logo', { hasText: 'TB' })).toHaveCount(0);
+  for (const sel of ['link[rel=icon]', 'link[rel=apple-touch-icon]']) {
+    const href = (await page.locator(sel).getAttribute('href'))!;
+    const r = await page.request.get(new URL(href, page.url()).toString());
+    expect(r.status(), sel).toBe(200);
+    expect(r.headers()['content-type'], sel).toMatch(sel.includes('apple') ? /image\/png/ : /image\/svg\+xml/);
+  }
+  await page.getByRole('button', { name: '收起侧栏' }).click();
+  const rail = page.getByRole('button', { name: '展开侧栏' }).first();
+  await expect(rail.locator('svg')).toHaveCount(1);
+  await rail.click();
+  await expect(page.locator('.side')).toHaveCSS('width', '232px');
+});
+
 test('no request leaves the page (works offline)', async ({ page }) => {
   const external: string[] = [];
   await page.route('**/*', (r) => {

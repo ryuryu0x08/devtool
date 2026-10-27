@@ -1,6 +1,7 @@
 import { CATS, CAT_ORDER, TOOLS } from '../i18n';
 import { useApp, type Theme } from '../store';
 import { Seg } from './Seg';
+import { LogoGlyph } from './Logo';
 
 const NEXT_THEME: Record<Theme, Theme> = { light: 'dark', dark: 'auto', auto: 'light' };
 
@@ -27,7 +28,7 @@ export function Sidebar() {
       {S.side ? (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: 211 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '2px 2px 14px 8px' }}>
-            <span className="logo" style={{ width: 26, height: 26, borderRadius: 7 }}>TB</span>
+            <span className="logo" style={{ width: 26, height: 26, borderRadius: 7 }}><LogoGlyph /></span>
             <span style={{ fontWeight: 600, fontSize: 15, flex: 1 }}>{T.brand}</span>
             <button className="ghost" onClick={c.toggleSide} aria-label={T.collapse} title={T.collapse + (isMac ? '  ⌘B' : '  Ctrl+B')}
               style={{ width: 30, height: 30, borderRadius: 7, color: 'var(--faint)', fontSize: 16, lineHeight: 1 }}>«</button>
@@ -59,7 +60,7 @@ export function Sidebar() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', gap: 6, width: 43 }}>
           <button className="logo" onClick={c.toggleSide} aria-label={T.expand} title={T.expand + (isMac ? '  ⌘B' : '  Ctrl+B')}
-            style={{ width: 32, height: 32, border: 0, borderRadius: 8, cursor: 'pointer', margin: '0 0 8px' }}>TB</button>
+            style={{ width: 32, height: 32, border: 0, borderRadius: 8, cursor: 'pointer', margin: '0 0 8px', padding: 0 }}><LogoGlyph /></button>
           <button className="search-btn mono" onClick={c.openPalette} title={T.search}
             style={{ width: 40, height: 34, padding: 0, justifyContent: 'center', color: 'var(--mut)', fontSize: 10.5, fontWeight: 500 }}>
             {isMac ? '⌘K' : '^K'}
@@ -92,7 +93,7 @@ export function MobileBar() {
   return (
     <div className="mbar">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px 8px 14px' }}>
-        <span className="logo" style={{ width: 28, height: 28, borderRadius: 8 }}>TB</span>
+        <span className="logo" style={{ width: 28, height: 28, borderRadius: 8 }}><LogoGlyph /></span>
         <span style={{ fontWeight: 600, fontSize: 16, flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tool[lang][0]}</span>
         <button className="mbtn" onClick={c.toggleLang}>{c.langBtn}</button>
         <button className="mbtn" onClick={c.cycleTheme}>{c.themeShort}</button>

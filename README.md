@@ -49,7 +49,7 @@ npm run test:all       # typecheck + test + test:e2e
 - **随机化测试**：`src/lib/fuzz.test.ts`（解析器与 `JSON.parse` 判断一致、格式化无损且稳定、篡改必被校验发现、差异结果可还原两侧）。
 - **一致性测试集**：TOML 官方测试集（`test/toml-test`，来自 [toml-lang/toml-test](https://github.com/toml-lang/toml-test)）和 JSONTestSuite（`test/json-test-suite`，来自 [nst/JSONTestSuite](https://github.com/nst/JSONTestSuite)），均为 MIT 许可。
 - **端到端测试**（`e2e/`，Playwright + Chromium，针对构建产物）：外壳与布局（含 320 / 390 / 1280 宽度）、智能粘贴与拖放、撤销、本地保存、复制失败、时间戳与夏令时、二维码生成 → 下载 → 识别往返（含 GBK、一图多码）、JSON / TOML 格式化与转换、差异对比的用例矩阵与跨工具往返、Base64 与哈希（含 24 MB 文件、CRLF 粘贴、核对）。每个测试都会检查：页面无报错，界面上没有未填的占位符、`undefined`、`NaN`。
-- **植入错误测试**（`scripts/mutation.mjs`）：逐个植入 58 种已知错误（数字按双精度比较、漏报新增字段、偏移按分钟取整、哈希常量写错、超过 512 MB 的长度溢出、Base64 混用字符集未报错、焦点被抢走、长提示超出屏幕等），每一个都必须让测试失败。
+- **植入错误测试**（`scripts/mutation.mjs`）：逐个植入 59 种已知错误（数字按双精度比较、漏报新增字段、偏移按分钟取整、哈希常量写错、超过 512 MB 的长度溢出、Base64 混用字符集未报错、焦点被抢走、长提示超出屏幕等），每一个都必须让测试失败。
 
 构建产物是纯静态文件（`base: './'`），可部署到任意静态托管。
 
@@ -65,6 +65,8 @@ src/
   lib/                 时间解析、数据对比、二维码等纯函数
 e2e/                   端到端测试（fixtures/ 下是生成测试图片的脚本和图片）
 scripts/mutation.mjs   植入错误测试
+scripts/icons.mjs      由 public/favicon.svg 生成 apple-touch-icon.png（改了图标后运行）
+public/                网页标签图标（随系统浅色 / 深色切换）和主屏幕图标；应用内 Logo 在 src/components/Logo.tsx，两处形状由测试保证一致
 test/                  第三方一致性测试集
 design/                Claude Design 交付的原型与对话记录
 ```
