@@ -72,7 +72,9 @@ const M = [
   ['paste: CRLF in pasted text not reported', 'src/components/Source.tsx', "if (t.includes('\\r')) p.onCr?.();", '', 'CRLF text says'],
   ['paste: a blank-area paste always leaves the current tool', 'src/App.tsx', 'if (!takeText(text)) routeText(text);', 'routeText(text);', 'blank area fills this tool'],
   // Shortest path: the result copies itself; pastes and files land where they are useful.
-  ['copy: a result row is not clickable', 'src/components/Kv.tsx', '<button className="kv" onClick={() => copy(value)} {...rest}>', '<button className="kv" {...rest}>', 'click anywhere on a row'],
+  ['copy: a result row is not clickable', 'src/components/Kv.tsx', '<button className="kv" title={T.clickCopy} onClick={() => copy(value)} {...rest}>', '<button className="kv" {...rest}>', 'click anywhere on a row'],
+  ['copy: a result block does not copy on click', 'src/components/Kv.tsx', '    copy(value);\n  };\n  const onKey', '  };\n  const onKey', 'result block'],
+  ['copy: dragging to select part still copies everything', 'src/components/Kv.tsx', '    if (sel && !sel.isCollapsed && e.currentTarget.contains(sel.anchorNode)) return;\n', '', 'result block'],
   ['diff: every paste fills A', 'src/App.tsx', "const side = s.diffLast === 'diffA' ? 'diffB' : 'diffA';", "const side = 'diffA';", 'two pastes fill A'],
   ['hash: a pasted checksum is hashed, not checked', 'src/App.tsx', 'if (hashLike(n.text) && (s.hashFile || s.hashIn))', 'if (false)', 'pasted checksum is checked'],
   ['Base64: direction not chosen from the content', 'src/App.tsx', "const mode = looksB64(n.text) ? 'dec' : 'enc';", 'const mode = s.b64Mode;', 'direction follows the content'],

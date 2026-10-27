@@ -3,6 +3,7 @@ import { f } from '../i18n';
 import { useApp } from '../store';
 import { Seg, Toggle } from '../components/Seg';
 import { Source } from '../components/Source';
+import { CopyBlock } from '../components/Kv';
 import { useSettled } from '../components/useSettled';
 import { Vis, countInvisible } from '../components/Vis';
 import { decodeUtf8, errInfo, textBytes, type ErrInfo } from '../lib/data';
@@ -40,7 +41,7 @@ function download(bytes: Uint8Array, name: string, mime: string) {
 type Dec = { bytes: Uint8Array; notes: B64Note[]; mime?: string; text: string | null } | { err: B64Error; info: ErrInfo } | null;
 
 export function Base64() {
-  const { S, set, T, copy, replace, toast } = useApp();
+  const { S, set, T, replace, toast } = useApp();
   const enc = S.b64Mode === 'enc';
   const file = enc ? S.b64File : null;
   const [text, pending] = useSettled(S.b64In);
@@ -92,7 +93,6 @@ export function Base64() {
   if (enc && file && S.b64DataUrl) notes.push(T.b64.dataUrlStd);
 
   const shown = (s: string) => (s.length > SHOW_CHARS ? s.slice(0, SHOW_CHARS) : s);
-  const outText = encOut && 'out' in encOut ? encOut.out : ok && view === 'text' ? ok.text! : '';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -137,10 +137,6 @@ export function Base64() {
                 <Seg size="sm" value={view} onChange={(v) => set({ b64View: v })} opts={[{ value: 'text', label: T.b64.text }, { value: 'hex', label: T.b64.hex }]} />
               )}
               {ok && <button className="btn sm" onClick={() => download(ok.bytes, fileName(), kind?.mime ?? 'application/octet-stream')}>{T.b64.dl}</button>}
-              <button className="btn sm inv" disabled={loading || (!outText && !(ok && view === 'hex'))}
-                onClick={() => { if (loading) return; if (ok && view === 'hex') copy(toHex(ok.bytes)); else if (outText) copy(outText); }}>
-                {ok && view === 'hex' ? T.b64.copyHex : T.copy}
-              </button>
             </span>
           </div>
           {notes.length > 0 && (
@@ -161,16 +157,17 @@ export function Base64() {
             ) : ok ? (
               <>
                 {preview && <img src={preview} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} style={{ display: 'block', maxWidth: '100%', maxHeight: 240, marginBottom: 12, borderRadius: 8, border: '1px solid var(--line)' }} />}
+                {/* The result copies itself: the decoded text, or in hex view the bytes as plain hex. */}
                 {view === 'text'
-                  ? <pre className="b64-out" style={{ margin: 0, font: "13px/1.6 'Geist Mono', monospace", whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}><Vis text={shown(ok.text!)} /></pre>
-                  : <pre className="b64-hex" style={{ margin: 0, font: "12.5px/1.6 'Geist Mono', monospace", whiteSpace: 'pre', overflow: 'auto' }}>{hexDump(ok.bytes, SHOW_BYTES)}</pre>}
+                  ? <CopyBlock value={ok.text!}><pre className="b64-out" style={{ margin: 0, font: "13px/1.6 'Geist Mono', monospace", whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}><Vis text={shown(ok.text!)} /></pre></CopyBlock>
+                  : <CopyBlock value={toHex(ok.bytes)}><pre className="b64-hex" style={{ margin: 0, font: "12.5px/1.6 'Geist Mono', monospace", whiteSpace: 'pre', overflow: 'auto' }}>{hexDump(ok.bytes, SHOW_BYTES)}</pre></CopyBlock>}
                 {(view === 'text' ? ok.text!.length > SHOW_CHARS : ok.bytes.length > SHOW_BYTES) && (
                   <div style={{ marginTop: 10, fontSize: 12, color: 'var(--faint)' }}>{view === 'text' ? f(T.b64.outFirst, { n: SHOW_CHARS.toLocaleString('en-US') }) : f(T.b64.hexFirst, { n: SHOW_BYTES })}</div>
                 )}
               </>
             ) : encOut && 'out' in encOut ? (
               <>
-                <pre className="b64-out" style={{ margin: 0, font: "13px/1.6 'Geist Mono', monospace", whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{shown(encOut.out)}</pre>
+                <CopyBlock value={loading ? '' : encOut.out}><pre className="b64-out" style={{ margin: 0, font: "13px/1.6 'Geist Mono', monospace", whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{shown(encOut.out)}</pre></CopyBlock>
                 {encOut.out.length > SHOW_CHARS && <div style={{ marginTop: 10, fontSize: 12, color: 'var(--faint)' }}>{f(T.b64.outFirst, { n: SHOW_CHARS.toLocaleString('en-US') })}</div>}
               </>
             ) : (

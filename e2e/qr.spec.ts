@@ -35,15 +35,6 @@ test('text with no UTF-8 encoding is refused, too much text is explained', async
   await expect(page.getByText('内容过长，无法生成')).toBeVisible();
 });
 
-test('copy image puts a PNG on the clipboard', async ({ page }) => {
-  await open(page, '生成二维码');
-  await page.getByRole('button', { name: '复制图片', exact: true }).click();
-  // Chrome sometimes takes ~7 s to put an image on the clipboard in a freshly opened page (measured here;
-  // repeated copies take ~0.1 s), so the wait is longer than for text.
-  await expect(toast(page)).toHaveText('图片已复制', { timeout: 15_000 });
-  expect(await page.evaluate(async () => (await navigator.clipboard.read())[0].types)).toContain('image/png');
-});
-
 test('a GBK-encoded code is decoded and labelled (jsQR alone returns empty text)', async ({ page }) => {
   await open(page, '识别二维码');
   await page.locator('input[type=file]').setInputFiles(fixture('gbk.svg'));
@@ -100,6 +91,6 @@ test('copying an image says at once that it has started', async ({ page }) => {
   await open(page, '生成二维码');
   // A clipboard that never finishes: the click must still get an answer straight away.
   await page.evaluate(() => { navigator.clipboard.write = () => new Promise(() => {}); });
-  await page.getByRole('button', { name: '复制图片', exact: true }).click();
+  await page.getByRole('button', { name: '二维码（点击复制图片）' }).click();
   await expect(toast(page)).toHaveText('正在复制图片…', { timeout: 1000 });
 });

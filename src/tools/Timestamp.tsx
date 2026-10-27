@@ -235,7 +235,7 @@ export function Timestamp() {
             ];
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <button className="hero" onClick={() => copy(main + msPart)}>
+                <button className="hero" title={T.clickCopy} onClick={() => copy(main + msPart)}>
                   <span style={{ fontSize: 12, color: 'var(--mut)' }}>
                     {S.tsUnit === 'auto' ? f(T.detected, { u: T.units[tsOk.u], d: tsOk.dig }) : f(T.forced, { u: T.units[tsOk.u] })}
                   </span>
@@ -263,7 +263,7 @@ export function Timestamp() {
             const sec = exactUnits(ms, sub, 3);
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <button className="hero" onClick={() => copy(sec)}>
+                <button className="hero" title={T.clickCopy} onClick={() => copy(sec)}>
                   <span style={{ fontSize: 12, color: 'var(--mut)' }}>{f(T.parsedAs, { v: fmtWall(ms, tz, true, sub) + ' ' + T.wd[p.wd] })}</span>
                   <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                     <span className="hero-big">{sec}</span><span style={{ fontSize: 13, color: 'var(--mut)' }}>{T.sec}</span>

@@ -66,7 +66,6 @@ export function QrGen() {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
           <button className="btn inv" onClick={download} style={{ height: 38, padding: '0 16px', borderRadius: 9 }}>{T.dlPng}</button>
-          <button className="btn" onClick={copyImg} style={{ height: 38, padding: '0 16px', borderRadius: 9 }}>{T.copyImg}</button>
           <button className="btn" onClick={() => copy(S.qrText)} style={{ height: 38, padding: '0 16px', borderRadius: 9 }}>{T.copyText}</button>
         </div>
       </section>
@@ -130,13 +129,12 @@ export function QrScan() {
                     {c.enc && <span style={{ fontSize: 12, color: 'var(--chg)', padding: '2px 8px', borderRadius: 999, background: 'var(--chgBg)' }}>{c.enc === 'browser' ? T.decodedByBrowser : f(T.decodedAs, { e: c.enc })}</span>}
                   </div>
                   <button className="qr-text" onClick={() => copy(c.text)} title={T.clickCopy}><Vis text={c.text} /></button>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button className="btn inv" onClick={() => copy(c.text)} style={{ padding: '0 14px', fontSize: 12.5 }}>{T.copy}</button>
-                    {k === 'url' && (
+                  {k === 'url' && (
+                    <div style={{ display: 'flex', gap: 8 }}>
                       <a href={c.text} target="_blank" rel="noopener noreferrer" className="btn"
                         style={{ padding: '0 14px', display: 'inline-flex', alignItems: 'center', fontSize: 12.5, color: 'var(--ink)', textDecoration: 'none' }}>{T.open} ↗</a>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

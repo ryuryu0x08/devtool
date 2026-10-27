@@ -33,7 +33,7 @@ test.describe('Base64', () => {
     await expect(b64Out(page)).toHaveText(Buffer.from(TEXT).toString('base64url'));
     await page.locator('.seg button', { hasText: /^CRLF$/ }).click();
     await expect(b64Out(page)).toHaveText(Buffer.from(TEXT.replace(/\n/g, '\r\n')).toString('base64url'));
-    await page.getByRole('button', { name: '复制', exact: true }).click();
+    await b64Out(page).click();
     await expect.poll(() => clipboard(page)).toBe(Buffer.from(TEXT.replace(/\n/g, '\r\n')).toString('base64url'));
   });
 
@@ -86,7 +86,7 @@ test.describe('Base64', () => {
       await expect(page.locator('section span', { hasText: /不是 Base64|两套字符|= 只能|不是完整/ }).first()).toHaveText(msg.replace('U+00A0', ' '));
       if (mark.startsWith('U+')) await expect(page.locator(`.err-at [data-cp="${mark}"]`)).toHaveCount(1);
       else await expect(page.locator('.err-at')).toHaveText(mark);
-      await expect(page.getByRole('button', { name: '复制', exact: true })).toBeDisabled();
+      await expect(page.locator('.copy-block')).toHaveCount(0);
     });
   }
 
@@ -97,7 +97,7 @@ test.describe('Base64', () => {
     await input(page).fill(bin.toString('base64'));
     await expect(b64Status(page)).toHaveText('7 字节 · 不是有效的 UTF-8 文本，以十六进制显示');
     await expect(page.locator('pre.b64-hex')).toHaveText('00000000  00 01 02 ff fe 80 41                               |......A|');
-    await page.getByRole('button', { name: '复制十六进制' }).click();
+    await page.locator('pre.b64-hex').click();
     await expect.poll(() => clipboard(page)).toBe('000102fffe8041');
     const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '下载' }).click()]);
     expect(dl.suggestedFilename()).toBe('decoded.bin');

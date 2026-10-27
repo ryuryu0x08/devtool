@@ -4,6 +4,7 @@ import { useApp, type FmtLang } from '../store';
 import { Seg } from '../components/Seg';
 import { useSettled } from '../components/useSettled';
 import { Vis, countInvisible } from '../components/Vis';
+import { CopyBlock } from '../components/Kv';
 import { ConvertError, DateTime, Num, bytesLabel, byteLen, clipboardUnsafe, cp, errInfo, isCont, isObj, sortDeep, stats, type ErrInfo, type Obj } from '../lib/data';
 import { astEqual, dupKeys, jsonValue, parseJsonAst, printJson, sortAst, statsAst, toJsonText, type JNode } from '../lib/json';
 import { TomlMismatch, TomlSyntaxError, VerifyError, bareKey, formatToml, parseTomlDoc, toTomlText, tomlStr, tomlValue, verifyToml, walkToml, type TomlDoc } from '../lib/toml';
@@ -300,7 +301,11 @@ export function Formatter({ lang }: { lang: FmtLang }) {
                 {tree.capped && <div style={{ padding: '8px 16px', fontSize: 12, fontFamily: "'Geist Sans', 'Geist', sans-serif", color: 'var(--faint)' }}>{f(T.truncated, { n: tree.rows.length })}</div>}
               </>
             )}
-            {ok && S.view === 'text' && <pre style={{ margin: 0, padding: '4px 16px', font: 'inherit', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}><Vis text={ok.text} /></pre>}
+            {ok && S.view === 'text' && (
+              <CopyBlock value={ok.text} style={{ margin: '0 8px' }}>
+                <pre style={{ margin: 0, padding: '0 8px', font: 'inherit', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}><Vis text={ok.text} /></pre>
+              </CopyBlock>
+            )}
             {err && (
               <div style={{ margin: '6px 16px', padding: '14px 16px', borderRadius: 10, background: 'var(--delBg)', color: 'var(--del)', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <span style={{ fontWeight: 600, fontSize: 13, fontFamily: "'Geist Sans', 'Geist', sans-serif" }}><Vis text={status} /></span>

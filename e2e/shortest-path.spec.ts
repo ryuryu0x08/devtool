@@ -1,7 +1,7 @@
 // The shortest path: the result itself copies; a paste or a dropped file lands where it is useful.
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { activeTool, clipboard, drop, expect, open, pasteOnBlank, test, toast } from './helpers';
+import { activeTool, clipboard, drop, expect, nav, open, pasteOnBlank, test, toast } from './helpers';
 import type { Page } from '@playwright/test';
 
 const input = (page: Page) => page.locator('textarea[data-autofocus]');
@@ -19,7 +19,7 @@ test.describe('the result itself copies', () => {
   test('hash: a click anywhere on a row copies its value', async ({ page }) => {
     await open(page, '哈希');
     await input(page).fill('abc');
-    for (const part of ['.k', '.v', '.c']) {
+    for (const part of ['.k', '.v']) {
       await page.evaluate(() => navigator.clipboard.writeText(''));
       await page.locator(`[data-algo="sha256"] ${part}`).click();
       await expect.poll(() => clipboard(page)).toBe(sha256('abc'));
@@ -40,6 +40,64 @@ test.describe('the result itself copies', () => {
     // repeated copies take ~0.1 s), so the wait is longer than for text.
     await expect(toast(page)).toHaveText('图片已复制', { timeout: 15_000 });
     expect(await page.evaluate(async () => (await navigator.clipboard.read())[0].types)).toContain('image/png');
+  });
+});
+
+test.describe('one way to copy, not two', () => {
+  test('no result has a second "copy" control next to it', async ({ page }) => {
+    await open(page, '时间戳转换');
+    await expect(page.locator('.kv').first()).toBeVisible();
+    await expect(page.locator('.kv', { hasText: '复制' })).toHaveCount(0);
+    await expect(page.locator('.hero', { hasText: '复制' })).toHaveCount(0);
+    await expect(page.locator('.hero').first()).toHaveAttribute('title', '点击复制');
+    await nav(page, '哈希');
+    await input(page).fill('abc');
+    await expect(page.locator('.kv', { hasText: '复制' })).toHaveCount(0);
+    await nav(page, 'Base64 编解码');
+    await input(page).fill('abc');
+    await expect(page.getByRole('button', { name: '复制', exact: true })).toHaveCount(0);
+    await nav(page, '生成二维码');
+    await expect(page.getByRole('button', { name: '复制图片', exact: true })).toHaveCount(0);
+    await nav(page, '识别二维码');
+    await page.locator('input[type=file]').setInputFiles(fileURLToPath(new URL('./fixtures/gbk.svg', import.meta.url)));
+    await expect(page.locator('.qr-text')).toHaveText('中文测试');
+    await expect(page.getByRole('button', { name: '复制', exact: true })).toHaveCount(0);
+  });
+
+  test('a result block: a click copies all of it; dragging selects a part, which ⌘C / Ctrl C copies', async ({ page }) => {
+    await open(page, 'Base64 编解码');
+    const text = 'first line of a longer result\nsecond line';
+    await page.locator('.seg button', { hasText: '解码' }).click();
+    await input(page).fill(Buffer.from(text).toString('base64'));
+    const out = page.locator('pre.b64-out');
+    await expect(out).toHaveText(text);
+    await out.click();
+    await expect.poll(() => clipboard(page)).toBe(text);
+    // Drag across the first word: only that is selected, nothing is copied by the click.
+    await page.evaluate(() => navigator.clipboard.writeText('unchanged'));
+    const box = (await out.boundingBox())!;
+    await page.mouse.move(box.x + 1, box.y + 8);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 40, box.y + 8, { steps: 5 });
+    await page.mouse.up();
+    const selected = await page.evaluate(() => String(window.getSelection()));
+    expect(selected.length).toBeGreaterThan(0);
+    expect(text.startsWith(selected)).toBe(true);
+    expect(await clipboard(page)).toBe('unchanged');
+    await page.keyboard.press('Control+C');
+    await expect.poll(() => clipboard(page)).toBe(selected);
+    // The keyboard copies all of it too.
+    await page.locator('.copy-block').focus();
+    await page.keyboard.press('Enter');
+    await expect.poll(() => clipboard(page)).toBe(text);
+  });
+
+  test('formatter text view: a click copies the whole formatted result', async ({ page }) => {
+    await open(page, 'JSON 格式化');
+    await input(page).fill('{"a":[1,2]}');
+    await page.locator('.seg button', { hasText: /^文本$/ }).click();
+    await page.locator('.copy-block pre').click();
+    await expect.poll(() => clipboard(page)).toBe('{\n  "a": [\n    1,\n    2\n  ]\n}');
   });
 });
 
