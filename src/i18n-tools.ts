@@ -6,7 +6,7 @@ export const zhT = {
     chars: '{n} 个字符', lines: '{n} 行', switched: '已按内容切换到「{m}」', empty: '结果实时显示', ok: '格式正确',
     regen: '重新生成', count: '数量', length: '长度', download: '下载', textView: '文本', hexView: '十六进制', swap: '交换',
     zone: '时区：{z}', bytesTo: '{a} 字节 → {b} 字节', loneSur: '结果含孤立代理字符（已标出），它们无法按 UTF-8 保存', notUtf8Out: '{n} 字节 · 不是有效的 UTF-8 文本，以十六进制显示', utf8Out: 'UTF-8 文本 · {n} 字节',
-    resize: '拖动调整宽度 · 双击恢复各占一半', grip: '拖到右侧或下方 · 单击切换', toRight: '放到右侧', toBottom: '放到下方',
+    resize: '拖动调整宽度 · 双击恢复各占一半', grip: '拖到右侧或下方 · 单击切换',
   },
   url: {
     component: '组件', uri: '整个链接', form: '表单（空格写成 +）', plusSpace: '+ 表示空格',
@@ -101,7 +101,7 @@ export const enT: ToolDict = {
     chars: '{n} characters', lines: '{n} lines', switched: 'Switched to {m} for this content', empty: 'The result appears as you type', ok: 'Well-formed',
     regen: 'Generate again', count: 'Count', length: 'Length', download: 'Download', textView: 'Text', hexView: 'Hex', swap: 'Swap',
     zone: 'Time zone: {z}', bytesTo: '{a} bytes → {b} bytes', loneSur: 'The result has lone surrogates (marked); they can’t be saved as UTF-8', notUtf8Out: '{n} bytes · not valid UTF-8 text, shown as hex', utf8Out: 'UTF-8 text · {n} bytes',
-    resize: 'Drag to resize · double-click for half and half', grip: 'Drag to the right or below · click to switch', toRight: 'To the right', toBottom: 'Below',
+    resize: 'Drag to resize · double-click for half and half', grip: 'Drag to the right or below · click to switch',
   },
   url: {
     component: 'Component', uri: 'Whole URL', form: 'Form (space as +)', plusSpace: '+ means space',

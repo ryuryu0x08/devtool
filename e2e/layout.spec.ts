@@ -21,6 +21,8 @@ test('the result is dragged below: both panes take the full width; each tool rem
   const content = (await page.locator('.content').boundingBox())!;
   await dragBy(page, '.split-grip', 0, 260);
   expect(await layout(page)).toBe('col');
+  // After it settles (a short animation), it fills its slot.
+  await expect.poll(async () => Math.round((await page.locator('.split-float').boundingBox())!.width)).toBe(Math.round((await box(page, 1)).width));
   const a = await box(page, 0), b = await box(page, 1);
   expect(b.y).toBeGreaterThan(a.y + a.height);
   // Stacked panes span the content width (its padding stays as the margin).
@@ -31,8 +33,18 @@ test('the result is dragged below: both panes take the full width; each tool rem
   await nav(page, 'Hex 编解码');
   expect(await layout(page)).toBe('row');
   await nav(page, 'URL 编解码');
-  // Dragged back up to the right.
-  await dragBy(page, '.split-grip', 0, -250);
+  // Carried back up level with the input, on the right; while carried it follows the pointer.
+  const g = (await page.locator('.split-grip').boundingBox())!;
+  const top = (await box(page, 0)).y;
+  await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(g.x + 200, top + 20, { steps: 10 });
+  expect(await layout(page)).toBe('row');
+  const carried = (await page.locator('.split-float').boundingBox())!;
+  expect(Math.abs(carried.y - (top + 20 - g.height / 2 + 9 - 8))).toBeLessThan(12);
+  await expect(page.locator('.split-pane.holding')).toHaveCount(1);
+  await page.mouse.up();
+  await expect(page.locator('.split-pane.holding')).toHaveCount(0);
   expect(await layout(page)).toBe('row');
 });
 

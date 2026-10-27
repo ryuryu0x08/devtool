@@ -234,7 +234,8 @@ button.caret { border: 0; background: transparent; padding: 0; font: inherit; fo
 .field.bad, .field.bad:focus { border-color: var(--del); }
 /* Input / result split (components/Split.tsx) */
 .split-pane { display: flex; flex-direction: column; min-width: 0; position: relative; }
-.split-pane > .card, .split-pane > section { flex: 1; }
+.split-float { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+.split-float > .card, .split-float > section, .split-pane > .card, .split-pane > section { flex: 1; }
 .split-gutter { display: flex; align-items: center; justify-content: center; cursor: col-resize; touch-action: none; }
 .split-gutter span { width: 4px; height: 36px; border-radius: 2px; background: var(--line2); transition: background .15s, height .15s; }
 .split-gutter:hover span, body.dragging-x .split-gutter span { background: var(--acc); height: 64px; }
@@ -245,11 +246,12 @@ button.caret { border: 0; background: transparent; padding: 0; font: inherit; fo
 }
 .split-grip svg { fill: currentColor; }
 .split-grip:hover, .split-grip:focus-visible { color: var(--acc); border-color: var(--acc); outline: none; }
-.split-pane.result.moving > :not(.split-grip) { opacity: 0.45; }
-.split-zone {
-  z-index: 50; pointer-events: none; display: flex; align-items: center; justify-content: center;
-  border: 2px dashed var(--acc); border-radius: 14px; background: var(--accRing);
+/* Carried result: lifted above the page; where it will land is outlined. */
+.split-float.carried { z-index: 40; will-change: transform; }
+.split-float.carried > .card, .split-float.carried > section { box-shadow: 0 18px 48px var(--shadow), 0 0 0 1px var(--acc); }
+.split-float.carried .split-grip { color: var(--acc); border-color: var(--acc); cursor: grabbing; }
+.split-pane.holding::before {
+  content: ''; position: absolute; inset: 0; border: 2px dashed var(--acc); border-radius: 14px; background: var(--accRing); pointer-events: none;
 }
-.split-zone span { background: var(--acc); color: var(--accInk); padding: 4px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600; }
 body.dragging-x, body.dragging-x * { cursor: col-resize !important; user-select: none; }
 body.dragging-move, body.dragging-move * { cursor: grabbing !important; user-select: none; }
