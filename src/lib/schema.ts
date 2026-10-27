@@ -12,7 +12,7 @@ import { dupKeys, parseJsonAst, type JNode } from './json';
 export type Draft = '06' | '07' | '2019-09' | '2020-12';
 
 export class SchemaError extends Error {
-  constructor(readonly code: 'draft4' | 'ref' | 'compile' | 'dup' | 'notSchema', readonly detail = '') { super(code + ': ' + detail); }
+  constructor(readonly code: 'draft4' | 'ref' | 'compile' | 'dup' | 'notSchema' | 'loop', readonly detail = '') { super(code + ': ' + detail); }
 }
 
 export function draftOf(schema: unknown): Draft {
@@ -69,11 +69,17 @@ export function validateJson(schemaText: string, dataText: string, lang: 'zh' | 
   const ajv = ajvFor(draft, (m) => ignored.push(m.replace(/^strict mode: /, '')));
   let validate;
   try { validate = ajv.compile(s.value as object); } catch (e) {
+    // A schema that is only a reference to itself ({"$ref": "#"}) recurses without end.
+    if (e instanceof RangeError) throw new SchemaError('loop');
     const msg = String((e as Error).message);
     if (/can't resolve reference|missing ref/i.test(msg)) throw new SchemaError('ref', msg.replace(/^.*reference /i, ''));
     throw new SchemaError('compile', msg);
   }
-  const valid = validate(data.value) as boolean;
+  let valid: boolean;
+  try { valid = validate(data.value) as boolean; } catch (e) {
+    if (e instanceof RangeError) throw new SchemaError('loop');
+    throw e;
+  }
   const errs: ErrorObject[] = validate.errors ?? [];
   if (lang === 'zh') localize.zh(errs);
   const issues = errs.map((e) => ({

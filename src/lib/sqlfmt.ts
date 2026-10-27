@@ -99,6 +99,30 @@ export function formatSql(src: string, language: SqlLanguage, keywordCase: KwCas
   return { text: text.endsWith('\n') ? text : text + '\n', commentsReindented: reindented };
 }
 
-export const looksSql = (s: string) =>
-  /^\s*(select|insert\s+into|update|delete\s+from|create\s+(table|view|index|unique|or)|alter\s+table|drop\s+(table|view|index)|with\s+\w+\s+as\s*\(|merge\s+into|truncate\s+table)\b/i.test(s) &&
-  /\b(from|into|set|table|view|index|values|as|where)\b/i.test(s);
+// A name as SQL writes one: plain, "quoted", `quoted` or [quoted], with schema parts.
+const NAME = String.raw`(?:[\w$]+|"[^"\n]+"|` + '`[^`\\n]+`' + String.raw`|\[[^\]\n]+\])(?:\.(?:[\w$]+|"[^"\n]+"|` + '`[^`\\n]+`' + String.raw`|\[[^\]\n]+\]))*`;
+const OBJ = String.raw`(?:table|view|materialized\s+view|index|database|schema|sequence|trigger|function|procedure|type)`;
+/** The start of a statement, with its parts in place: "SELECT … FROM name", "UPDATE name SET col =", … */
+const STATEMENT = new RegExp('^(?:' + [
+  String.raw`select\b[\s\S]*?\bfrom\s+(?:${NAME}|\()`,
+  String.raw`insert\s+into\s+${NAME}\s*(?:\(|values\b|select\b|default\s+values\b)`,
+  String.raw`update\s+${NAME}(?:\s+(?:as\s+)?\w+)?\s+set\s+${NAME}\s*=`,
+  String.raw`delete\s+from\s+${NAME}(?:\s+(?:as\s+)?\w+)?\s*(?:;|$|where\b|using\b|returning\b)`,
+  String.raw`create\s+(?:or\s+replace\s+)?(?:(?:global\s+|local\s+)?(?:temporary|temp)\s+)?(?:unique\s+)?${OBJ}\s+(?:if\s+not\s+exists\s+)?${NAME}`,
+  String.raw`alter\s+${OBJ}\s+(?:if\s+exists\s+)?${NAME}\s+\w`,
+  String.raw`drop\s+${OBJ}\s+(?:if\s+exists\s+)?${NAME}\s*(?:;|$|,|cascade\b|restrict\b)`,
+  String.raw`with\s+(?:recursive\s+)?${NAME}(?:\s*\([^)]*\))?\s+as\s*(?:not\s+)?(?:materialized\s+)?\(`,
+  String.raw`merge\s+into\s+${NAME}[\s\S]*?\busing\b`,
+  String.raw`truncate\s+table\s+${NAME}\s*(?:;|$)`,
+].join('|') + ')', 'i');
+/** Words of English sentences that SQL doesn't use ("Select the file from the list"). */
+const PROSE = /\b(?:the|my|our|your|we|you|please|these|those|was|were|will|should|could|would|i'm|it's|don't)\b/i;
+
+/** SQL, not a sentence that happens to start with an SQL word. Checked outside strings and comments. */
+export function looksSql(s: string): boolean {
+  const t = s.replace(/^(?:\s*(?:--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/))*\s*/, '');
+  if (!STATEMENT.test(t)) return false;
+  // Strings and quoted names become a placeholder word, comments a space.
+  const bare = t.replace(/'(?:[^']|'')*'|"(?:[^"]|"")*"|`[^`]*`|\[[^\]\n]*\]/g, ' q ').replace(/--[^\n]*|\/\*[\s\S]*?\*\//g, ' ');
+  return !PROSE.test(bare) && !/[.!?。！？]\s*$/.test(bare);
+}

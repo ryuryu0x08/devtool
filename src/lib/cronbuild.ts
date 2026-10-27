@@ -90,7 +90,10 @@ export function readExpr(expr: string, d: Dialect): Model | null {
   if (s.startsWith('@')) {
     const m = MACROS[s.toLowerCase()];
     if (!m) return null;
-    s = (d === 'unix' ? '' : '0 ') + m.replace(/\*$/, d === 'quartz' ? '?' : '*');
+    const f = m.split(' ');
+    // Quartz: "?" in the unused day field, and weekdays count from 1 (Sunday).
+    if (d === 'quartz') { if (f[4] === '*') f[4] = '?'; else { f[4] = String(+f[4] + 1); f[2] = '?'; } }
+    s = (d === 'unix' ? '' : '0 ') + f.join(' ');
   }
   const t = s.split(/\s+/);
   const kinds = KINDS[d];

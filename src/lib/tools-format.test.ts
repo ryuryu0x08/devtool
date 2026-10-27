@@ -50,7 +50,22 @@ second: doc
     expect(pos('a: 1\na: 2\n')).toBe(5);
     expect(pos('a: [1, 2\n')).not.toBeNull();
     expect(pos('a:\n  - 1\n - 2\n')).not.toBeNull();
+    // The earliest repeat in the text, even inside a map that comes before the outer repeat.
+    expect(pos('a:\n  x: 1\n  x: 2\na: 3\n')).toBe(12);
+    expect(pos('{a: 1, a: 2}')).toBe(7);
+    // Equal as the library defines it: 1 and 1.0 differ, NaN never repeats, ~ and null are the same.
+    expect([pos('1: a\n1.0: b\n'), pos('.nan: a\n.nan: b\n'), pos('~: a\nnull: b\n')]).toEqual([null, null, 5]);
+    // An alias with no anchor ("*.log" typed as text) is an error at the alias.
+    expect(pos('a: 1\nb: *x\n')).toBe(8);
+    expect(pos('*.log')).toBe(0);
   });
+  it('a large file takes seconds, not minutes (keys are checked in one pass)', () => {
+    const src = Array.from({ length: 30000 }, (_, i) => `key${i}: value ${i} # c`).join('\n');
+    const t0 = performance.now();
+    expect(formatYaml(src, 2).text.split('\n').length).toBe(30001);
+    // Comparing each key with all earlier ones took about a minute here.
+    expect(performance.now() - t0).toBeLessThan(15000);
+  }, 60000);
   it('recognises YAML, not prose', () => {
     expect(looksYaml('name: x\nport: 80\n')).toBe(true);
     expect(looksYaml('- a\n- b\n')).toBe(true);
@@ -76,6 +91,10 @@ describe('XML formatting', () => {
     expect(err('<a>R&D</a>')).toEqual(['amp', 4]);
     expect(err('<a/><b/>')).toEqual(['multiRoot', 4]);
     expect(err('<a x="<"/>')).toEqual(['lt', 6]);
+    // Text after the root is marked where it is, not at the start.
+    expect(err('<a/>junk')).toEqual(['text', 4]);
+    expect(err('<a><b/></a>\n  junk')).toEqual(['text', 14]);
+    expect(err('<a/><![CDATA[x]]>')).toEqual(['text', 4]);
     expect(looksXml('<a><b/></a>')).toBe(true);
     expect(looksXml('<b>bold</i>')).toBe(false);
   });
@@ -109,8 +128,16 @@ describe('SQL formatting', () => {
     }
   });
   it('recognises SQL statements', () => {
-    expect(looksSql('SELECT * FROM t')).toBe(true);
-    expect(looksSql('select the best option')).toBe(false);
+    for (const q of ['SELECT * FROM t', 'select a.id, b."Name" from t a join u b on a.id = b.id', 'select count(*) from users where age > 18',
+      'insert into t (a, b) values (1, 2)', 'INSERT INTO users SELECT * FROM tmp', "update users set name = 'the x' where id = 1", 'UPDATE t AS x SET a = 1',
+      'delete from logs where ts < now()', 'DELETE FROM t;', 'create table users (id int primary key)', 'CREATE OR REPLACE VIEW v AS SELECT 1 FROM t',
+      'create unique index i on t (a)', 'alter table t add column c int', 'drop table if exists t', 'with x as (select 1 from t) select * from x',
+      'truncate table t', '-- get the users\nselect * from users', '/* report */ SELECT a FROM [dbo].[t]',
+      'merge into t using s on (t.id = s.id) when matched then update set t.a = s.a']) expect(looksSql(q), q).toBe(true);
+    // Sentences that start with an SQL word stay sentences.
+    for (const p of ['select the best option', 'Update: we set the flag as default', 'Select the file from the list', 'select one from the list',
+      'Delete from my calendar the meeting', 'Create a table of contents', 'Drop table names from list', 'Update the docs and set a = reminder',
+      'Insert into the box', 'With friends as (always) we go', 'Select name from users.']) expect(looksSql(p), p).toBe(false);
   });
 });
 
@@ -136,6 +163,8 @@ describe('JSON Schema', () => {
     expect(code('{"$schema":"http://json-schema.org/draft-04/schema#"}', '1')).toBe('draft4');
     expect(code('{"$ref":"https://example.com/s.json"}', '1')).toBe('ref');
     expect(code('{"type":"object"}', '{"a":1,"a":2}')).toBe('dup');
+    expect(code('{"$ref":"#"}', '1')).toBe('loop');
+    expect(code('{"$ref":""}', '[1]')).toBe('loop');
     expect(pointerToPath('/a/0/b~1c')).toBe('$.a[0]["b/c"]');
     expect(inexact(parseJsonAst('[0.1, 1e400, 9007199254740993]').ast)).toEqual(['$[1] = 1e400', '$[2] = 9007199254740993']);
     expect(looksSchema(schema)).toBe(true);

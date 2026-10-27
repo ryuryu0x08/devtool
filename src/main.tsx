@@ -10,7 +10,11 @@ import '@fontsource/geist-mono/600.css';
 import './styles.css';
 import { App } from './App';
 
-createRoot(document.getElementById('root')!).render(
+// An error a tool's boundary caught is shown in the page (components/ToolBoundary.tsx), so it is
+// logged as a warning; uncaught errors are still errors.
+createRoot(document.getElementById('root')!, {
+  onCaughtError: (error, info) => console.warn('Handled by the tool’s error boundary:', error, info.componentStack),
+}).render(
   <StrictMode>
     <App />
   </StrictMode>,

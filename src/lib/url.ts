@@ -19,29 +19,33 @@ export class UrlError extends Error {
   }
 }
 
-/** Decode every %XX; in form mode "+" is a space. */
+/** Decode every %XX; in form mode "+" is a space. One pass into a buffer: text between the
+ *  escapes is encoded a run at a time (a 4 MB text took seconds one character at a time). */
 export function urlDecode(s: string, form: boolean): { text: string; enc?: 'GB18030'; plus: number } {
-  const bytes: number[] = [];
-  const enc = new TextEncoder();
-  let plus = 0;
+  // UTF-8 needs at most 3 bytes per UTF-16 unit; an escape is 3 units for 1 byte.
+  const out = new Uint8Array(s.length * 3);
+  const te = new TextEncoder();
+  let n = 0, last = 0, plus = 0;
+  const run = (end: number) => { if (end > last) n += te.encodeInto(s.slice(last, end), out.subarray(n)).written; };
+  const hex = (c: number) => (c >= 48 && c <= 57 ? c - 48 : c >= 97 && c <= 102 ? c - 87 : c >= 65 && c <= 70 ? c - 55 : -1);
   for (let i = 0; i < s.length; i++) {
-    const c = s[i];
-    if (c === '%') {
-      const h = s.slice(i + 1, i + 3);
-      if (!/^[0-9a-fA-F]{2}$/.test(h)) throw new UrlError('pct', i);
-      bytes.push(parseInt(h, 16));
+    const c = s.charCodeAt(i);
+    if (c === 37) { // %
+      const h = hex(s.charCodeAt(i + 1)), l = hex(s.charCodeAt(i + 2));
+      if (h < 0 || l < 0) throw new UrlError('pct', i);
+      run(i);
+      out[n++] = h * 16 + l;
       i += 2;
-    } else if (c === '+') {
+      last = i + 1;
+    } else if (c === 43) { // +
+      run(i);
       plus++;
-      bytes.push(form ? 32 : 43);
-    } else {
-      const cp = s.codePointAt(i)!;
-      const ch = String.fromCodePoint(cp);
-      bytes.push(...enc.encode(ch));
-      i += ch.length - 1;
+      out[n++] = form ? 32 : 43;
+      last = i + 1;
     }
   }
-  const b = Uint8Array.from(bytes);
+  run(s.length);
+  const b = out.subarray(0, n);
   try { return { text: new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(b), plus }; } catch { /* not UTF-8 */ }
   try { return { text: new TextDecoder('gb18030', { fatal: true }).decode(b), enc: 'GB18030', plus }; } catch { /* neither */ }
   const first = firstBadUtf8(s);

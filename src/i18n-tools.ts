@@ -5,7 +5,8 @@ export const zhT = {
     enc: '编码', dec: '解码', escape: '转义', unescape: '还原', upper: '大写', indent: '缩进', spaces: '{n} 空格', tab: 'Tab',
     chars: '{n} 个字符', lines: '{n} 行', switched: '已按内容切换到「{m}」', empty: '结果实时显示', ok: '格式正确',
     regen: '重新生成', count: '数量', length: '长度', download: '下载', textView: '文本', hexView: '十六进制', swap: '交换',
-    zone: '时区：{z}', bytesTo: '{a} 字节 → {b} 字节', loneSur: '结果含孤立代理字符（已标出），它们无法按 UTF-8 保存', notUtf8Out: '{n} 字节 · 不是有效的 UTF-8 文本，以十六进制显示', utf8Out: 'UTF-8 文本 · {n} 字节',
+    zone: '时区：{z}', bytesTo: '{a} 字节 → {b} 字节', loneSur: '结果含孤立代理字符（已标出），它们无法按 UTF-8 保存', notUtf8Out: '{n} 字节 · 不是有效的 UTF-8 文本，以十六进制显示', bigOut: '{n} 字节 · 太大，不在页面里按文本显示（下面是开头部分的十六进制）；请下载', utf8Out: 'UTF-8 文本 · {n} 字节',
+    crashed: '这个工具遇到意外错误，没能显示结果：{m}', retry: '重试', clearInput: '清空这个工具的输入（可撤销）', tooDeep: '嵌套层级太深，超出了浏览器能处理的递归深度', shownFirst: '仅显示前 {n} 个字符；点击复制得到全部',
     resize: '拖动调整宽度 · 双击恢复各占一半', grip: '拖到右侧或下方 · 单击切换',
   },
   url: {
@@ -42,7 +43,7 @@ export const zhT = {
   },
   gzip: {
     zip: '压缩', unzip: '解压', ph: '输入文本或拖入文件', unPh: '粘贴 Base64 或十六进制的压缩数据，或拖入 .gz 文件', fmt: '格式', detected: '识别为 {f}', ratio: '{a} 字节 → {b} 字节（{p}%）',
-    fail: '无法按 {f} 解压：数据不完整或不是这种格式', notData: '无法识别输入：请粘贴 Base64 或十六进制，或拖入文件', out64: '结果（Base64）', dlOnly: '结果超过 {n} MB，不在页面显示，请下载', tooBig: '文件超过 {n} MB，未处理',
+    fail: '无法按 {f} 解压：数据不完整或不是这种格式', notData: '无法识别输入：请粘贴 Base64 或十六进制，或拖入文件', out64: '结果（Base64）', dlOnly: '结果超过 {n} MB，不在页面显示，请下载', tooLarge: '解压结果超过 {n} MB，为避免页面崩溃已停止；这么大的文件请用命令行工具解压', tooBig: '文件超过 {n} MB，未处理',
   },
   yaml: { ph: '粘贴 YAML…', valid: '有效 YAML · {n} 个文档', changed: '{n} 处写法有变化（值不变），如 {a} → {b}', verify: '格式化结果校验未通过（{p}），为避免改动数据，已停止输出' },
   xml: {
@@ -53,13 +54,13 @@ export const zhT = {
   schema: {
     schema: 'Schema', data: '数据', schemaPh: '粘贴 JSON Schema…', dataPh: '粘贴要校验的 JSON…', pass: '✓ 通过校验', fail: '✗ {n} 处不符合', draft: '按 {d} 规范校验',
     ignored: '已忽略：{w}', inexact: '{n} 个数字超出双精度，校验时只能按近似值比较：{p}', need: '两侧都填入后显示结果',
-    e: { draft4: '不支持 draft-04 及更早的规范（{d}）', ref: '不支持引用外部 schema：{d}', compile: 'Schema 本身有错：{d}', dup: '{d} 有重复的键，无法确定应使用哪个值', notSchema: 'Schema 应是 JSON 对象或 true / false' },
+    e: { draft4: '不支持 draft-04 及更早的规范（{d}）', ref: '不支持引用外部 schema：{d}', compile: 'Schema 本身有错：{d}', dup: '{d} 有重复的键，无法确定应使用哪个值', notSchema: 'Schema 应是 JSON 对象或 true / false', loop: 'Schema 的 $ref 绕回了自己（如 {"$ref": "#"}），校验会无限循环' },
   },
-  tdiff: { a: 'A · 原始', b: 'B · 修改后', ignoreWs: '忽略空白差异', ignoreCase: '忽略大小写', onlyDiff: '仅显示差异', same: '两段文本完全一致', added: '+ {n} 行', removed: '− {n} 行', hidden: '… {n} 行未变化', ph: '粘贴文本…', need: '两侧都填入后显示差异', capped: '仅显示前 {n} 行，共 {t} 行' },
+  tdiff: { a: 'A · 原始', b: 'B · 修改后', ignoreWs: '忽略空白差异', ignoreCase: '忽略大小写', onlyDiff: '仅显示差异', same: '两段文本完全一致', added: '+ {n} 行', removed: '− {n} 行', hidden: '… {n} 行未变化', ph: '粘贴文本…', need: '两侧都填入后显示差异', capped: '仅显示前 {n} 行，共 {t} 行', approx: '两边差异太大，1.5 秒内没有算出最少改动的逐行对齐：开头和结尾相同的行已对齐，中间部分整体标为删除再新增（结果仍然正确，只是不是最精简的）', unmarked: '为免页面卡住，有 {n} 对修改的行没有标出具体改动的字符' },
   regex: {
     pattern: '正则表达式', patternPh: '如 (\\d{4})-(\\d{2})，也可以粘贴 /abc/gi', text: '测试文本', textPh: '粘贴要匹配的文本…', repl: '替换为', replPh: '可选，如 $2/$1、$<name>',
     flags: { g: '全部匹配', i: '忽略大小写', m: '多行（^ $ 按行）', s: '. 匹配换行', u: 'Unicode', y: '粘连' },
-    matches: '{n} 处匹配', none: '没有匹配', first: '没有开启 g：只找第一处', more: '仅显示前 {n} 处，共 {t} 处', timeout: '超过 1.5 秒未完成（可能是灾难性回溯），已停止', replaced: '替换结果',
+    matches: '{n} 处匹配', none: '没有匹配', first: '没有开启 g：只找第一处', more: '仅显示前 {n} 处，共 {t} 处', timeout: '超过 1.5 秒未完成（可能是灾难性回溯），已停止', stack: '匹配时回溯太深，超出了浏览器的上限（常见于在很长的文本上重复 (a|b)* 这类分组；改成 [ab]* 通常就能匹配）', replaced: '替换结果',
     group: '分组', at: '位置 {i}', undef: '（未参与匹配）',
   },
   caseConv: { ph: '输入标识符或短语，每行一个，如 user_id、XMLHttpRequest', names: { camel: 'camelCase', pascal: 'PascalCase', snake: 'snake_case', constant: 'CONSTANT_CASE', kebab: 'kebab-case', dot: 'dot.case', title: 'Title Case', lower: '全小写', upper: '全大写' } },
@@ -80,7 +81,7 @@ export const zhT = {
     ph: '如 30 9 * * 1-5、0 0/15 * * * ?、@daily', dialect: '规则', auto: '自动', unix: 'Unix（5 位）', spring: 'Spring（6 位，含秒）', quartz: 'Quartz（6–7 位，周日 = 1）', as: '按 {d} 规则解析',
     next: '接下来 {n} 次（{z}）', none: '找不到下一次执行时间（例如 2 月 30 日不存在）', reboot: '系统启动时运行，没有固定时间',
     skipped: '有 {n} 个时刻因夏令时切换不存在，不会执行', repeated: '标 * 的时刻因夏令时回拨会出现两次，这里只算第一次；不同 cron 实现处理方式不同',
-    unixOr: '「日」和「星期」都指定时，满足其中一个就执行（Unix cron 的规则）', andRule: '「日」和「星期」都指定时，两者都满足才执行（{d} 的规则）',
+    unixOr: '「日」和「星期」都指定时，满足其中一个就执行（Unix cron 的规则）', starAnd: '「日」或「星期」以 * 开头（如 */2）时，Vixie cron / cronie（多数 Linux 系统）要求两者同时满足，这里按此计算；有的实现（如 Node.js 的 cron-parser）仍按满足其一执行', andRule: '「日」和「星期」都指定时，两者都满足才执行（{d} 的规则）',
     e: { count: '字段数不对：这条规则需要 {w} 个字段，现在是 {n} 个', value: '{i}的「{t}」超出范围或无法识别', range: '{i}的范围「{t}」起点大于终点', step: '{i}的步长「{t}」不对', special: '{i}的「{t}」不是 Unix cron 的写法（L、W、# 只在 Spring / Quartz 里有）', question: '「?」只能用在日或星期字段，且 Unix cron 不支持', quartzQ: 'Quartz 要求「日」和「星期」中有一个写成「?」' },
     fields: { sec: '秒', min: '分', hour: '时', dom: '日', mon: '月', dow: '星期', year: '年' },
     b: {
@@ -109,7 +110,8 @@ export const enT: ToolDict = {
     enc: 'Encode', dec: 'Decode', escape: 'Escape', unescape: 'Unescape', upper: 'Uppercase', indent: 'Indent', spaces: '{n} spaces', tab: 'Tab',
     chars: '{n} characters', lines: '{n} lines', switched: 'Switched to {m} for this content', empty: 'The result appears as you type', ok: 'Well-formed',
     regen: 'Generate again', count: 'Count', length: 'Length', download: 'Download', textView: 'Text', hexView: 'Hex', swap: 'Swap',
-    zone: 'Time zone: {z}', bytesTo: '{a} bytes → {b} bytes', loneSur: 'The result has lone surrogates (marked); they can’t be saved as UTF-8', notUtf8Out: '{n} bytes · not valid UTF-8 text, shown as hex', utf8Out: 'UTF-8 text · {n} bytes',
+    zone: 'Time zone: {z}', bytesTo: '{a} bytes → {b} bytes', loneSur: 'The result has lone surrogates (marked); they can’t be saved as UTF-8', notUtf8Out: '{n} bytes · not valid UTF-8 text, shown as hex', bigOut: '{n} bytes · too large to show as text here (the start is shown as hex); download it', utf8Out: 'UTF-8 text · {n} bytes',
+    crashed: 'This tool hit an unexpected error and could not show a result: {m}', retry: 'Try again', clearInput: 'Clear this tool’s input (undo brings it back)', tooDeep: 'Nested too deeply: beyond the recursion depth the browser can handle', shownFirst: 'Showing the first {n} characters; a click copies all of it',
     resize: 'Drag to resize · double-click for half and half', grip: 'Drag to the right or below · click to switch',
   },
   url: {
@@ -146,7 +148,7 @@ export const enT: ToolDict = {
   },
   gzip: {
     zip: 'Compress', unzip: 'Decompress', ph: 'Type text or drop a file', unPh: 'Paste compressed data as Base64 or hex, or drop a .gz file', fmt: 'Format', detected: 'Detected {f}', ratio: '{a} bytes → {b} bytes ({p}%)',
-    fail: 'Can’t decompress as {f}: the data is incomplete or not in this format', notData: 'Unrecognised input: paste Base64 or hex, or drop a file', out64: 'Result (Base64)', dlOnly: 'The result is over {n} MB: not shown, download it', tooBig: 'File is over {n} MB, not processed',
+    fail: 'Can’t decompress as {f}: the data is incomplete or not in this format', notData: 'Unrecognised input: paste Base64 or hex, or drop a file', out64: 'Result (Base64)', dlOnly: 'The result is over {n} MB: not shown, download it', tooLarge: 'The decompressed result is over {n} MB; stopped so the page doesn’t crash. Use a command-line tool for files this large', tooBig: 'File is over {n} MB, not processed',
   },
   yaml: { ph: 'Paste YAML…', valid: 'Valid YAML · {n} document(s)', changed: '{n} written differently (same values), e.g. {a} → {b}', verify: 'The formatted result didn’t pass the check ({p}); output stopped so no data changes' },
   xml: {
@@ -157,13 +159,13 @@ export const enT: ToolDict = {
   schema: {
     schema: 'Schema', data: 'Data', schemaPh: 'Paste a JSON Schema…', dataPh: 'Paste the JSON to validate…', pass: '✓ Valid', fail: '✗ {n} problem(s)', draft: 'Validated as {d}',
     ignored: 'Ignored: {w}', inexact: '{n} number(s) exceed double precision and are compared approximately: {p}', need: 'Fill in both sides to see the result',
-    e: { draft4: 'draft-04 and earlier are not supported ({d})', ref: 'References to external schemas aren’t supported: {d}', compile: 'The schema itself is invalid: {d}', dup: '{d} has duplicate keys; which value counts is undefined', notSchema: 'A schema is a JSON object, or true / false' },
+    e: { draft4: 'draft-04 and earlier are not supported ({d})', ref: 'References to external schemas aren’t supported: {d}', compile: 'The schema itself is invalid: {d}', dup: '{d} has duplicate keys; which value counts is undefined', notSchema: 'A schema is a JSON object, or true / false', loop: 'The schema’s $ref leads back to itself (like {"$ref": "#"}), so validating would never end' },
   },
-  tdiff: { a: 'A · original', b: 'B · changed', ignoreWs: 'Ignore whitespace', ignoreCase: 'Ignore case', onlyDiff: 'Only differences', same: 'The texts are identical', added: '+ {n} lines', removed: '− {n} lines', hidden: '… {n} unchanged lines', ph: 'Paste text…', need: 'Fill in both sides to compare', capped: 'Showing the first {n} of {t} lines' },
+  tdiff: { a: 'A · original', b: 'B · changed', ignoreWs: 'Ignore whitespace', ignoreCase: 'Ignore case', onlyDiff: 'Only differences', same: 'The texts are identical', added: '+ {n} lines', removed: '− {n} lines', hidden: '… {n} unchanged lines', ph: 'Paste text…', need: 'Fill in both sides to compare', capped: 'Showing the first {n} of {t} lines', approx: 'The texts differ too much to find the smallest line-by-line alignment within 1.5 s: equal lines at the start and end are aligned, the middle is shown as removed then added (still correct, just not the smallest)', unmarked: 'To keep the page responsive, the changed characters of {n} pairs of lines are not marked' },
   regex: {
     pattern: 'Pattern', patternPh: 'e.g. (\\d{4})-(\\d{2}), or paste /abc/gi', text: 'Test text', textPh: 'Paste text to match…', repl: 'Replace with', replPh: 'Optional, e.g. $2/$1, $<name>',
     flags: { g: 'All matches', i: 'Ignore case', m: 'Multiline (^ $ per line)', s: '. matches newline', u: 'Unicode', y: 'Sticky' },
-    matches: '{n} match(es)', none: 'No match', first: 'g is off: only the first match', more: 'Showing the first {n} of {t}', timeout: 'Stopped after 1.5 s (probably catastrophic backtracking)', replaced: 'Replaced',
+    matches: '{n} match(es)', none: 'No match', first: 'g is off: only the first match', more: 'Showing the first {n} of {t}', timeout: 'Stopped after 1.5 s (probably catastrophic backtracking)', stack: 'Backtracking went deeper than the browser allows (typical of repeating a group like (a|b)* over a long text; [ab]* usually works)', replaced: 'Replaced',
     group: 'Group', at: 'at {i}', undef: '(did not participate)',
   },
   caseConv: { ph: 'Type identifiers or phrases, one per line: user_id, XMLHttpRequest', names: { camel: 'camelCase', pascal: 'PascalCase', snake: 'snake_case', constant: 'CONSTANT_CASE', kebab: 'kebab-case', dot: 'dot.case', title: 'Title Case', lower: 'lowercase', upper: 'UPPERCASE' } },
@@ -184,7 +186,7 @@ export const enT: ToolDict = {
     ph: 'e.g. 30 9 * * 1-5, 0 0/15 * * * ?, @daily', dialect: 'Rules', auto: 'Auto', unix: 'Unix (5 fields)', spring: 'Spring (6, with seconds)', quartz: 'Quartz (6–7, Sunday = 1)', as: 'Read with {d} rules',
     next: 'Next {n} ({z})', none: 'No next run (e.g. February 30 never comes)', reboot: 'Runs at system start, no fixed time',
     skipped: '{n} time(s) don’t exist because of a DST change and won’t run', repeated: 'Times marked * occur twice when clocks go back; listed once here; cron implementations differ',
-    unixOr: 'With both day of month and day of week set, either one matching is enough (Unix cron rule)', andRule: 'With both day of month and day of week set, both must match ({d} rule)',
+    unixOr: 'With both day of month and day of week set, either one matching is enough (Unix cron rule)', starAnd: 'When day of month or day of week starts with * (like */2), Vixie cron / cronie (most Linux systems) needs both to match, as computed here; some implementations (like Node.js cron-parser) still accept either', andRule: 'With both day of month and day of week set, both must match ({d} rule)',
     e: { count: 'Wrong number of fields: these rules need {w}, this has {n}', value: '“{t}” in {i} is out of range or not recognised', range: 'Range “{t}” in {i} starts after it ends', step: 'Step “{t}” in {i} is wrong', special: '“{t}” in {i} isn’t Unix cron syntax (L, W, # are Spring / Quartz only)', question: '“?” only works in the day fields, and not in Unix cron', quartzQ: 'Quartz needs “?” in either day of month or day of week' },
     fields: { sec: 'second', min: 'minute', hour: 'hour', dom: 'day of month', mon: 'month', dow: 'day of week', year: 'year' },
     b: {

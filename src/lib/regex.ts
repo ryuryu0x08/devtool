@@ -72,7 +72,15 @@ export function runRegexAsync(pattern: string, flags: string, text: string, repl
     active = w;
     const t = setTimeout(() => { w.terminate(); if (active === w) active = null; resolve('timeout'); }, ms);
     w.onmessage = (e: MessageEvent<ReResult>) => { clearTimeout(t); w.terminate(); if (active === w) active = null; resolve(e.data); };
-    w.onerror = () => { clearTimeout(t); w.terminate(); resolve(runRegex(pattern, flags, text, repl)); };
+    // A failure inside the worker (e.g. too much recursion) is reported; only a worker that
+    // could not start falls back to running here.
+    w.onerror = (ev) => {
+      // Handled here, so it isn't also reported as an uncaught error of the page.
+      ev.preventDefault();
+      clearTimeout(t); w.terminate(); if (active === w) active = null;
+      if (ev.message) { resolve({ matches: [], total: 0, err: ev.message.replace(/^Uncaught\s+/, '') }); return; }
+      try { resolve(runRegex(pattern, flags, text, repl)); } catch (e) { resolve({ matches: [], total: 0, err: String((e as Error).message) }); }
+    };
     w.postMessage({ pattern, flags, text, repl });
   });
 }

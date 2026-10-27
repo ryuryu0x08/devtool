@@ -22,9 +22,12 @@ import { looksHtmlEscaped } from './lib/htmlent';
 import { looksHex } from './lib/hex';
 import { looksSchema } from './lib/schema';
 import { readInt } from './lib/numbase';
+import { sniffZ } from './lib/gzip';
 import { MobileBar, Sidebar } from './components/Sidebar';
 import { Palette } from './components/Palette';
 import { Vis } from './components/Vis';
+import { ToolBoundary } from './components/ToolBoundary';
+import { ErrLine } from './components/Panes';
 import { Timestamp } from './tools/Timestamp';
 import { QrGen, QrScan } from './tools/Qr';
 import { Formatter } from './tools/Formatter';
@@ -44,6 +47,15 @@ const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg|ico|avif|heic|heif|tiff?)$/i;
 const TEXT_EXT = /\.(json|toml|ya?ml|xml|sql|txt|csv|tsv|log|md|ini|conf|cfg|env|html?|js|ts|css|sh|py|java|c|h|go|rs)$/i;
 /** Files held in memory (Base64 / Hash / Hex / Gzip): replacing one can be undone like replacing text. */
 const FILE_KEYS: (keyof State)[] = ['hashFile', 'b64File', 'hexFile', 'gzFile'];
+/** Each tool's inputs: a tool that fails unexpectedly offers to clear them (undo brings them back). */
+const TOOL_INPUTS: Partial<Record<ToolId, (keyof State)[]>> = {
+  ts: ['tsIn', 'tmIn'], qrgen: ['qrText'], qrscan: ['scan'], json: ['json'], toml: ['toml'], diff: ['diffA', 'diffB'],
+  b64: ['b64In', 'b64File'], hash: ['hashIn', 'hashFile', 'hashCheck'], url: ['urlIn'], urlp: ['urlpIn'], jwt: ['jwtIn', 'jwtKey'],
+  uni: ['uniIn'], html: ['htmlIn'], esc: ['escIn'], hex: ['hexIn', 'hexFile'], base: ['numIn'], gzip: ['gzIn', 'gzFile'],
+  yaml: ['yamlIn'], xml: ['xmlIn'], sql: ['sqlIn'], schema: ['schemaIn', 'schemaData'], tdiff: ['tdA', 'tdB'],
+  regex: ['reSrc', 'reText', 'reRepl'], case: ['caseIn'], count: ['countIn'], proc: ['procIn'], uuid: ['uuidIn'], cron: ['cronIn'],
+  color: ['colorIn', 'colorFg', 'colorBg'],
+};
 /** Tools that take any file, or any pasted file, as bytes. */
 const BYTE_TOOLS: ToolId[] = ['b64', 'hash', 'hex', 'gzip'];
 /** ULIDs are written in upper case; a lower-case 26-character word is more likely something else. */
@@ -201,8 +213,7 @@ export function App() {
     else if (s.tool === 'gzip') {
       // A compressed file (by its first bytes) is decompressed; anything else compressed.
       file.slice(0, 4).arrayBuffer().then((b) => {
-        const h = new Uint8Array(b);
-        const z = (h[0] === 0x1f && h[1] === 0x8b) || (h.length > 1 && (h[0] & 0x0f) === 8 && (h[0] >> 4) <= 7 && ((h[0] << 8) | h[1]) % 31 === 0);
+        const z = sniffZ(new Uint8Array(b)) !== 'deflate-raw';
         set((x) => ({ gzFile: file, o: { ...x.o, 'gz.mode': z ? 'unzip' : 'zip' } }));
       }, () => toast(t.readFail, 5000));
     }
@@ -488,6 +499,17 @@ export function App() {
         <main className="main">
           {!S.wide && <MobileBar />}
           <div className="content" style={{ padding: S.wide ? '26px 36px 56px' : '14px 14px 40px' }}>
+            <ToolBoundary key={S.tool} reset={(TOOL_INPUTS[S.tool] ?? []).map((k) => S[k])} fallback={(err, retry) => (
+              <section className="card tool-crash" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <ErrLine msg={f(T.ui.crashed, { m: err.message || String(err) })} />
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button className="btn" onClick={retry}>{T.ui.retry}</button>
+                  {!!TOOL_INPUTS[S.tool]?.length && (
+                    <button className="btn" onClick={() => replace(Object.fromEntries(TOOL_INPUTS[S.tool]!.map((k) => [k, typeof S[k] === 'string' ? '' : null])))}>{T.ui.clearInput}</button>
+                  )}
+                </div>
+              </section>
+            )}>
             {S.tool === 'ts' && <Timestamp />}
             {S.tool === 'qrgen' && <QrGen />}
             {S.tool === 'qrscan' && <QrScan />}
@@ -516,6 +538,7 @@ export function App() {
             {S.tool === 'uuid' && <Uuid />}
             {S.tool === 'cron' && <Cron />}
             {S.tool === 'color' && <Color />}
+            </ToolBoundary>
           </div>
         </main>
         {S.palette && <Palette />}

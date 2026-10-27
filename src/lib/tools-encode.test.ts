@@ -7,7 +7,7 @@ import { UniError, charTable, escapeUnicode, looksUniEscaped, unescapeUnicode } 
 import { decodeHtml, encodeHtml, looksHtmlEscaped } from './htmlent';
 import { HexError, bytesToHex, hexToBytes, looksHex } from './hex';
 import { NumError, readInt, widths, writeInt } from './numbase';
-import { compress, decompress, sniffZ } from './gzip';
+import { ZTooBig, compress, decompress, sniffZ } from './gzip';
 import { EscError, escapeStr, unescapeStr, type EscLang } from './escape';
 import { JwtError, decodeJwt, looksJwt, times, verifyJwt } from './jwt';
 
@@ -48,6 +48,24 @@ describe('URL encoding', () => {
     expect(looksPercent('100% sure')).toBe(false);
     expect(looksPercent('hello')).toBe(false);
   });
+});
+
+describe('large input stays fast', () => {
+  const text = 'héllo wörld 中文 😀 a+b;'.repeat(150000); // about 4 MB
+  it('URL decoding a few MB (it took seconds, one character at a time)', () => {
+    const t0 = performance.now();
+    expect(urlDecode(encodeURIComponent(text), false).text).toBe(text);
+    expect(urlDecode(text + '%20', true).text).toBe(text.replace(/\+/g, ' ') + ' ');
+    expect(performance.now() - t0).toBeLessThan(2500);
+  }, 30000);
+  it('hex of a 10 MB file and back', () => {
+    const b = Uint8Array.from({ length: 10e6 }, (_, i) => (i * 7) & 255);
+    const t0 = performance.now();
+    const h = bytesToHex(b, ' ', true, '');
+    expect(h.length).toBe(30e6 - 1);
+    expect(Buffer.from(hexToBytes(h)!).equals(Buffer.from(b))).toBe(true);
+    expect(performance.now() - t0).toBeLessThan(5000);
+  }, 30000);
 });
 
 describe('URL parsing', () => {
@@ -174,6 +192,14 @@ describe('number bases', () => {
 });
 
 describe('gzip / deflate', () => {
+  it('a result over the limit stops with its own error; a run no longer wanted stops', async () => {
+    const bomb = gzipSync(Buffer.alloc(5_000_000));
+    await expect(decompress(bomb, 'gzip', undefined, 1_000_000)).rejects.toBeInstanceOf(ZTooBig);
+    expect((await decompress(bomb, 'gzip')).length).toBe(5_000_000);
+    const stop = new AbortController();
+    stop.abort();
+    await expect(decompress(bomb, 'gzip', stop.signal)).rejects.toMatchObject({ name: 'AbortError' });
+  });
   it('agrees with zlib both ways', async () => {
     const r = rng(5);
     for (let i = 0; i < 20; i++) {

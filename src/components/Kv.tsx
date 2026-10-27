@@ -1,13 +1,17 @@
 import type { ButtonHTMLAttributes, CSSProperties, KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { useApp } from '../store';
 
+/** Values longer than this are shown in part (the click still copies all of it). */
+const KV_SHOW = 20_000;
+
 /** A labelled value that copies itself when clicked anywhere on the row: no separate button to find. */
 export function Kv({ label, value, labelColor, ...rest }: { label: string; value: string; labelColor?: string } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'value'>) {
   const { T, copy } = useApp();
+  const shown = value.length > KV_SHOW ? value.slice(0, /[\ud800-\udbff]/.test(value[KV_SHOW - 1]) ? KV_SHOW - 1 : KV_SHOW) + '…' : value;
   return (
     <button className="kv" title={T.clickCopy} onClick={() => copy(value)} {...rest}>
       <span className="k" style={labelColor ? { color: labelColor, fontWeight: 600 } : undefined}>{label}</span>
-      <span className="v">{value}</span>
+      <span className="v">{shown}</span>
     </button>
   );
 }

@@ -1,5 +1,5 @@
 // Bytes and numbers: Hex ⇄ text / bytes, gzip / deflate, integer bases.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { f } from '../i18n';
 import { Pair } from '../components/Split';
 import { useApp } from '../store';
@@ -12,7 +12,7 @@ import { useFileBytes } from './Base64';
 import { errInfo, textBytes, type ErrInfo } from '../lib/data';
 import { b64decode, b64encode } from '../lib/b64';
 import { HexError, bytesToHex, hexToBytes, looksHex, type HexPrefix, type HexSep } from '../lib/hex';
-import { compress, decompress, sniffZ, type ZFmt } from '../lib/gzip';
+import { ZTooBig, compress, decompress, sniffZ, type ZFmt } from '../lib/gzip';
 import { NumError, readInt, widths, writeInt } from '../lib/numbase';
 
 const HEX_MAX_MB = 10;
@@ -122,11 +122,13 @@ export function Gzip() {
     if (input === null) { done(!text.trim() ? null : { err: zip ? T.badText : T.gzip.notData }); return; }
     if (!input || (!file && !text)) { done(null); return; }
     const use = zip ? fmt : sniffZ(input);
-    (zip ? compress(input, use) : decompress(input, use)).then(
+    // A newer input stops the run still going for an older one.
+    const stop = new AbortController();
+    (zip ? compress(input, use, stop.signal) : decompress(input, use, stop.signal)).then(
       (bytes) => done({ bytes, inN: input.length, fmt: use }),
-      () => done({ err: f(T.gzip.fail, { f: zName(use) }) }),
+      (e) => done({ err: e instanceof ZTooBig ? f(T.gzip.tooLarge, { n: e.max / 1024 / 1024 }) : f(T.gzip.fail, { f: zName(use) }) }),
     );
-    return () => { live = false; };
+    return () => { live = false; stop.abort(); };
   }, [key, T]); // eslint-disable-line react-hooks/exhaustive-deps
   const out = res.key === key ? res.out : undefined;
   const loading = pending || out === undefined && !fb.err;
@@ -199,8 +201,6 @@ export function NumBase() {
     else setN(m);
   };
   const label: Record<BaseKey, string> = { '2': T.base.bin, '8': T.base.oct, '10': T.base.dec, '16': T.base.hex, n: f(T.base.baseN, { n: custom }) };
-  // A click puts the whole number in the selection (to copy or type over); a second click places the caret.
-  const fresh = useRef(false);
   const w = ok ? widths(ok.v) : [];
   return (
     <Grid min={360}>
@@ -219,8 +219,12 @@ export function NumBase() {
                 <input className={'field line mono' + (k === src && r && !ok ? ' bad' : '')} value={v} spellCheck={false} autoComplete="off"
                   data-autofocus={k === '10' ? '1' : undefined} aria-label={label[k]} placeholder={S.numIn ? '' : k === '10' ? T.base.ph : BASE_PH[k]}
                   onChange={(e) => edit(k, e.target.value)}
-                  onFocus={(e) => { e.currentTarget.select(); fresh.current = true; }}
-                  onMouseUp={(e) => { if (fresh.current) e.preventDefault(); fresh.current = false; }} />
+                  onFocus={(e) => e.currentTarget.select()}
+                  onMouseDown={(e) => {
+                    // The first click focuses and selects everything; a click in a focused box places the caret.
+                    const el = e.currentTarget;
+                    if (document.activeElement !== el) { e.preventDefault(); el.focus(); el.select(); }
+                  }} />
               </div>
             );
           })}

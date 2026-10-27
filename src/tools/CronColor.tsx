@@ -57,7 +57,11 @@ export function Cron() {
   if (ok) {
     if (mode === 'auto' && !ok.c.macro) notes.push(f(T.cron.as, { d: T.cron[ok.c.dialect] }));
     const f2 = ok.c.f;
-    if (!ok.c.reboot && f2.dom && f2.dow && !f2.dom.star && !f2.dow.star) notes.push(ok.c.dialect === 'unix' ? T.cron.unixOr : f(T.cron.andRule, { d: T.cron[ok.c.dialect] }));
+    // Both day fields restricted: say which rule decides (implementations differ for Unix "*/n").
+    if (!ok.c.reboot && f2.dom && f2.dow && !f2.dom.any && !f2.dow.any) {
+      if (ok.c.dialect !== 'unix') notes.push(f(T.cron.andRule, { d: T.cron[ok.c.dialect] }));
+      else notes.push(f2.dom.star || f2.dow.star ? T.cron.starAnd : T.cron.unixOr);
+    }
     if (ok.next.skipped) notes.push(f(T.cron.skipped, { n: ok.next.skipped }));
     if (ok.next.runs.some((x) => x.repeated)) notes.push(T.cron.repeated);
   }

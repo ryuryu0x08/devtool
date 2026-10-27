@@ -72,6 +72,37 @@ test('the gap is dragged to share the width, remembered; a double-click shares i
   expect(Math.abs((await box(page, 0)).width - (await box(page, 1)).width)).toBeLessThan(2);
 });
 
+test('a drag the system cancels lets go cleanly: the layout comes back, nothing keeps following the pointer', async ({ page }) => {
+  await open(page, 'URL 编解码');
+  const cancel = () => page.evaluate(() => window.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true })));
+  // Carrying the result below, then cancelled: side by side again.
+  const g = (await page.locator('.split-grip').boundingBox())!;
+  await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(g.x + g.width / 2, g.y + 300, { steps: 8 });
+  expect(await layout(page)).toBe('col');
+  await cancel();
+  expect(await layout(page)).toBe('row');
+  await expect(page.locator('.split-pane.holding')).toHaveCount(0);
+  expect(await page.evaluate(() => document.body.className)).not.toContain('dragging');
+  await page.mouse.move(g.x, g.y + 400, { steps: 4 });
+  await page.mouse.up();
+  expect(await layout(page)).toBe('row');
+  // The panes slide back (a short animation); measure widths once they are still.
+  await page.waitForFunction(() => document.getAnimations().length === 0);
+  // Sharing the width, then cancelled: later moves don't resize.
+  const gut = (await page.locator('.split-gutter').boundingBox())!;
+  await page.mouse.move(gut.x + gut.width / 2, gut.y + gut.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(gut.x + 100, gut.y + gut.height / 2, { steps: 4 });
+  await cancel();
+  const w = (await box(page, 0)).width;
+  await page.mouse.move(gut.x + 300, gut.y + gut.height / 2, { steps: 4 });
+  expect(Math.abs((await box(page, 0)).width - w)).toBeLessThan(1);
+  expect(await page.evaluate(() => document.body.className)).not.toContain('dragging');
+  await page.mouse.up();
+});
+
 test('the older tools have it too: Base64, hash, JSON, QR code', async ({ page }) => {
   await open(page);
   for (const t of ['Base64 编解码', '哈希', 'JSON 格式化', '生成二维码']) {

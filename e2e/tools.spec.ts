@@ -3,7 +3,7 @@
 import { createHmac } from 'node:crypto';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import type { Locator, Page } from '@playwright/test';
-import { activeTool, clipboard, drop, expect, nav, open, pasteOnBlank, test } from './helpers';
+import { activeTool, clipboard, drop, expect, nav, open, pasteOnBlank, setValue, test } from './helpers';
 
 const input = (page: Page) => page.locator('textarea[data-autofocus], input[data-autofocus]').first();
 const out = (page: Page) => page.locator('.out-card .tool-out').first();
@@ -96,6 +96,9 @@ test.describe('encoding', () => {
     await drop(page, [{ name: 'notes.txt.gz', bytes: [...gzipSync('dropped 文本')] }]);
     await expect(seg(page, '解压')).toHaveClass(/on/);
     await expect(out(page)).toHaveText('dropped 文本');
+    // Saved under the name it had inside the .gz, not notes.txt.txt.
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '下载' }).click()]);
+    expect(dl.suggestedFilename()).toBe('notes.txt');
   });
 
   test('Gzip: what it compresses, zlib decompresses; what zlib compresses, it decompresses', async ({ page }) => {
@@ -441,5 +444,48 @@ test.describe('pasting and dropping', () => {
     await expect(out(page)).toHaveText('k: v\n');
     await drop(page, [{ name: 'q.sql', bytes: 'select 1' }]);
     await expect.poll(() => activeTool(page)).toContain('SQL 格式化');
+  });
+});
+
+test.describe('large and unusual input', () => {
+  test('nesting too deep, a dangling YAML alias, a schema that refers to itself: each is explained', async ({ page }) => {
+    await open(page, 'XML 格式化');
+    await setValue(input(page), '<a>'.repeat(20000) + '</a>'.repeat(20000));
+    await expect(errBox(page)).toContainText('嵌套层级太深', { timeout: 15000 });
+    await nav(page, 'YAML 格式化');
+    await input(page).fill('*.log');
+    await expect(errBox(page)).toContainText('Unresolved alias');
+    await nav(page, 'JSON Schema 校验');
+    await input(page).fill('{"$ref":"#"}');
+    await page.locator('textarea').nth(1).fill('1');
+    await expect(page.locator('.schema-out')).toContainText('绕回了自己');
+  });
+
+  test('a regex the engine gives up on is explained, not left "processing"', async ({ page }) => {
+    await open(page, '正则表达式测试');
+    await input(page).fill('(a|b)*c');
+    await setValue(page.locator('textarea').first(), 'ab'.repeat(3e6));
+    await expect(errBox(page)).toContainText('回溯太深', { timeout: 15000 });
+  });
+
+  test('very large results are shown in part; a click still copies all of it', async ({ page }) => {
+    await open(page, 'Hex 编解码');
+    await drop(page, [{ name: 'x.bin', bytes: Array.from({ length: 70000 }, (_, i) => i & 255) }]);
+    await expect(page.locator('.shown-first')).toContainText('仅显示前 200,000 个字符');
+    await out(page).click();
+    await expect.poll(async () => (await clipboard(page)).length).toBe(70000 * 3 - 1);
+  });
+
+  test('Cron: a "*/2" day with a weekday says which rule it follows', async ({ page }) => {
+    await open(page, 'Cron 表达式');
+    await input(page).fill('0 0 */2 * 1');
+    await expect(notes(page)).toContainText('Vixie cron');
+    await expect(page.locator('.cron-desc')).toContainText('且是周一');
+  });
+
+  test('a sentence that starts with an SQL word is not sent to the SQL formatter', async ({ page }) => {
+    await open(page);
+    await pasteOnBlank(page, { text: 'Select the file from the list' });
+    await expect.poll(() => activeTool(page)).toContain('生成二维码');
   });
 });

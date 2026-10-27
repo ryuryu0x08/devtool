@@ -15,18 +15,42 @@ import { contrast, formats, looksColor, parseColor, toOklch } from './color';
 
 describe('text diff', () => {
   it('lines added, removed, changed (with the changed characters)', () => {
-    const d = diffText('a\nb\nc\nd', 'a\nB!\nc\ne\nf', { ignoreWs: false, ignoreCase: false });
+    const d = diffText('a\nb\nc\nd', 'a\nB!\nc\ne\nf', { ignoreWs: false, ignoreCase: false }).lines;
     expect(d.map((l) => l.k + (l.a ?? '-') + (l.b ?? '-') + ':' + l.text)).toEqual(['same11:a', 'del2-:b', 'add-2:B!', 'same33:c', 'del4-:d', 'add-4:e', 'add-5:f']);
     expect(d[1].segs).toEqual([{ t: 'b', ch: true }]);
     expect(d[2].segs).toEqual([{ t: 'B!', ch: true }]);
   });
   it('ignore whitespace / case', () => {
-    expect(diffText('a  b\nX', 'a b \nx', { ignoreWs: true, ignoreCase: true }).every((l) => l.k === 'same')).toBe(true);
-    expect(diffText('a  b', 'a b', { ignoreWs: false, ignoreCase: false }).map((l) => l.k)).toEqual(['del', 'add']);
+    expect(diffText('a  b\nX', 'a b \nx', { ignoreWs: true, ignoreCase: true }).lines.every((l) => l.k === 'same')).toBe(true);
+    expect(diffText('a  b', 'a b', { ignoreWs: false, ignoreCase: false }).lines.map((l) => l.k)).toEqual(['del', 'add']);
   });
+  it('large, very different texts finish quickly; equal start and end stay aligned', () => {
+    let x = 7;
+    const rnd = (n: number) => Array.from({ length: n }, () => { x = (x * 1103515245 + 12345) % 2147483648; return 'line ' + x.toString(36); });
+    const head = ['# same start'], tail = ['# same end'];
+    const A = [...head, ...rnd(8000), ...tail].join('\n'), B = [...head, ...rnd(8000), ...tail].join('\n');
+    let t0 = performance.now();
+    const d = diffText(A, B, { ignoreWs: false, ignoreCase: false });
+    expect(performance.now() - t0).toBeLessThan(6000); // took 20 s before the time budget
+    expect(d.lines[0]).toMatchObject({ k: 'same', text: '# same start' });
+    expect(d.lines[d.lines.length - 1]).toMatchObject({ k: 'same', text: '# same end' });
+    // Whether aligned exactly or not, the diff is correct: A is the same + removed lines, B the same + added.
+    expect(d.lines.filter((l) => l.k !== 'add').map((l) => l.text).join('\n')).toBe(A);
+    expect(d.lines.filter((l) => l.k !== 'del').map((l) => l.text).join('\n')).toBe(B);
+    // Two long lines that differ a lot: no character marks (they ran out of memory before), but correct.
+    const long = (s: number) => Array.from({ length: 200000 }, (_, i) => String.fromCharCode(97 + ((i * s) % 26))).join('');
+    t0 = performance.now();
+    const e = diffText(long(7), long(11), { ignoreWs: false, ignoreCase: false });
+    expect(performance.now() - t0).toBeLessThan(6000);
+    expect(e.lines.map((l) => [l.k, l.segs])).toEqual([['del', undefined], ['add', undefined]]);
+    // A small change in a long line is still marked.
+    const f = diffText('x'.repeat(100000) + 'A' + 'y'.repeat(100000), 'x'.repeat(100000) + 'B' + 'y'.repeat(100000), { ignoreWs: false, ignoreCase: false });
+    expect(f.lines[0].segs?.filter((g) => g.ch)).toEqual([{ t: 'A', ch: true }]);
+    expect(f.approx).toBe(false);
+  }, 30000);
   it('identical and empty texts', () => {
-    expect(diffText('x\ny', 'x\ny', { ignoreWs: false, ignoreCase: false }).every((l) => l.k === 'same')).toBe(true);
-    expect(diffText('', 'a', { ignoreWs: false, ignoreCase: false }).map((l) => l.k)).toEqual(['del', 'add']);
+    expect(diffText('x\ny', 'x\ny', { ignoreWs: false, ignoreCase: false }).lines.every((l) => l.k === 'same')).toBe(true);
+    expect(diffText('', 'a', { ignoreWs: false, ignoreCase: false }).lines.map((l) => l.k)).toEqual(['del', 'add']);
   });
 });
 
@@ -138,7 +162,8 @@ describe('IDs with time', () => {
 describe('cron', () => {
   const NOW = Date.UTC(2026, 9, 27, 3, 4, 5);
   it('next runs agree with cron-parser (Unix expressions, several zones)', () => {
-    for (const expr of ['* * * * *', '*/15 9-17 * * 1-5', '0 0 1,15 * *', '30 2 * * 0', '0 12 * JAN,JUL MON', '5 4 31 * *', '0 0 29 2 *', '0 9 1 * 1', '@weekly', '0 */3 * * *']) {
+    for (const expr of ['* * * * *', '*/15 9-17 * * 1-5', '0 0 1,15 * *', '30 2 * * 0', '0 12 * JAN,JUL MON', '5 4 31 * *', '0 0 29 2 *', '0 9 1 * 1', '@weekly', '0 */3 * * *',
+      '0 0 */2 * *', '0 0 1-31/2 * 1', '0 0 1 * MON-WED', '0 0 1 JAN-JUL *', '0 0 * * */2']) {
       for (const tz of ['UTC', 'Asia/Shanghai', 'America/New_York']) {
         const ours = nextRuns(parseCron(expr, guessDialect(expr)), tz, NOW, 8).runs.map((r) => r.ms);
         const it = CronExpressionParser.parse(expr, { currentDate: new Date(NOW), tz });
@@ -179,6 +204,26 @@ describe('cron', () => {
     expect(zh('0 0 1 1 *')).toBe('1 月 每月 1 日 00:00');
     expect(describeCron(parseCron('30 9 * * 1-5', 'unix'), 'en')).toBe('09:30, every weekday (Monday to Friday)');
     expect(zh('@reboot')).toBe('系统启动时运行一次');
+  });
+  it('Unix: a day field starting with "*" (like */2) makes both day fields count, as Vixie cron / cronie do', () => {
+    // cron-parser accepts either field here; Linux cron needs both. Expected from the rule itself:
+    // midnight on Mondays that are odd days of the month.
+    const runs = nextRuns(parseCron('0 0 */2 * 1', 'unix'), 'UTC', NOW, 6).runs.map((r) => r.ms);
+    const want: number[] = [];
+    for (let t = Date.UTC(2026, 9, 28); want.length < 6; t += 864e5) {
+      const d = new Date(t);
+      if (d.getUTCDay() === 1 && d.getUTCDate() % 2 === 1) want.push(t);
+    }
+    expect(runs).toEqual(want);
+    expect(describeCron(parseCron('0 0 */2 * 1', 'unix'), 'zh')).toContain('且是周一');
+    expect(describeCron(parseCron('0 0 1,15 * 1', 'unix'), 'zh')).toContain('以及每周一');
+  });
+  it('month and day names in ranges are names, not L / W / #', () => {
+    expect(() => parseCron('0 0 * * MON-WED', 'unix')).not.toThrow();
+    expect(() => parseCron('0 0 1 JAN-JUL/2 *', 'unix')).not.toThrow();
+    expect(looksCron('0 0 * * MON-WED')).toBe(true);
+    const code = (s: string) => { try { parseCron(s, 'unix'); return null; } catch (x) { return (x as CronError).code; } };
+    expect([code('0 0 * * 6L'), code('0 0 15W * *'), code('0 0 * * 2#1')]).toEqual(['special', 'special', 'special']);
   });
   it('errors say which field', () => {
     const e = (s: string, d: 'unix' | 'spring' | 'quartz' = 'unix') => { try { parseCron(s, d); return null; } catch (x) { return [(x as CronError).code, (x as CronError).field]; } };
@@ -245,6 +290,13 @@ describe('cron editor model', () => {
       ['0 0 12 1W * ?', 'quartz'], ['0 0 12 ? * 2#1 2030', 'quartz'], ['0 0/15 8-17 ? * MON-FRI', 'quartz'],
     ];
     for (const [e, d] of cases) same(e, writeExpr(readExpr(e, d)!, d), d);
+  });
+  it('macros in Quartz get "?" and Sunday = 1', () => {
+    for (const [m, q] of [['@weekly', '0 0 0 ? * 1'], ['@yearly', '0 0 0 1 1 ?'], ['@daily', '0 0 0 * * ?']]) {
+      const e = writeExpr(readExpr(m, 'quartz')!, 'quartz');
+      expect(e).toBe(q);
+      expect(() => parseCron(e, 'quartz')).not.toThrow();
+    }
   });
   it('recognises the simple forms', () => {
     const p = (e: string, d: Dialect = 'unix') => presetOf(readExpr(e, d)!);

@@ -59,7 +59,8 @@ function field(raw: string, kind: Kind, idx: number, d: Dialect): Field {
     if (special && kind === 'dom' && (m = /^(\d+)W$/i.exec(part))) { const n = name(m[1]); (f.nearestW ??= []).push(n); continue; }
     if (special && kind === 'dow' && (m = /^(\w+)L$/i.exec(part))) { (f.last ??= []).push(dowNorm(name(m[1]), d)); continue; }
     if (special && kind === 'dow' && (m = /^(\w+)#([1-5])$/.exec(part))) { (f.nth ??= []).push([dowNorm(name(m[1]), d), +m[2]]); continue; }
-    if (/[LW#]/i.test(part) && !/^[A-Z]{3}$/i.test(part)) throw new CronError(d === 'unix' ? 'special' : 'value', idx, part);
+    // L / W / # outside the forms above; month and day names (JUL, WED) in ranges and steps are fine.
+    if (part.split(/[-/]/).some((t) => /[LW#]/i.test(t) && !/^[A-Z]{3}$/i.test(t))) throw new CronError(d === 'unix' ? 'special' : 'value', idx, part);
     const [base, stepS] = part.split('/');
     if (part.split('/').length > 2) throw new CronError('step', idx, part);
     const step = stepS === undefined ? 1 : /^\d+$/.test(stepS) && +stepS > 0 ? +stepS : NaN;
@@ -145,10 +146,9 @@ function dowMatch(f: Field, y: number, m: number, d: number): boolean {
 function dayMatch(c: Cron, y: number, m: number, d: number): boolean {
   const { dom, dow } = c.f;
   if (c.dialect === 'unix') {
-    // Vixie cron: when both are restricted, either one matching is enough.
-    if (dom.star && dow.star) return true;
-    if (dom.star) return dowMatch(dow, y, m, d);
-    if (dow.star) return domMatch(dom, y, m, d);
+    // Vixie cron: when either field begins with "*" (even "*/2"), both must match; when both
+    // are restricted, either one matching is enough.
+    if (dom.star || dow.star) return domMatch(dom, y, m, d) && dowMatch(dow, y, m, d);
     return domMatch(dom, y, m, d) || dowMatch(dow, y, m, d);
   }
   return (dom.any || domMatch(dom, y, m, d)) && (dow.any || dowMatch(dow, y, m, d));
@@ -268,7 +268,8 @@ export function describe(c: Cron, l: L): string {
   if (domFree && dowFree) days = l === 'zh' ? '每天' : 'every day';
   else if (domFree) days = dowText();
   else if (dowFree) days = domText();
-  else if (c.dialect === 'unix') days = l === 'zh' ? `${domText()}，以及${dowText()}` : `${domText()}, and ${dowText()}`;
+  // Unix cron: either one when both are written without "*"; both when one starts with "*" (*/2).
+  else if (c.dialect === 'unix' && !dom.star && !dow.star) days = l === 'zh' ? `${domText()}，以及${dowText()}` : `${domText()}, and ${dowText()}`;
   else days = l === 'zh' ? `${domText()}，且是${dowText().replace(/^每/, '')}时` : `${domText()}, when it is ${dowText().replace(/^every /, '')}`;
 
   const months = mon.vals.length === 12 ? '' : l === 'zh' ? list(mon.vals, (x) => x + ' 月') : list(mon.vals, (x) => MONTHS[x - 1][0] + MONTHS[x - 1].slice(1).toLowerCase());

@@ -8,7 +8,7 @@ import { Kv } from '../components/Kv';
 import { CopyBlock } from '../components/Kv';
 import { Vis } from '../components/Vis';
 import { useSettled } from '../components/useSettled';
-import { Empty, ErrLine, Flag, Grid, OutCard, TextIn, TextOut, Toolbar, useOpt } from '../components/Panes';
+import { Empty, ErrLine, Flag, Grid, OutCard, SHOW_CHARS, TextIn, TextOut, Toolbar, head, useOpt } from '../components/Panes';
 import { diffText, type DLine } from '../lib/textdiff';
 import { runRegexAsync, splitLiteral, type ReResult } from '../lib/regex';
 import { CASES, convertLines } from '../lib/caseconv';
@@ -27,7 +27,8 @@ export function TextDiff() {
   const [onlyDiff, setOnly] = useOpt('tdiff.only', false);
   const [a, pa] = useSettled(S.tdA);
   const [b, pb] = useSettled(S.tdB);
-  const lines = useMemo(() => (a || b ? diffText(a, b, { ignoreWs, ignoreCase }) : null), [a, b, ignoreWs, ignoreCase]);
+  const d = useMemo(() => (a || b ? diffText(a, b, { ignoreWs, ignoreCase }) : null), [a, b, ignoreWs, ignoreCase]);
+  const lines = d?.lines ?? null;
   const added = lines?.filter((l) => l.k === 'add').length ?? 0;
   const removed = lines?.filter((l) => l.k === 'del').length ?? 0;
   const rows = useMemo<Row[]>(() => {
@@ -60,7 +61,11 @@ export function TextDiff() {
         <TextIn title={T.tdiff.b} value={S.tdB} placeholder={T.tdiff.ph} minH={200} focus={false} onChange={edit('tdB')} onClear={() => replace({ tdB: '' })} />
       </Grid>
       <OutCard className="tdiff-out" status={pa || pb ? T.processing : !lines ? T.tdiff.need : same ? T.tdiff.same : f(T.tdiff.removed, { n: removed }) + '  ' + f(T.tdiff.added, { n: added })}
-        notes={rows.length > DIFF_CAP ? [f(T.tdiff.capped, { n: DIFF_CAP, t: rows.length })] : []}>
+        notes={[
+          ...(d?.approx ? [T.tdiff.approx] : []),
+          ...(d?.unmarked ? [f(T.tdiff.unmarked, { n: d.unmarked })] : []),
+          ...(rows.length > DIFF_CAP ? [f(T.tdiff.capped, { n: DIFF_CAP, t: rows.length })] : []),
+        ]}>
         {!lines ? <Empty>{T.tdiff.need}</Empty> : (
           <CopyBlock value={unified}>
             {shown.map((r, i) => ('gap' in r
@@ -108,17 +113,21 @@ export function Regex() {
   };
 
   // Matches marked in the text, alternating colours so neighbours stay apart.
+  // Only the first part of a long text is marked up (laying out megabytes freezes the page).
   const marked = useMemo(() => {
     if (!ok) return null;
     const out: ReactNode[] = [];
+    const lim = head(text, SHOW_CHARS).length;
     let at = 0;
     ok.matches.forEach((m, k) => {
-      if (m.i < at) return;
+      if (m.i < at || m.i >= lim) return;
+      const end = Math.min(m.i + m.text.length, lim);
       out.push(<Vis key={'t' + k} text={text.slice(at, m.i)} />);
-      out.push(<mark key={'m' + k} className={k % 2 ? 'mark-b' : 'mark-a'}>{m.text ? <Vis text={m.text} /> : '​'}</mark>);
-      at = m.i + m.text.length;
+      out.push(<mark key={'m' + k} className={k % 2 ? 'mark-b' : 'mark-a'}>{m.text ? <Vis text={text.slice(m.i, end)} /> : '​'}</mark>);
+      at = Math.max(at, end);
     });
-    out.push(<Vis key="end" text={text.slice(at)} />);
+    out.push(<Vis key="end" text={text.slice(at, lim)} />);
+    if (lim < text.length) out.push(<span key="more" style={{ color: 'var(--faint)' }}>{'\n…'}</span>);
     return out;
   }, [ok, text]);
 
@@ -147,7 +156,7 @@ export function Regex() {
           )}
         </TextIn>
         <OutCard className="re-out" status={status} bad={r === 'timeout' || !!r?.err} notes={notes}>
-          {!S.reSrc ? <Empty /> : r === 'timeout' ? <ErrLine msg={T.regex.timeout} /> : r?.err ? <ErrLine msg={r.err} /> : ok && ok.matches.length ? (
+          {!S.reSrc ? <Empty /> : r === 'timeout' ? <ErrLine msg={T.regex.timeout} /> : r?.err ? <ErrLine msg={/call stack|too much recursion/i.test(r.err) ? T.regex.stack : r.err} /> : ok && ok.matches.length ? (
             <div className="re-matches">
               {ok.matches.map((m, k) => (
                 <Fragment key={k}>

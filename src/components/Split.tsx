@@ -35,8 +35,11 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
   const [target, setTarget] = useState<Mode | null>(null);
   /** Where the result was grabbed (fraction of its width, px from its top), its width then, and the pointer now. */
   const grab = useRef<{ fx: number; oy: number; w: number; x: number; y: number } | null>(null);
-  /** Pane rects after the last layout, to animate from when it changes. */
+  /** Pane rects of the layout on screen: measured after each layout change and again right before
+   *  one is asked for (not on every render: each keystroke re-renders the tool). */
   const prev = useRef<{ shown: Mode; a: DOMRect; b: DOMRect } | null>(null);
+  /** The next layout change was asked for here (click, key, carry), so it slides; a narrower window just switches. */
+  const animate = useRef(false);
 
   useLayoutEffect(() => {
     const el = box.current;
@@ -63,13 +66,24 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
     f.style.transform = `translate(${g.x - g.fx * g.w - rs.left}px, ${g.y - g.oy - rs.top}px)`;
   };
 
+  const measure = () => {
+    const A = paneA.current, B = slotB.current;
+    if (A && B) prev.current = { shown, a: A.getBoundingClientRect(), b: B.getBoundingClientRect() };
+  };
+  /** Switch side by side ⇄ stacked, sliding from where the panes are now. */
+  const toggle = () => {
+    measure();
+    animate.current = true;
+    setMode(shown === 'row' ? 'col' : 'row');
+  };
+
   // After a layout change, the panes move from where they were (width and position animate).
   useLayoutEffect(() => {
     const A = paneA.current, B = slotB.current, F = floatB.current;
     if (!A || !B || !F) return;
     const ra = A.getBoundingClientRect(), rb = B.getBoundingClientRect();
     const p = prev.current;
-    if (p && p.shown !== shown && !reduced()) {
+    if (animate.current && p && p.shown !== shown && !reduced()) {
       const opts = { duration: 260, easing: EASE };
       A.animate([{ width: p.a.width + 'px', transform: `translate(${p.a.left - ra.left}px, ${p.a.top - ra.top}px)` }, { width: ra.width + 'px', transform: 'none' }], opts);
       // A carried result follows the pointer; it shrinks to fit a narrower slot, and grows only
@@ -82,9 +96,10 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
       }
       if (!g) F.animate([{ width: p.b.width + 'px', transform: `translate(${p.b.left - rb.left}px, ${p.b.top - rb.top}px)` }, { width: rb.width + 'px', transform: 'none' }], opts);
     }
+    animate.current = false;
     if (grab.current) place();
     prev.current = { shown, a: ra, b: rb };
-  });
+  }, [shown]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Gap between the panes: drag to share the width; double-click to share it equally.
   const onGutter = (e: RPointerEvent<HTMLDivElement>) => {
@@ -97,6 +112,7 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
     const up = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
       document.body.classList.remove('dragging-x');
       setLive(null);
       setRatio(Math.round(last * 1000) / 1000);
@@ -104,6 +120,7 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
     document.body.classList.add('dragging-x');
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
   };
 
   /** The layout for the carried result's top edge here: pulled about 120 px down, it goes below;
@@ -127,6 +144,7 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
       if (!moved) {
         if (Math.hypot(ev.clientX - g.x, ev.clientY - g.y) < 5) return;
         moved = true;
+        measure();
         grab.current = g;
         floatB.current!.style.width = g.w + 'px';
         document.body.classList.add('dragging-move');
@@ -135,27 +153,32 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
       g.x = ev.clientX;
       g.y = ev.clientY;
       const next = decide(tgt, ev.clientX, ev.clientY - g.oy);
-      if (next !== tgt) { tgt = next; setTarget(next); }
+      if (next !== tgt) { tgt = next; animate.current = true; setTarget(next); }
       place();
     };
-    const up = () => {
+    const up = (ev: PointerEvent) => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
-      if (!moved) { setMode(shown === 'row' ? 'col' : 'row'); return; }
+      window.removeEventListener('pointercancel', up);
+      if (!moved) { if (ev.type === 'pointerup') toggle(); return; }
       document.body.classList.remove('dragging-move');
-      // Settle: from where it was let go into its slot, taking the slot's width.
+      // Let go: it settles into its slot, taking the slot's width. Cancelled (a system gesture took
+      // the pointer): the layout it was carried from comes back.
+      const cancel = ev.type === 'pointercancel';
       const f = floatB.current, t = f?.style.transform, w = f?.style.width;
       grab.current = null;
-      setMode(tgt);
+      if (!cancel) setMode(tgt);
+      else if (tgt !== mode) animate.current = true;
       setTarget(null);
       if (f) {
         f.style.transform = '';
         f.style.width = '';
-        if (t && !reduced()) f.animate([{ transform: t, width: w }, { transform: 'none', width: slotB.current!.getBoundingClientRect().width + 'px' }], { duration: 260, easing: EASE });
+        if (!cancel && t && !reduced()) f.animate([{ transform: t, width: w }, { transform: 'none', width: slotB.current!.getBoundingClientRect().width + 'px' }], { duration: 260, easing: EASE });
       }
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
   };
 
   const grid: CSSProperties = shown === 'row'
@@ -174,7 +197,7 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
         <div ref={floatB} className={'split-float' + (carrying ? ' carried' : '')}>
           {!narrow && (
             <button className="split-grip" title={T.ui.grip} aria-label={T.ui.grip} onPointerDown={onGrip}
-              onClick={(e) => { if (e.detail === 0) setMode(shown === 'row' ? 'col' : 'row'); }}>
+              onClick={(e) => { if (e.detail === 0) toggle(); }}>
               <svg width="16" height="6" viewBox="0 0 16 6" aria-hidden="true">
                 {[1.5, 6, 10.5, 15].flatMap((x) => [<circle key={x + 'a'} cx={x - 0.5} cy="1.2" r="1.1" />, <circle key={x + 'b'} cx={x - 0.5} cy="4.8" r="1.1" />])}
               </svg>

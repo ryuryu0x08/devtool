@@ -10,7 +10,7 @@ export class XmlVerifyError extends Error {}
 
 type Node =
   | { k: 'el'; name: string; attrs: { name: string; raw: string }[]; self: boolean; kids: Node[]; inner: string; pos: number }
-  | { k: 'text' | 'comment' | 'pi' | 'cdata' | 'doctype'; raw: string };
+  | { k: 'text' | 'comment' | 'pi' | 'cdata' | 'doctype'; raw: string; at?: number };
 
 const NAME = /^[A-Za-z_:À-￿][\w.\-:·-￿]*/;
 
@@ -31,12 +31,12 @@ function parse(s: string): Node[] {
       for (const m of raw.matchAll(/&/g)) {
         if (!/^&(#\d+|#x[0-9a-fA-F]+|[A-Za-z_:][\w.\-:]*);/.test(raw.slice(m.index!))) throw new XmlError('amp', i + m.index!);
       }
-      add({ k: 'text', raw });
+      add({ k: 'text', raw, at: i });
       i = j;
       continue;
     }
     if (s.startsWith('<!--', i)) { const j = until('-->', i + 4); add({ k: 'comment', raw: s.slice(i, j) }); i = j; continue; }
-    if (s.startsWith('<![CDATA[', i)) { const j = until(']]>', i + 9); add({ k: 'cdata', raw: s.slice(i, j) }); i = j; continue; }
+    if (s.startsWith('<![CDATA[', i)) { const j = until(']]>', i + 9); add({ k: 'cdata', raw: s.slice(i, j), at: i }); i = j; continue; }
     if (s.startsWith('<?', i)) { const j = until('?>', i + 2); add({ k: 'pi', raw: s.slice(i, j) }); i = j; continue; }
     if (s.startsWith('<!DOCTYPE', i)) {
       let j = i + 9, depth = 0, q = '';
@@ -95,10 +95,8 @@ function parse(s: string): Node[] {
   const roots = top.filter((n) => n.k === 'el');
   if (!roots.length) throw new XmlError('noRoot', 0);
   if (roots.length > 1) throw new XmlError('multiRoot', (roots[1] as { pos: number }).pos);
-  let pos = 0;
   for (const n of top) {
-    if ((n.k === 'text' && n.raw.trim()) || n.k === 'cdata') throw new XmlError('text', pos + (n.k === 'text' ? n.raw.search(/\S/) : 0));
-    pos += n.k === 'el' ? 0 : n.raw.length;
+    if ((n.k === 'text' && n.raw.trim()) || n.k === 'cdata') throw new XmlError('text', (n.at ?? 0) + (n.k === 'text' ? n.raw.search(/\S/) : 0));
   }
   return top;
 }

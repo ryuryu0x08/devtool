@@ -65,11 +65,25 @@ export function OutCard(p: { status: ReactNode; bad?: boolean; right?: ReactNode
   );
 }
 
+/** Longer results are shown in part (laying out megabytes of text freezes the page); a click
+ *  still copies all of it. */
+export const SHOW_CHARS = 200_000;
+
+/** The first `n` UTF-16 units of s, not cutting a surrogate pair in half. */
+export function head(s: string, n: number): string {
+  if (s.length <= n) return s;
+  const c = s.charCodeAt(n - 1);
+  return s.slice(0, c >= 0xd800 && c <= 0xdbff ? n - 1 : n);
+}
+
 /** Text result: a click copies all of it; invisible characters are marked. */
 export function TextOut({ text, className }: { text: string; className?: string }) {
+  const { T } = useApp();
+  const cut = text.length > SHOW_CHARS;
   return (
     <CopyBlock value={text}>
-      <pre className={'tool-out ' + (className ?? '')} style={{ margin: 0, font: "13px/1.6 'Geist Mono', 'PingFang SC', monospace", whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}><Vis text={text} /></pre>
+      <pre className={'tool-out ' + (className ?? '')} style={{ margin: 0, font: "13px/1.6 'Geist Mono', 'PingFang SC', monospace", whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}><Vis text={cut ? head(text, SHOW_CHARS) : text} /></pre>
+      {cut && <div className="shown-first" style={{ marginTop: 10, fontSize: 12, color: 'var(--faint)' }}>{f(T.ui.shownFirst, { n: SHOW_CHARS.toLocaleString('en-US') })}</div>}
     </CopyBlock>
   );
 }
@@ -107,12 +121,18 @@ export function download(bytes: Uint8Array, name: string, mime = 'application/oc
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-/** Bytes as a result: UTF-8 text when they are, else a hex dump; downloadable either way. */
+/** Results larger than this are shown as a hex dump of their start (and downloaded), not as text. */
+const TEXT_MAX = 64 * 1024 * 1024;
+
+/** Bytes as a result: UTF-8 text when they are, else a hex dump; downloadable either way. A name
+ *  that already has an extension (notes.txt from notes.txt.gz) is kept as it is. */
 export function BytesOut({ bytes, view, onView, name, extraNotes = [], status }: {
   bytes: Uint8Array; view: 'text' | 'hex'; onView: (v: 'text' | 'hex') => void; name: string; extraNotes?: string[]; status?: string;
 }) {
   const { T } = useApp();
-  const text = useMemo(() => decodeUtf8(bytes), [bytes]);
+  // Very large results aren't turned into text: the string alone could exhaust the page.
+  const big = bytes.length > TEXT_MAX;
+  const text = useMemo(() => (big ? null : decodeUtf8(bytes)), [bytes, big]);
   const kind = sniff(bytes);
   const v = text === null ? 'hex' : view;
   const preview = useMemo(() => (kind?.mime.startsWith('image/') ? URL.createObjectURL(new Blob([bytes as BlobPart], { type: kind.mime })) : ''), [bytes, kind]);
@@ -120,10 +140,10 @@ export function BytesOut({ bytes, view, onView, name, extraNotes = [], status }:
   const inv = text ? countInvisible(text) : 0;
   const notes = [...extraNotes, ...(inv ? [f(T.invisibleChars, { n: inv })] : [])];
   return (
-    <OutCard status={status ?? f(text === null ? T.ui.notUtf8Out : T.ui.utf8Out, { n: bytes.length.toLocaleString('en-US') })} notes={notes}
+    <OutCard status={status ?? f(big ? T.ui.bigOut : text === null ? T.ui.notUtf8Out : T.ui.utf8Out, { n: bytes.length.toLocaleString('en-US') })} notes={notes}
       right={<>
         {text !== null && <Seg size="sm" value={v} onChange={onView} opts={[{ value: 'text', label: T.ui.textView }, { value: 'hex', label: T.ui.hexView }]} />}
-        <button className="btn sm" onClick={() => download(bytes, name + '.' + (kind?.ext ?? (text !== null ? 'txt' : 'bin')), kind?.mime)}>{T.ui.download}</button>
+        <button className="btn sm" onClick={() => download(bytes, /\.[A-Za-z0-9]{1,8}$/.test(name) ? name : name + '.' + (kind?.ext ?? (text !== null ? 'txt' : 'bin')), kind?.mime)}>{T.ui.download}</button>
       </>}>
       {preview && <img src={preview} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} style={{ display: 'block', maxWidth: '100%', maxHeight: 240, marginBottom: 12, borderRadius: 8, border: '1px solid var(--line)' }} />}
       {v === 'text'

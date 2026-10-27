@@ -14,6 +14,9 @@ import { DIALECTS, SqlError, SqlVerifyError, formatSql, type KwCase } from '../l
 import { SchemaError, validateJson, type SchemaResult } from '../lib/schema';
 import { parseJsonAst } from '../lib/json';
 
+/** The browser's recursion limit was hit (very deeply nested input); the libraries report it in their own words. */
+const tooDeep = (e: unknown) => e instanceof RangeError || /maximum call stack|too much recursion/i.test(String((e as { message?: unknown } | null)?.message ?? ''));
+
 interface FmtOut { text?: string; status?: string; notes?: string[]; err?: { msg: string; info: ErrInfo | null } }
 
 /** One input, one formatted result. */
@@ -52,6 +55,7 @@ export function YamlFmt() {
       return { text: r.text, status: f(T.yaml.valid, { n: r.docs }), notes };
     } catch (e) {
       if (e instanceof YamlVerifyError) return { err: { msg: f(T.yaml.verify, { p: e.what }), info: null } };
+      if (tooDeep(e)) return { err: { msg: T.ui.tooDeep, info: null } };
       if (e instanceof YamlError) return { err: { msg: e.message, info: errInfo(e, t) } };
       throw e;
     }
@@ -69,6 +73,7 @@ export function XmlFmt() {
     } catch (e) {
       if (e instanceof XmlVerifyError) return { err: { msg: T.xml.verify, info: null } };
       if (e instanceof XmlError) return { err: { msg: f(T.xml.e[e.code], { a: e.arg }), info: errInfo(e, t) } };
+      if (tooDeep(e)) return { err: { msg: T.ui.tooDeep, info: null } };
       throw e;
     }
   }, [indent, T]);
@@ -92,6 +97,7 @@ export function SqlFmt() {
       return { text: r.text, notes: r.commentsReindented ? [T.sql.reindented] : [] };
     } catch (e) {
       if (e instanceof SqlVerifyError) return { err: { msg: T.sql.verify, info: errInfo(e, t) } };
+      if (tooDeep(e)) return { err: { msg: T.ui.tooDeep, info: null } };
       if (e instanceof SqlError) return { err: { msg: e.message, info: e.line ? errInfo({ line: e.line, column: e.column }, t) : null } };
       throw e;
     }
@@ -126,6 +132,7 @@ export function Schema() {
     const de = jsonErr(dataText);
     if (de) return { k: 'syntax', side: T.schema.data, info: de };
     try { return { k: 'res', res: validateJson(schemaText, dataText, lang) }; } catch (e) {
+      if (tooDeep(e)) return { k: 'msg', msg: T.ui.tooDeep };
       if (!(e instanceof SchemaError)) throw e;
       const d = e.detail.replace(/^schema:/, T.schema.schema + ' ').replace(/^data:/, T.schema.data + ' ');
       return { k: 'msg', msg: f(T.schema.e[e.code], { d }) };

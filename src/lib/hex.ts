@@ -3,10 +3,15 @@
 export type HexSep = '' | ' ' | ':';
 export type HexPrefix = '' | '0x' | '\\x';
 
+const LOWER = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'));
+const UPPER = LOWER.map((h) => h.toUpperCase());
+
+/** The prefix (0x, \x) keeps its lower-case x either way. */
 export function bytesToHex(b: Uint8Array, sep: HexSep, upper: boolean, prefix: HexPrefix): string {
-  const parts = Array.from(b, (x) => prefix + x.toString(16).padStart(2, '0'));
-  const s = parts.join(sep);
-  return upper ? s.toUpperCase().replace(/0X/g, '0x').replace(/\\X/g, '\\x') : s;
+  const t = upper ? UPPER : LOWER;
+  const parts = new Array<string>(b.length);
+  for (let i = 0; i < b.length; i++) parts[i] = prefix + t[b[i]];
+  return parts.join(sep);
 }
 
 export class HexError extends Error {
@@ -16,23 +21,32 @@ export class HexError extends Error {
 /** Parse hex text into bytes. A byte written as one digit between separators ("0x1") is an error,
  *  not a guess; so is an odd number of digits in one run. */
 export function hexToBytes(s: string): Uint8Array | null {
-  const out: number[] = [];
-  let i = 0, any = false;
+  const out = new Uint8Array(s.length >> 1);
+  let i = 0, n = 0, any = false;
   while (i < s.length) {
-    const c = s[i];
-    if (/[\s:,;\-_]/.test(c)) { i++; continue; }
-    if ((c === '0' && (s[i + 1] === 'x' || s[i + 1] === 'X') && /[0-9a-fA-F]/.test(s[i + 2] || '')) || (c === '\\' && s[i + 1] === 'x')) { i += 2; continue; }
+    const c = s.charCodeAt(i);
+    if (isSep(s, i)) { i++; continue; }
+    if ((c === 48 && (s[i + 1] === 'x' || s[i + 1] === 'X') && isHex(s.charCodeAt(i + 2))) || (c === 92 && s[i + 1] === 'x')) { i += 2; continue; }
     let j = i;
-    while (j < s.length && /[0-9a-fA-F]/.test(s[j])) j++;
+    while (j < s.length && isHex(s.charCodeAt(j))) j++;
     if (j === i) throw new HexError('char', i, String.fromCodePoint(s.codePointAt(i)!));
     // A letter right after the digits is the mistake to point at, not the digit count.
-    if (j < s.length && !/[\s:,;\-_]/.test(s[j]) && s[j] !== '\\' && !(s[j] === '0' && /[xX]/.test(s[j + 1] || ''))) throw new HexError('char', j, String.fromCodePoint(s.codePointAt(j)!));
+    if (j < s.length && !isSep(s, j) && s[j] !== '\\') throw new HexError('char', j, String.fromCodePoint(s.codePointAt(j)!));
     if ((j - i) % 2) throw new HexError('odd', j - 1);
-    for (let k = i; k < j; k += 2) out.push(parseInt(s.slice(k, k + 2), 16));
+    for (let k = i; k < j; k += 2) out[n++] = (val(s.charCodeAt(k)) << 4) | val(s.charCodeAt(k + 1));
     any = true;
     i = j;
   }
-  return any ? Uint8Array.from(out) : null;
+  return any ? out.slice(0, n) : null;
+}
+
+const isHex = (c: number) => (c >= 48 && c <= 57) || (c >= 65 && c <= 70) || (c >= 97 && c <= 102);
+const val = (c: number) => (c <= 57 ? c - 48 : (c | 32) - 87);
+/** Separators: white space (as \s), ":", ",", ";", "-", "_". */
+function isSep(s: string, i: number): boolean {
+  const c = s.charCodeAt(i);
+  if (c < 128) return c === 32 || (c >= 9 && c <= 13) || c === 58 || c === 44 || c === 59 || c === 45 || c === 95;
+  return /\s/.test(s[i]);
 }
 
 /** Text that is hex bytes: hex digit pairs, optionally with separators or 0x / \x. */

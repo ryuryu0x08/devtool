@@ -2,7 +2,7 @@
 // nulls are written exactly as in the source (it would turn 0x1F into 0x1f and round
 // 0.10000000000000000555 to 0.1). The result is parsed again and compared value by value,
 // with every comment; anything that differs stops the output.
-import { Parser, isAlias, isCollection, isMap, isScalar, parseAllDocuments, visit, type Document, type Scalar, type ScalarTag, type CollectionTag, type Tags } from 'yaml';
+import { Parser, isCollection, isScalar, parseAllDocuments, visit, type Document, type Scalar, type ScalarTag, type CollectionTag, type Tags } from 'yaml';
 import { numKey } from './data';
 
 export class YamlError extends Error {
@@ -21,16 +21,51 @@ const keepSource = (tags: Tags): Tags => tags.map((t) => {
     isScalar(item) && typeof item.source === 'string' && item.source !== '' ? item.source : (orig as (...a: unknown[]) => string)(item, ...rest)) } as ScalarTag;
 });
 
-const OPTS = { keepSourceTokens: true, intAsBigInt: true, uniqueKeys: true, customTags: keepSource, prettyErrors: false } as const;
+// Duplicate keys are checked by dupKey below: the library's own check (uniqueKeys) compares each
+// key with every earlier one, which takes minutes on a file with 50 000 keys.
+const OPTS = { keepSourceTokens: true, intAsBigInt: true, uniqueKeys: false, customTags: keepSource, prettyErrors: false } as const;
 
 function parse(src: string): Document.Parsed[] {
   const docs = parseAllDocuments(src, OPTS);
   const list = Array.isArray(docs) ? docs : [];
   for (const d of list) {
-    const e = d.errors[0];
+    const e = d.errors[0], dup = dupKey(d);
+    // The first problem in the text is reported.
+    if (dup !== null && (!e || dup < e.pos[0])) throw new YamlError('Map keys must be unique', dup);
     if (e) throw new YamlError(e.message.split('\n')[0], e.pos[0]);
+    // An alias with no anchor before it ("*a", or text like "*.log"): the library only notices
+    // when writing, with a plain Error.
+    visit(d, {
+      Alias(_k, n) {
+        if (!n.resolve(d)) throw new YamlError('Unresolved alias (the anchor must be set before the alias): ' + n.source, n.range?.[0] ?? 0);
+      },
+    });
   }
   return list;
+}
+
+/** Where the first repeated key is, or null. Keys are equal as the library's uniqueKeys option
+ *  defines it (scalar values compared with ===), but each map is checked in one pass. */
+function dupKey(d: Document.Parsed): number | null {
+  let at: number | null = null;
+  visit(d, {
+    Map(_k, n) {
+      const seen = new Set<unknown>();
+      for (const p of n.items) {
+        const k = p.key;
+        // Objects (dates) are equal only to themselves, and NaN to nothing, as with ===.
+        if (!isScalar(k) || (typeof k.value === 'object' && k.value !== null) || Number.isNaN(k.value)) continue;
+        if (seen.has(k.value)) {
+          // Maps are visited outer first, so keep the earliest repeat in the text, not the first found.
+          const pos = k.range?.[0] ?? 0;
+          if (at === null || pos < at) at = pos;
+          break;
+        }
+        seen.add(k.value);
+      }
+    },
+  });
+  return at;
 }
 
 interface Item { kind: string; text: string; value?: unknown; path: string }
@@ -75,7 +110,14 @@ export interface YamlOut { text: string; docs: number; changed: { from: string; 
 export function formatYaml(src: string, indent: 2 | 4): YamlOut {
   const docs = parse(src);
   const warnings = docs.flatMap((d) => d.warnings.map((w) => w.message.split('\n')[0]));
-  const text = docs.map((d) => d.toString({ indent, lineWidth: 0, minContentWidth: 0, flowCollectionPadding: false })).join('');
+  let text: string;
+  try {
+    text = docs.map((d) => d.toString({ indent, lineWidth: 0, minContentWidth: 0, flowCollectionPadding: false })).join('');
+  } catch (e) {
+    // The library's other complaints while writing (an invalid anchor name …) are YAML errors too.
+    if (e instanceof Error && !(e instanceof RangeError)) throw new YamlError(e.message.split('\n')[0], 0);
+    throw e;
+  }
   // Verify: the same nodes, values and comments.
   let again: Document.Parsed[];
   try { again = parse(text); } catch { throw new YamlVerifyError('parse'); }
@@ -100,7 +142,7 @@ export function looksYaml(s: string): boolean {
   if (lines.length < 2 || !lines.some((l) => /^\s*(?:[\w"'.-][^:\n]*:(\s|$)|-\s)/.test(l))) return false;
   try {
     const docs = parse(s);
-    return docs.length > 0 && docs.every((d) => isCollection(d.contents)) && docs.some((d) => isMap(d.contents) || !isAlias(d.contents));
+    return docs.length > 0 && docs.every((d) => isCollection(d.contents));
   } catch {
     return false;
   }
