@@ -1,10 +1,11 @@
 // Two-way text tools: URL encoding, Unicode escapes, HTML entities, string escaping.
 import { useMemo, type ReactNode } from 'react';
 import { f } from '../i18n';
+import { Pair } from '../components/Split';
 import { useApp, type State } from '../store';
 import { Seg } from '../components/Seg';
 import { useSettled } from '../components/useSettled';
-import { Empty, ErrLine, Flag, Grid, OutCard, TextIn, TextOut, Toolbar, errStatus, useOpt } from '../components/Panes';
+import { Empty, ErrLine, Flag, OutCard, TextIn, TextOut, Toolbar, errStatus, useOpt } from '../components/Panes';
 import { Vis, countInvisible } from '../components/Vis';
 import { errInfo, wellFormed, type ErrInfo } from '../lib/data';
 import { UrlError, looksPercent, urlDecode, urlEncode, type UrlMode } from '../lib/url';
@@ -33,7 +34,7 @@ function TwoWay(p: {
         <Seg value={mode} onChange={setMode} opts={[{ value: 'enc', label: p.labels[0] }, { value: 'dec', label: p.labels[1] }]} />
         {p.options?.(mode)}
       </Toolbar>
-      <Grid>
+      <Pair>
         <TextIn title={T.input} value={value} placeholder={p.placeholder} size={value ? f(T.ui.chars, { n: [...value].length }) : ''}
           onChange={(v) => set({ [p.inKey]: v })} onClear={() => replace({ [p.inKey]: '' })}
           onFirstPaste={(t) => {
@@ -43,7 +44,7 @@ function TwoWay(p: {
         <OutCard status={pending ? T.processing : r?.err ? errStatus(T, r.err.info) : r ? f(T.ui.chars, { n: [...(r.out ?? '')].length }) : T.result} bad={!!r?.err} notes={notes}>
           {r?.err ? <ErrLine msg={r.err.msg} info={r.err.info} /> : r && !pending ? <TextOut text={r.out ?? ''} /> : <Empty />}
         </OutCard>
-      </Grid>
+      </Pair>
       {r && !pending && p.below?.(text, mode, r)}
     </div>
   );

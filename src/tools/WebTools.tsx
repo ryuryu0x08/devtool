@@ -1,6 +1,7 @@
 // Link parts and JWT decoding.
 import { useEffect, useMemo, useState } from 'react';
 import { f } from '../i18n';
+import { Pair } from '../components/Split';
 import { useApp } from '../store';
 import { Kv, KvRows } from '../components/Kv';
 import { Empty, ErrLine, Grid, OutCard, TextIn, TextOut } from '../components/Panes';
@@ -106,7 +107,7 @@ export function Jwt() {
 
   return (
     <div className="tool-stack">
-      <Grid>
+      <Pair>
         <TextIn title={T.input} value={S.jwtIn} placeholder={T.jwt.ph} minH={160} onChange={(x) => set({ jwtIn: x })} onClear={() => replace({ jwtIn: '' })} />
         <OutCard status={!r ? T.result : r.err ? T.invalid : f(T.jwt.alg, { a: j!.alg || '?' }) + (state ? ' · ' + state : '')}
           bad={!!r?.err || state === T.jwt.expired} notes={notes}>
@@ -119,7 +120,7 @@ export function Jwt() {
             </div>
           )}
         </OutCard>
-      </Grid>
+      </Pair>
       {j && j.alg !== 'none' && (
         <section className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>

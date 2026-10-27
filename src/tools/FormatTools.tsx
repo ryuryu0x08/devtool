@@ -2,6 +2,7 @@
 import { useMemo, type ReactNode } from 'react';
 import type { SqlLanguage } from 'sql-formatter';
 import { f } from '../i18n';
+import { Pair } from '../components/Split';
 import { useApp, type State } from '../store';
 import { Seg } from '../components/Seg';
 import { useSettled } from '../components/useSettled';
@@ -24,13 +25,13 @@ function FmtPage(p: { inKey: keyof State; placeholder: string; options: ReactNod
   return (
     <div className="tool-stack">
       <Toolbar>{p.options}</Toolbar>
-      <Grid>
+      <Pair>
         <TextIn title={T.input} value={value} placeholder={p.placeholder} size={value ? f(T.ui.lines, { n: value.split('\n').length }) : ''}
           onChange={(v) => set({ [p.inKey]: v })} onClear={() => replace({ [p.inKey]: '' })} minH={320} />
         <OutCard status={pending ? T.processing : !r ? T.result : r.err ? errStatus(T, r.err.info) : r.status ?? T.ui.ok} bad={!!r?.err} notes={r?.notes}>
           {!r || pending ? <Empty /> : r.err ? <ErrLine msg={r.err.msg} info={r.err.info} /> : <TextOut text={r.text ?? ''} />}
         </OutCard>
-      </Grid>
+      </Pair>
     </div>
   );
 }

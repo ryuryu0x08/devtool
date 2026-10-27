@@ -1,13 +1,11 @@
-// Generators: UUID (with inspection) and random passwords. Generated values are never stored.
+// UUID: generate v4 / v7 and inspect any UUID. Generated values are never stored.
 import { useMemo, useState } from 'react';
-import { f } from '../i18n';
 import { useApp } from '../store';
 import { Seg } from '../components/Seg';
-import { CopyBlock, KvRows } from '../components/Kv';
-import { Empty, ErrLine, Flag, Grid, NumIn, OutCard, TextOut, Toolbar, useOpt } from '../components/Panes';
+import { KvRows } from '../components/Kv';
+import { ErrLine, Flag, Grid, NumIn, OutCard, TextOut, Toolbar, useOpt } from '../components/Panes';
 import { fmtISO, fmtWall } from '../lib/time';
 import { parseUuid, uuid4, uuid7 } from '../lib/uuid';
-import { charset, entropy, password, type PwdOpts } from '../lib/pwd';
 
 export function Uuid() {
   const { S, set, T, replace } = useApp();
@@ -68,54 +66,5 @@ export function Uuid() {
         )}
       </div>
     </Grid>
-  );
-}
-
-export function Password() {
-  const { T } = useApp();
-  const [len, setLen] = useOpt('pwd.len', 20);
-  const [n, setN] = useOpt('pwd.n', 5);
-  const [lower, setLower] = useOpt('pwd.lower', true);
-  const [upper, setUpper] = useOpt('pwd.upper', true);
-  const [digits, setDigits] = useOpt('pwd.digits', true);
-  const [symbols, setSymbols] = useOpt('pwd.symbols', true);
-  const [noAmbiguous, setNoAmb] = useOpt('pwd.noAmb', false);
-  const [eachClass, setEach] = useOpt('pwd.each', true);
-  // Extra characters are part of the options (no secret in them), so they are kept too.
-  const [extra, setExtra] = useOpt('pwd.extra', '' as string);
-  const [seed, setSeed] = useState(0);
-  const L = Math.min(256, Math.max(4, len)), N = Math.min(100, Math.max(1, n));
-  const o: PwdOpts = { lower, upper, digits, symbols, extra, noAmbiguous, eachClass };
-  const cs = charset(o);
-  const list = useMemo(() => Array.from({ length: N }, () => password(L, o)), [L, N, lower, upper, digits, symbols, extra, noAmbiguous, eachClass, seed]); // eslint-disable-line react-hooks/exhaustive-deps
-  const err = !cs.all.length ? T.pwd.none : list.some((p) => p === null) ? T.pwd.tooShort : '';
-  return (
-    <div className="tool-stack">
-      <Toolbar>
-        <NumIn label={T.ui.length} value={L} min={4} max={256} onChange={setLen} />
-        <NumIn label={T.ui.count} value={N} min={1} max={100} onChange={setN} />
-        <Flag on={lower} label={T.pwd.lower} onClick={() => setLower(!lower)} />
-        <Flag on={upper} label={T.pwd.upper} onClick={() => setUpper(!upper)} />
-        <Flag on={digits} label={T.pwd.digits} onClick={() => setDigits(!digits)} />
-        <Flag on={symbols} label={T.pwd.symbols} onClick={() => setSymbols(!symbols)} />
-        <Flag on={noAmbiguous} label={T.pwd.noAmbiguous} onClick={() => setNoAmb(!noAmbiguous)} />
-        <Flag on={eachClass} label={T.pwd.eachClass} onClick={() => setEach(!eachClass)} />
-        <label className="num-in"><span>{T.pwd.extra}</span>
-          <input className="field mono" value={extra} spellCheck={false} aria-label={T.pwd.extra} onChange={(e) => setExtra(e.target.value)} style={{ width: 120, height: 32, fontSize: 13, padding: '0 8px' }} />
-        </label>
-        <button className="btn primary" onClick={() => setSeed(seed + 1)}>↻ {T.ui.regen}</button>
-      </Toolbar>
-      <OutCard className="pwd-out" status={err ? T.invalid : f(T.pwd.info, { n: cs.all.length, b: Math.round(entropy(L, cs.all.length)) })} bad={!!err} notes={err ? [] : [T.pwd.notSaved]}>
-        {err ? <ErrLine msg={err} /> : !list.length ? <Empty /> : (
-          <div className="pwd-list" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {list.map((p, i) => (
-              <CopyBlock key={i} value={p!}>
-                <pre className="tool-out" style={{ margin: 0, padding: '6px 4px', font: "14px/1.5 'Geist Mono', monospace", wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>{p}</pre>
-              </CopyBlock>
-            ))}
-          </div>
-        )}
-      </OutCard>
-    </div>
   );
 }

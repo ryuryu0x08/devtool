@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { SAMPLE_JSON, SAMPLE_TOML, f, type Dict } from '../i18n';
+import { Pair } from '../components/Split';
 import { useApp, type FmtLang } from '../store';
 import { Seg } from '../components/Seg';
 import { useSettled } from '../components/useSettled';
@@ -249,7 +250,7 @@ export function Formatter({ lang }: { lang: FmtLang }) {
         <button className="btn inv" onClick={() => { if (ok) copy(ok.text); }} style={{ padding: '0 14px' }}>{T.copyResult}</button>
       </div>
 
-      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))', alignItems: 'stretch' }}>
+      <Pair>
         <section className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div className="card-head" style={{ height: 44 }}>
             <span style={{ fontWeight: 600 }}>{T.input} {L}</span>
@@ -330,7 +331,7 @@ export function Formatter({ lang }: { lang: FmtLang }) {
             </div>
           )}
         </section>
-      </div>
+      </Pair>
     </div>
   );
 }

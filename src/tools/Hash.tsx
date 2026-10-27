@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { f } from '../i18n';
+import { Pair } from '../components/Split';
 import { useApp } from '../store';
 import { Seg } from '../components/Seg';
 import { Kv } from '../components/Kv';
@@ -46,7 +47,7 @@ export function Hash() {
         : !d ? f(T.hs.busy, { p: total ? Math.floor((job.p / total) * 100) : 0 }) : '';
 
   return (
-    <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 380px), 1fr))', alignItems: 'stretch' }}>
+    <Pair>
       <Source title={T.input} placeholder={T.hs.ph} text={S.hashIn}
         size={file ? '' : bytes ? f(T.bytes, { n: bytes.length.toLocaleString('en-US') }) : ''}
         onText={(v) => set({ hashIn: v, ...(v ? {} : { hashCr: false }) })}
@@ -90,6 +91,6 @@ export function Hash() {
           </div>
         </div>
       </section>
-    </div>
+    </Pair>
   );
 }

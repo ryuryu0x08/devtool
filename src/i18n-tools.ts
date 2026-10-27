@@ -6,6 +6,7 @@ export const zhT = {
     chars: '{n} 个字符', lines: '{n} 行', switched: '已按内容切换到「{m}」', empty: '结果实时显示', ok: '格式正确',
     regen: '重新生成', count: '数量', length: '长度', download: '下载', textView: '文本', hexView: '十六进制', swap: '交换',
     zone: '时区：{z}', bytesTo: '{a} 字节 → {b} 字节', loneSur: '结果含孤立代理字符（已标出），它们无法按 UTF-8 保存', notUtf8Out: '{n} 字节 · 不是有效的 UTF-8 文本，以十六进制显示', utf8Out: 'UTF-8 文本 · {n} 字节',
+    resize: '拖动调整宽度 · 双击恢复各占一半', grip: '拖到右侧或下方 · 单击切换', toRight: '放到右侧', toBottom: '放到下方',
   },
   url: {
     component: '组件', uri: '整个链接', form: '表单（空格写成 +）', plusSpace: '+ 表示空格',
@@ -35,8 +36,8 @@ export const zhT = {
     char: '「{c}」不是十六进制数字', tooBig: '文件超过 {n} MB，十六进制结果过大，未处理', odd: '这里的十六进制数字是奇数个，最后一个字节不完整',
   },
   base: {
-    ph: '输入整数，如 255、0xFF、0b1010、-42；可用 _ 或 , 分组', from: '输入进制', auto: '自动', other: '其他', bin: '二进制', oct: '八进制', dec: '十进制', hex: '十六进制', baseN: '{n} 进制',
-    widths: '固定位宽', unsigned: '{n} 位无符号', signed: '{n} 位有符号', hexW: '{n} 位十六进制', readAs: '按 {n} 进制读取',
+    ph: '输入整数，如 255、0xFF、0b1010、-42；可用 _ 或 , 分组', values: '各进制 · 改任意一个，其余同步', custom: '自定义', bin: '二进制', oct: '八进制', dec: '十进制', hex: '十六进制', baseN: '{n} 进制',
+    widths: '固定位宽', unsigned: '{n} 位无符号', signed: '{n} 位有符号', hexW: '{n} 位十六进制',
     e: { char: '「{c}」不是 {n} 进制的数字', frac: '只支持整数，不支持小数', empty: '没有数字' },
   },
   gzip: {
@@ -75,7 +76,6 @@ export const zhT = {
     kinds: { '1': 'v1 · 时间 + 节点', '2': 'v2 · DCE 安全', '3': 'v3 · 名称（MD5）', '4': 'v4 · 随机', '5': 'v5 · 名称（SHA-1）', '6': 'v6 · 时间（可排序）', '7': 'v7 · Unix 时间（可排序）', '8': 'v8 · 自定义' },
     v7note: 'v7 的前 48 位是毫秒时间，同一毫秒内依次递增，整批可按字符串排序',
   },
-  pwd: { lower: '小写 a-z', upper: '大写 A-Z', digits: '数字 0-9', symbols: '符号 !@#…', extra: '额外字符', noAmbiguous: '排除易混淆（Il1O0o）', eachClass: '每类至少一个', info: '字符集 {n} 个 · 每个约 {b} 位熵', none: '请至少选择一类字符', tooShort: '长度不足以包含每一类字符', notSaved: '用浏览器的安全随机数生成，不会保存' },
   cron: {
     ph: '如 30 9 * * 1-5、0 0/15 * * * ?、@daily', dialect: '规则', auto: '自动', unix: 'Unix（5 位）', spring: 'Spring（6 位，含秒）', quartz: 'Quartz（6–7 位，周日 = 1）', as: '按 {d} 规则解析',
     next: '接下来 {n} 次（{z}）', none: '找不到下一次执行时间（例如 2 月 30 日不存在）', reboot: '系统启动时运行，没有固定时间',
@@ -101,6 +101,7 @@ export const enT: ToolDict = {
     chars: '{n} characters', lines: '{n} lines', switched: 'Switched to {m} for this content', empty: 'The result appears as you type', ok: 'Well-formed',
     regen: 'Generate again', count: 'Count', length: 'Length', download: 'Download', textView: 'Text', hexView: 'Hex', swap: 'Swap',
     zone: 'Time zone: {z}', bytesTo: '{a} bytes → {b} bytes', loneSur: 'The result has lone surrogates (marked); they can’t be saved as UTF-8', notUtf8Out: '{n} bytes · not valid UTF-8 text, shown as hex', utf8Out: 'UTF-8 text · {n} bytes',
+    resize: 'Drag to resize · double-click for half and half', grip: 'Drag to the right or below · click to switch', toRight: 'To the right', toBottom: 'Below',
   },
   url: {
     component: 'Component', uri: 'Whole URL', form: 'Form (space as +)', plusSpace: '+ means space',
@@ -130,8 +131,8 @@ export const enT: ToolDict = {
     char: '“{c}” is not a hex digit', tooBig: 'File is over {n} MB; its hex would be too large, not processed', odd: 'An odd number of hex digits here: the last byte is incomplete',
   },
   base: {
-    ph: 'Type an integer: 255, 0xFF, 0b1010, -42; _ or , may group digits', from: 'Input base', auto: 'Auto', other: 'Other', bin: 'Binary', oct: 'Octal', dec: 'Decimal', hex: 'Hexadecimal', baseN: 'Base {n}',
-    widths: 'Fixed widths', unsigned: '{n}-bit unsigned', signed: '{n}-bit signed', hexW: '{n}-bit hex', readAs: 'Read as base {n}',
+    ph: 'Type an integer: 255, 0xFF, 0b1010, -42; _ or , may group digits', values: 'Every base · edit any one, the rest follow', custom: 'Custom', bin: 'Binary', oct: 'Octal', dec: 'Decimal', hex: 'Hexadecimal', baseN: 'Base {n}',
+    widths: 'Fixed widths', unsigned: '{n}-bit unsigned', signed: '{n}-bit signed', hexW: '{n}-bit hex',
     e: { char: '“{c}” is not a base-{n} digit', frac: 'Integers only, no fractions', empty: 'No digits' },
   },
   gzip: {
@@ -170,7 +171,6 @@ export const enT: ToolDict = {
     kinds: { '1': 'v1 · time + node', '2': 'v2 · DCE security', '3': 'v3 · name (MD5)', '4': 'v4 · random', '5': 'v5 · name (SHA-1)', '6': 'v6 · time (sortable)', '7': 'v7 · Unix time (sortable)', '8': 'v8 · custom' },
     v7note: 'v7 starts with 48 bits of milliseconds and counts up within a millisecond: a batch sorts as strings',
   },
-  pwd: { lower: 'Lowercase a-z', upper: 'Uppercase A-Z', digits: 'Digits 0-9', symbols: 'Symbols !@#…', extra: 'Extra characters', noAmbiguous: 'No look-alikes (Il1O0o)', eachClass: 'At least one of each', info: '{n} characters · about {b} bits of entropy each', none: 'Choose at least one kind of character', tooShort: 'Too short to include every kind', notSaved: 'Made with the browser’s secure random numbers; never stored' },
   cron: {
     ph: 'e.g. 30 9 * * 1-5, 0 0/15 * * * ?, @daily', dialect: 'Rules', auto: 'Auto', unix: 'Unix (5 fields)', spring: 'Spring (6, with seconds)', quartz: 'Quartz (6–7, Sunday = 1)', as: 'Read with {d} rules',
     next: 'Next {n} ({z})', none: 'No next run (e.g. February 30 never comes)', reboot: 'Runs at system start, no fixed time',

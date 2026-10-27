@@ -2,7 +2,7 @@
 import { enT, zhT } from './i18n-tools';
 
 export type ToolId = 'ts' | 'cron' | 'qrgen' | 'qrscan' | 'json' | 'toml' | 'yaml' | 'xml' | 'sql' | 'schema' | 'diff' | 'tdiff'
-  | 'b64' | 'hash' | 'url' | 'uni' | 'html' | 'hex' | 'base' | 'gzip' | 'esc' | 'urlp' | 'jwt' | 'color' | 'regex' | 'case' | 'count' | 'proc' | 'uuid' | 'pwd';
+  | 'b64' | 'hash' | 'url' | 'uni' | 'html' | 'hex' | 'base' | 'gzip' | 'esc' | 'urlp' | 'jwt' | 'color' | 'regex' | 'case' | 'count' | 'proc' | 'uuid';
 export type CatId = 'time' | 'qr' | 'fmt' | 'diff' | 'enc' | 'web' | 'text' | 'gen';
 export type Lang = 'zh' | 'en';
 
@@ -47,7 +47,6 @@ export const TOOLS: Tool[] = [
   { id: 'count', cat: 'text', icon: 'Σ', zh: ['字数统计', '字数统计', '字符 · 字节 · 行 · 词'], en: ['Word Count', 'Word Count', 'Characters · bytes · lines · words'], kw: 'count word character length bytes 字数 统计 字符 长度 zs tj' },
   { id: 'proc', cat: 'text', icon: '≡', zh: ['文本处理', '文本处理', '去重 · 排序 · 去空行 · 反转'], en: ['Line Tools', 'Lines', 'Dedupe · sort · blank lines · reverse'], kw: 'lines dedupe unique sort trim reverse 去重 排序 空行 文本 处理 qc px wbcl' },
   { id: 'uuid', cat: 'gen', icon: 'ID', zh: ['UUID 生成与解析', 'UUID', 'v4 / v7 批量生成 · 看版本和时间'], en: ['UUID', 'UUID', 'v4 / v7 in batches · version and time'], kw: 'uuid guid v4 v7 ulid generate 生成 sc' },
-  { id: 'pwd', cat: 'gen', icon: '***', zh: ['随机密码', '随机密码', '安全随机数 · 可选字符集'], en: ['Password', 'Password', 'Secure random · choose characters'], kw: 'password random string secret generate 密码 随机 生成 mm sj' },
 ];
 
 export const CATS: Record<CatId, Record<Lang, string>> = {

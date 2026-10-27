@@ -113,20 +113,35 @@ test.describe('encoding', () => {
     await expect(errBox(page)).toContainText('无法按 gzip 解压');
   });
 
-  test('Number bases: exact at any size, fixed widths, errors located', async ({ page }) => {
+  test('Number bases: every base is a box; editing any one updates the rest, exactly', async ({ page }) => {
     await open(page, '进制转换');
-    await input(page).fill('0xFFFFFFFFFFFFFFFFFFFF');
-    await expect(kv(page, '十进制').locator('.v')).toHaveText(BigInt('0xFFFFFFFFFFFFFFFFFFFF').toString());
-    await input(page).fill('-1');
-    await expect(kv(page, '8 位无符号').locator('.v')).toHaveText('255');
-    await expect(kv(page, '64 位十六进制').locator('.v')).toHaveText('FFFFFFFFFFFFFFFF');
-    await input(page).fill('1_000');
-    await expect(kv(page, '十六进制').locator('.v')).toHaveText('3e8');
-    await input(page).fill('12.5');
+    const box = (name: string) => page.getByRole('textbox', { name, exact: true });
+    const values = () => page.locator('.base-row input').evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value));
+    await box('十六进制').fill('ff');
+    expect(await values()).toEqual(['11111111', '377', '255', 'ff', (255).toString(36)]);
+    await box('二进制').fill('-101');
+    expect(await values()).toEqual(['-101', '-5', '-5', '-5', '-5']);
+    await expect(kv(page, '8 位无符号').locator('.v')).toHaveText('251');
+    await box('十进制').fill('0xFFFFFFFFFFFFFFFFFFFF');
+    await expect(box('八进制')).toHaveValue(BigInt('0xFFFFFFFFFFFFFFFFFFFF').toString(8));
+    await expect(box('十进制')).toHaveValue('0xFFFFFFFFFFFFFFFFFFFF');
+    await flag(page, '大写').click();
+    await expect(box('36 进制')).toHaveValue(BigInt('0xFFFFFFFFFFFFFFFFFFFF').toString(36).toUpperCase());
+    await page.getByRole('spinbutton', { name: '自定义' }).fill('7');
+    await expect(box('7 进制')).toHaveValue(BigInt('0xFFFFFFFFFFFFFFFFFFFF').toString(7));
+    // A click selects the whole number, ready to copy or type over; the label copies it.
+    await box('十六进制').click();
+    expect(await box('十六进制').evaluate((e: HTMLInputElement) => e.selectionEnd! - e.selectionStart!)).toBe(20);
+    await page.locator('.base-label', { hasText: '二进制' }).click();
+    await expect.poll(() => clipboard(page)).toBe(BigInt('0xFFFFFFFFFFFFFFFFFFFF').toString(2));
+    await box('十进制').fill('12.5');
     await expect(errBox(page)).toContainText('只支持整数');
-    await seg(page, '2').click();
-    await input(page).fill('1012');
+    await box('二进制').fill('1012');
     await expect(errBox(page)).toContainText('「2」不是 2 进制的数字');
+    await expect(box('十进制')).toHaveValue('');
+    // Pasted on the page: bare hex lands in the hex box.
+    await pasteOnBlank(page, { text: 'beef' });
+    await expect(box('十进制')).toHaveValue(String(0xbeef));
   });
 });
 
@@ -292,22 +307,6 @@ test.describe('generators and time', () => {
     await page.getByRole('textbox', { name: '解析' }).fill('{C232AB00-9414-11EC-B3C8-9F6BDECED846}');
     await expect(kv(page, '节点（MAC）').locator('.v')).toHaveText('9f:6b:de:ce:d8:46');
     await expect(kv(page, '时间').locator('.v')).toContainText('2022-02-23 03:22:22');
-  });
-
-  test('Password: length, count, classes; each copies on its own; nothing stored', async ({ page }) => {
-    await open(page, '随机密码');
-    await page.getByRole('spinbutton', { name: '长度' }).fill('32');
-    await page.getByRole('spinbutton', { name: '数量' }).fill('3');
-    await flag(page, '符号').click();
-    const pw = page.locator('.pwd-list pre');
-    await expect(pw).toHaveCount(3);
-    for (const t of await pw.allTextContents()) expect(t).toMatch(/^[a-zA-Z0-9]{32}$/);
-    const first = (await pw.first().textContent())!;
-    await pw.first().click();
-    await expect.poll(() => clipboard(page)).toBe(first);
-    expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain(first);
-    for (const c of ['小写', '大写', '数字']) await flag(page, c).click();
-    await expect(errBox(page)).toContainText('请至少选择一类字符');
   });
 
   test('Cron: description and the next runs in the chosen zone; errors name the field', async ({ page }) => {

@@ -1,6 +1,7 @@
 // Text tools: line diff, regular expressions, case conversion, counts, line processing.
 import { Fragment, useEffect, useMemo, useState, type ClipboardEvent, type ReactNode } from 'react';
 import { f } from '../i18n';
+import { Pair } from '../components/Split';
 import { useApp } from '../store';
 import { Seg } from '../components/Seg';
 import { Kv } from '../components/Kv';
@@ -139,7 +140,7 @@ export function Regex() {
         <input className="field line mono" value={S.reRepl} spellCheck={false} placeholder={T.regex.replPh} aria-label={T.regex.repl}
           onChange={(e) => set({ reRepl: e.target.value })} style={{ fontFamily: "'Geist Mono', monospace" }} />
       </section>
-      <Grid>
+      <Pair>
         <TextIn title={T.regex.text} value={S.reText} placeholder={T.regex.textPh} focus={false} minH={200} onChange={(v) => set({ reText: v })} onClear={() => replace({ reText: '' })}>
           {marked && text && (
             <pre className="re-marked" style={{ margin: 0, padding: '12px 16px', borderTop: '1px solid var(--line)', font: "13px/1.65 'Geist Mono', 'PingFang SC', monospace", whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 320, overflow: 'auto' }}>{marked}</pre>
@@ -159,7 +160,7 @@ export function Regex() {
             </div>
           ) : ok ? <Empty>{T.regex.none}</Empty> : null}
         </OutCard>
-      </Grid>
+      </Pair>
       {ok && ok.replaced !== undefined && S.reRepl && (
         <OutCard className="re-replaced" status={T.regex.replaced}><TextOut text={ok.replaced} /></OutCard>
       )}
@@ -170,12 +171,12 @@ export function Regex() {
 export function CaseConv() {
   const { S, set, T, replace } = useApp();
   return (
-    <Grid>
+    <Pair>
       <TextIn title={T.input} value={S.caseIn} placeholder={T.caseConv.ph} minH={260} onChange={(v) => set({ caseIn: v })} onClear={() => replace({ caseIn: '' })} />
       <OutCard status={T.result}>
         {S.caseIn.trim() ? <div className="case-rows">{CASES.map((k) => <Kv key={k} label={T.caseConv.names[k]} value={convertLines(S.caseIn, k)} />)}</div> : <Empty />}
       </OutCard>
-    </Grid>
+    </Pair>
   );
 }
 
@@ -186,12 +187,12 @@ export function Count() {
   const [text, pending] = useSettled(S.countIn);
   const c = useMemo(() => countText(text, lang), [text, lang]);
   return (
-    <Grid>
+    <Pair>
       <TextIn title={T.input} value={S.countIn} placeholder={T.count.ph} mono={false} minH={300} onChange={(v) => set({ countIn: v })} onClear={() => replace({ countIn: '' })} />
       <OutCard status={pending ? T.processing : T.result}>
         <div className="count-rows">{COUNT_KEYS.map((k) => <Kv key={k} label={T.count[k]} value={c[k].toLocaleString('en-US')} />)}</div>
       </OutCard>
-    </Grid>
+    </Pair>
   );
 }
 
@@ -217,13 +218,13 @@ export function TextProc() {
         <Seg value={sort} onChange={setSort} opts={(['none', 'asc', 'desc', 'natural', 'length'] as const).map((k) => ({ value: k, label: T.proc.sort[k] }))} />
         <Flag on={reverse} label={T.proc.reverse} onClick={() => setReverse(!reverse)} />
       </Toolbar>
-      <Grid>
+      <Pair>
         <TextIn title={T.input} value={S.procIn} placeholder={T.proc.ph} minH={300} size={S.procIn ? f(T.ui.lines, { n: S.procIn.split('\n').length }) : ''}
           onChange={(v) => set({ procIn: v })} onClear={() => replace({ procIn: '' })} />
         <OutCard status={pending ? T.processing : r ? f(T.proc.stats, { a: inLines, b: r.lines }) : T.result} notes={notes}>
           {r && !pending ? <TextOut text={r.text} /> : <Empty />}
         </OutCard>
-      </Grid>
+      </Pair>
     </div>
   );
 }

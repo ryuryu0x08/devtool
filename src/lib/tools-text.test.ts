@@ -8,7 +8,6 @@ import { CASES, convertCase, convertLines, words } from './caseconv';
 import { countText } from './count';
 import { processLines } from './textproc';
 import { looksUuid, parseUuid, uuid4, uuid7 } from './uuid';
-import { charset, entropy, password, randInt } from './pwd';
 import { looksUlid, snowflakeTime, ulidTime } from './ids';
 import { CronError, describe as describeCron, guessDialect, looksCron, nextRuns, parseCron } from './cron';
 import { contrast, formats, looksColor, parseColor, toOklch } from './color';
@@ -116,28 +115,6 @@ describe('UUID', () => {
     expect(parseUuid('urn:uuid:ffffffff-ffff-ffff-ffff-ffffffffffff')).toMatchObject({ max: true });
     expect(parseUuid('not-a-uuid')).toBeNull();
     expect(looksUuid('550e8400-e29b-41d4-a716-446655440000')).toBe(true);
-  });
-});
-
-describe('passwords', () => {
-  const o = { lower: true, upper: true, digits: true, symbols: false, extra: '', noAmbiguous: false, eachClass: true };
-  it('only chosen characters; every class present when asked', () => {
-    for (let i = 0; i < 300; i++) {
-      const p = password(8, o)!;
-      expect(p).toMatch(/^[A-Za-z0-9]{8}$/);
-      expect(p).toMatch(/[a-z]/); expect(p).toMatch(/[A-Z]/); expect(p).toMatch(/[0-9]/);
-    }
-    expect(password(12, { ...o, noAmbiguous: true, upper: false, lower: false })).toMatch(/^[2-9]{12}$/);
-    expect(password(5, { ...o, lower: false, upper: false, digits: false })).toBeNull();
-    expect(password(2, { ...o, symbols: true })).toBeNull();
-    expect(charset({ ...o, extra: 'aé' }).all).toContain('é');
-  });
-  it('uniform: no character is favoured (χ² over 60 000 draws)', () => {
-    const n = 62, draws = 60000, counts = new Array(n).fill(0);
-    for (let i = 0; i < draws; i++) counts[randInt(n)]++;
-    const e = draws / n, chi = counts.reduce((a, c) => a + (c - e) ** 2 / e, 0);
-    expect(chi).toBeLessThan(110); // p ≈ 0.0001 for 61 degrees of freedom
-    expect(entropy(16, 62)).toBeCloseTo(95.27, 1);
   });
 });
 

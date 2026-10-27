@@ -227,4 +227,29 @@ button.caret { border: 0; background: transparent; padding: 0; font: inherit; fo
 .out-card .kv { grid-template-columns: 112px minmax(0, 1fr); }
 .out-card .kv .k { overflow-wrap: anywhere; }
 @media (max-width: 480px) { .out-card .kv { grid-template-columns: 88px minmax(0, 1fr); } }
-.pwd-list .copy-block { margin: 0 -8px; padding: 2px 8px; }
+.base-rows { display: flex; flex-direction: column; gap: 8px; }
+.base-row { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 10px; }
+.base-label { border: 0; background: transparent; text-align: left; font-size: 12.5px; color: var(--mut); padding: 8px 6px; margin-left: -6px; border-radius: 6px; cursor: pointer; }
+.base-label:hover { background: var(--sub); color: var(--ink); }
+.field.bad, .field.bad:focus { border-color: var(--del); }
+/* Input / result split (components/Split.tsx) */
+.split-pane { display: flex; flex-direction: column; min-width: 0; position: relative; }
+.split-pane > .card, .split-pane > section { flex: 1; }
+.split-gutter { display: flex; align-items: center; justify-content: center; cursor: col-resize; touch-action: none; }
+.split-gutter span { width: 4px; height: 36px; border-radius: 2px; background: var(--line2); transition: background .15s, height .15s; }
+.split-gutter:hover span, body.dragging-x .split-gutter span { background: var(--acc); height: 64px; }
+.split-grip {
+  position: absolute; top: -9px; left: 50%; transform: translateX(-50%); z-index: 3; width: 38px; height: 16px; padding: 0;
+  display: flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--card); color: var(--faint); cursor: grab; touch-action: none;
+}
+.split-grip svg { fill: currentColor; }
+.split-grip:hover, .split-grip:focus-visible { color: var(--acc); border-color: var(--acc); outline: none; }
+.split-pane.result.moving > :not(.split-grip) { opacity: 0.45; }
+.split-zone {
+  z-index: 50; pointer-events: none; display: flex; align-items: center; justify-content: center;
+  border: 2px dashed var(--acc); border-radius: 14px; background: var(--accRing);
+}
+.split-zone span { background: var(--acc); color: var(--accInk); padding: 4px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600; }
+body.dragging-x, body.dragging-x * { cursor: col-resize !important; user-select: none; }
+body.dragging-move, body.dragging-move * { cursor: grabbing !important; user-select: none; }

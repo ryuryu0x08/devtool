@@ -1,6 +1,7 @@
 import { useMemo, useRef } from 'react';
 import { Vis } from '../components/Vis';
 import { f } from '../i18n';
+import { Pair } from '../components/Split';
 import { useApp } from '../store';
 import { Seg } from '../components/Seg';
 import { byteLen } from '../lib/data';
@@ -34,7 +35,7 @@ export function QrGen() {
   };
 
   return (
-    <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 380px), 1fr))' }}>
+    <Pair>
       <section className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div className="card-head" style={{ minHeight: 0, padding: '12px 16px' }}>
           <span style={{ fontWeight: 600 }}>{T.qrContent}</span>
@@ -69,7 +70,7 @@ export function QrGen() {
           <button className="btn" onClick={() => copy(S.qrText)} style={{ height: 38, padding: '0 16px', borderRadius: 9 }}>{T.copyText}</button>
         </div>
       </section>
-    </div>
+    </Pair>
   );
 }
 

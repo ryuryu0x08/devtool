@@ -1,6 +1,7 @@
 // Bytes and numbers: Hex ⇄ text / bytes, gzip / deflate, integer bases.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { f } from '../i18n';
+import { Pair } from '../components/Split';
 import { useApp } from '../store';
 import { Seg } from '../components/Seg';
 import { Kv } from '../components/Kv';
@@ -58,7 +59,7 @@ export function Hex() {
           <Flag on={upper} label={T.ui.upper} onClick={() => setUpper(!upper)} />
         </>}
       </Toolbar>
-      <Grid>
+      <Pair>
         <Source title={T.input} placeholder={enc ? T.hex.ph : T.hex.hexPh} text={S.hexIn}
           size={file ? '' : enc ? f(T.bytes, { n: (textBytes(S.hexIn, 'lf')?.length ?? 0).toLocaleString('en-US') }) : ''}
           onText={(v) => set({ hexIn: v })} file={file} onFile={enc ? (fl) => set({ hexFile: fl }) : undefined}
@@ -76,7 +77,7 @@ export function Hex() {
               {loading || fb.err ? null : !out ? <Empty /> : 'err' in out ? <ErrLine msg={out.err} info={out.info} /> : 'hex' in out ? <TextOut text={out.hex} /> : null}
             </OutCard>
           )}
-      </Grid>
+      </Pair>
     </div>
   );
 }
@@ -143,7 +144,7 @@ export function Gzip() {
         <Seg value={mode} onChange={setMode} opts={[{ value: 'zip', label: T.gzip.zip }, { value: 'unzip', label: T.gzip.unzip }]} />
         {zip && <Seg value={fmt} onChange={setFmt} opts={ZFMTS} />}
       </Toolbar>
-      <Grid>
+      <Pair>
         <Source title={T.input} placeholder={zip ? T.gzip.ph : T.gzip.unPh} text={S.gzIn}
           size={file ? '' : f(T.ui.chars, { n: [...S.gzIn].length.toLocaleString('en-US') })}
           onText={(v) => set({ gzIn: v })} file={file} onFile={(fl) => set({ gzFile: fl })}
@@ -159,68 +160,86 @@ export function Gzip() {
               {fb.err || loading ? null : out && 'err' in out ? <ErrLine msg={out.err} /> : ok ? (tooLong ? null : <TextOut text={b64} />) : <Empty />}
             </OutCard>
           )}
-      </Grid>
+      </Pair>
     </div>
   );
 }
 
-const BASES = [2, 8, 10, 16] as const;
+type BaseKey = '2' | '8' | '10' | '16' | 'n';
+const BASE_KEYS: BaseKey[] = ['2', '8', '10', '16', 'n'];
+const BASE_PH: Record<BaseKey, string> = { '2': '1111 1111', '8': '377', '10': '', '16': 'ff', n: '' };
 
+/** One box per base: the box being edited keeps what is typed, every other box shows the same
+ *  number in its base. The decimal box also reads 0x / 0o / 0b prefixes. */
 export function NumBase() {
-  const { S, set, T, replace } = useApp();
-  const [from, setFrom] = useOpt<string>('base.from', 'auto', ['auto', '2', '8', '10', '16', 'other']);
-  const [other, setOther] = useOpt('base.other', 36);
-  const base = from === 'auto' ? 'auto' : from === 'other' ? other : Number(from);
-  const r = useMemo(() => {
+  const { S, set, T, replace, copy } = useApp();
+  const [src] = useOpt<string>('base.src', '10', BASE_KEYS);
+  const [nOpt, setN] = useOpt('base.other', 36);
+  const [upper, setUpper] = useOpt('base.upper', false);
+  const custom = Math.min(36, Math.max(2, Math.round(nOpt)));
+  const baseOf = (k: string) => (k === 'n' ? custom : Number(k));
+  const r = useMemo((): { v: bigint } | { err: string; info: ErrInfo } | null => {
     if (!S.numIn.trim()) return null;
-    try { return { ...readInt(S.numIn, base) }; } catch (e) {
+    try { return { v: readInt(S.numIn, src === '10' ? 'auto' : baseOf(src)).v }; } catch (e) {
       if (!(e instanceof NumError)) throw e;
-      const b = base === 'auto' ? 10 : base;
-      return { err: e.code === 'char' ? f(T.base.e.char, { c: e.ch, n: b }) : T.base.e[e.code], info: errInfo(e, S.numIn) };
+      return { err: e.code === 'char' ? f(T.base.e.char, { c: e.ch, n: baseOf(src) }) : T.base.e[e.code], info: errInfo(e, S.numIn) };
     }
-  }, [S.numIn, base, T]);
-  const name: Record<number, string> = { 2: T.base.bin, 8: T.base.oct, 10: T.base.dec, 16: T.base.hex };
+  }, [S.numIn, src, custom, T]); // eslint-disable-line react-hooks/exhaustive-deps
   const ok = r && 'v' in r ? r : null;
-  const rows: [string, string][] = ok ? [
-    ...BASES.map((b) => [name[b], writeInt(ok.v, b)] as [string, string]),
-    ...(from === 'other' && !BASES.includes(other as 2) ? [[f(T.base.baseN, { n: other }), writeInt(ok.v, other)] as [string, string]] : []),
-    ['HEX', writeInt(ok.v, 16).toUpperCase()],
-  ] : [];
+  const shown = (k: BaseKey) => {
+    if (k === src) return S.numIn;
+    if (!ok) return '';
+    const t = writeInt(ok.v, baseOf(k));
+    return upper ? t.toUpperCase() : t;
+  };
+  const edit = (k: BaseKey, v: string) => set((s) => ({ numIn: v, o: { ...s.o, 'base.src': k } }));
+  // Changing the custom base keeps the number: if it was typed there, it moves to the decimal box.
+  const setCustom = (m: number) => {
+    if (src === 'n' && ok) set((s) => ({ numIn: ok.v.toString(), o: { ...s.o, 'base.other': m, 'base.src': '10' } }));
+    else setN(m);
+  };
+  const label: Record<BaseKey, string> = { '2': T.base.bin, '8': T.base.oct, '10': T.base.dec, '16': T.base.hex, n: f(T.base.baseN, { n: custom }) };
+  // A click puts the whole number in the selection (to copy or type over); a second click places the caret.
+  const fresh = useRef(false);
   const w = ok ? widths(ok.v) : [];
   return (
-    <div className="tool-stack">
-      <section className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input data-autofocus="1" className="field line mono" value={S.numIn} spellCheck={false} placeholder={T.base.ph} aria-label={T.input}
-            onChange={(e) => set({ numIn: e.target.value })} style={{ flex: 1, minWidth: 0 }} />
+    <Grid min={360}>
+      <OutCard className="base-values" status={T.base.values}
+        right={<>
+          <NumIn label={T.base.custom} value={custom} min={2} max={36} onChange={setCustom} width={60} />
+          <Flag on={upper} label={T.ui.upper} onClick={() => setUpper(!upper)} />
           {S.numIn && <button className="btn sm" onClick={() => replace({ numIn: '' })}>{T.clear}</button>}
-        </div>
-        <Toolbar>
-          <span style={{ fontSize: 12.5, color: 'var(--mut)' }}>{T.base.from}</span>
-          <Seg size="sm" value={from} onChange={setFrom} opts={[{ value: 'auto', label: T.base.auto }, { value: '2', label: '2' }, { value: '8', label: '8' }, { value: '10', label: '10' }, { value: '16', label: '16' }, { value: 'other', label: T.base.other }]} />
-          {from === 'other' && <NumIn label={T.base.from} value={other} min={2} max={36} onChange={setOther} />}
-        </Toolbar>
-      </section>
-      {r && (
-        <Grid>
-          <OutCard status={ok ? f(T.base.readAs, { n: ok.base }) : errStatus(T, r.info)} bad={!ok}>
-            {ok ? <div className="base-rows">{rows.map(([k, v]) => <Kv key={k} label={k} value={v} />)}</div> : <ErrLine msg={r.err!} info={r.info} />}
-          </OutCard>
-          {ok && w.length > 0 && (
-            <OutCard status={T.base.widths}>
-              <div className="base-widths">
-                {w.map((x) => (
-                  <div key={x.bits} style={{ marginBottom: 6 }}>
-                    <Kv label={f(T.base.hexW, { n: x.bits })} value={x.hex} />
-                    <Kv label={f(T.base.unsigned, { n: x.bits })} value={x.unsigned.toString()} />
-                    <Kv label={f(T.base.signed, { n: x.bits })} value={x.signed.toString()} />
-                  </div>
-                ))}
+        </>}>
+        <div className="base-rows">
+          {BASE_KEYS.map((k) => {
+            const v = shown(k);
+            return (
+              <div key={k} className="base-row">
+                <button className="base-label" title={T.clickCopy} onClick={() => { if (v) copy(v); }}>{label[k]}</button>
+                <input className={'field line mono' + (k === src && r && !ok ? ' bad' : '')} value={v} spellCheck={false} autoComplete="off"
+                  data-autofocus={k === '10' ? '1' : undefined} aria-label={label[k]} placeholder={S.numIn ? '' : k === '10' ? T.base.ph : BASE_PH[k]}
+                  onChange={(e) => edit(k, e.target.value)}
+                  onFocus={(e) => { e.currentTarget.select(); fresh.current = true; }}
+                  onMouseUp={(e) => { if (fresh.current) e.preventDefault(); fresh.current = false; }} />
               </div>
-            </OutCard>
-          )}
-        </Grid>
+            );
+          })}
+        </div>
+        {r && 'err' in r && <div style={{ marginTop: 10 }}><ErrLine msg={r.err} info={r.info} /></div>}
+      </OutCard>
+      {ok && w.length > 0 && (
+        <OutCard status={T.base.widths}>
+          <div className="base-widths">
+            {w.map((x) => (
+              <div key={x.bits} style={{ marginBottom: 6 }}>
+                <Kv label={f(T.base.hexW, { n: x.bits })} value={upper ? x.hex : x.hex.toLowerCase()} />
+                <Kv label={f(T.base.unsigned, { n: x.bits })} value={x.unsigned.toString()} />
+                <Kv label={f(T.base.signed, { n: x.bits })} value={x.signed.toString()} />
+              </div>
+            ))}
+          </div>
+        </OutCard>
       )}
-    </div>
+    </Grid>
   );
 }

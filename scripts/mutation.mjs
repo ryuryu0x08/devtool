@@ -113,6 +113,13 @@ const M = [
   ['paste: a one-kind tool keeps any paste', 'src/App.tsx', '    if (ty && ty[1]()) { replace({ [ty[0]]: one }, msg()); return true; }', '    if (ty) { replace({ [ty[0]]: one }, msg()); return true; }', 'keeps only that kind'],
   ['escape: a pasted quoted literal is not unwrapped', 'src/tools/EncodeTools.tsx', "      const wrapped = !!q && /^[\"']$/.test(q) && t.length >= 2 && t[0] === q && t[t.length - 1] === q;", '      const wrapped = false;', 'pasted escaped text is unescaped'],
   ['contrast: ratio rounded up past a threshold', 'src/tools/CronColor.tsx', "const r2 = ratio === null ? '' : String(Math.floor(ratio * 100) / 100);", "const r2 = ratio === null ? '' : ratio.toFixed(1);", 'contrast checks'],
+  // Layout and number bases.
+  ['layout: one layout shared by every tool', 'src/components/Split.tsx', "useOpt<Mode>('lay.' + key, 'row', ['row', 'col'])", "useOpt<Mode>('lay', 'row', ['row', 'col'])", 'each tool remembers'],
+  ['layout: stacked panes stay half width', 'src/components/Split.tsx', "{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', rowGap: GAP }", "{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', rowGap: GAP }", 'each tool remembers'],
+  ['layout: a pane can be squeezed to nothing', 'src/components/Split.tsx', '    return Math.min(1 - lo, Math.max(lo, r));', '    return r;', 'share the width'],
+  ['layout: narrow screens keep side by side', 'src/components/Split.tsx', "  const shown: Mode = narrow ? 'col' : mode;", '  const shown: Mode = mode;', 'always stacked'],
+  ['bases: the other boxes do not follow', 'src/tools/BytesTools.tsx', '    if (!ok) return \'\';\n    const t = writeInt(ok.v, baseOf(k));', "    if (!ok) return '';\n    const t = writeInt(ok.v, Number(src === 'n' ? custom : src));", 'editing any one updates'],
+  ['bases: a click does not select the number', 'src/tools/BytesTools.tsx', 'onFocus={(e) => { e.currentTarget.select(); fresh.current = true; }}', 'onFocus={() => { fresh.current = true; }}', 'editing any one updates'],
 ];
 
 const args = process.argv.slice(2);

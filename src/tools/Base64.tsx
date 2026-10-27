@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { f } from '../i18n';
+import { Pair } from '../components/Split';
 import { useApp } from '../store';
 import { Seg, Toggle } from '../components/Seg';
 import { Source } from '../components/Source';
@@ -108,7 +109,7 @@ export function Base64() {
         {enc && file && <Toggle on={S.b64DataUrl} label={T.b64.dataUrl} onClick={() => set((s) => ({ b64DataUrl: !s.b64DataUrl }))} />}
       </div>
 
-      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 380px), 1fr))', alignItems: 'stretch' }}>
+      <Pair>
         <Source title={T.input} placeholder={enc ? T.b64.encPh : T.b64.decPh} text={S.b64In}
           size={file ? '' : f(T.bytes, { n: (textBytes(S.b64In, enc ? S.b64Eol : 'lf')?.length ?? 0).toLocaleString('en-US') })}
           onText={(v) => set({ b64In: v, ...(v ? {} : { b64Cr: false }) })}
@@ -175,7 +176,7 @@ export function Base64() {
             )}
           </div>
         </section>
-      </div>
+      </Pair>
     </div>
   );
 }

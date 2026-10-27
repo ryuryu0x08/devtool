@@ -36,7 +36,7 @@ import { Jwt, UrlParse } from './tools/WebTools';
 import { Gzip, Hex, NumBase, looksZData } from './tools/BytesTools';
 import { Schema, SqlFmt, XmlFmt, YamlFmt } from './tools/FormatTools';
 import { CaseConv, Count, Regex, TextDiff, TextProc } from './tools/TextTools';
-import { Password, Uuid } from './tools/GenTools';
+import { Uuid } from './tools/GenTools';
 import { Color, Cron } from './tools/CronColor';
 
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg|ico|avif|heic|heif|tiff?)$/i;
@@ -287,8 +287,13 @@ export function App() {
     const typed: Partial<Record<ToolId, [keyof State, () => boolean]>> = {
       urlp: ['urlpIn', () => looksUrl(one)], jwt: ['jwtIn', () => looksJwt(one)], uuid: ['uuidIn', () => !!parseUuid(one)],
       cron: ['cronIn', () => looksCron(one)], color: ['colorIn', () => !!parseColor(one)],
-      base: ['numIn', () => { try { readInt(one, 'auto'); return true; } catch { return false; } }],
     };
+    // Number bases: an integer goes to the decimal box (which reads 0x / 0b / 0o), bare hex to the hex box.
+    if (s.tool === 'base') {
+      const reads = (b: number | 'auto') => { try { readInt(one, b); return true; } catch { return false; } };
+      const box = reads('auto') ? '10' : reads(16) ? '16' : null;
+      if (box) { replace({ numIn: one, o: { ...s.o, 'base.src': box } }, msg()); return true; }
+    }
     const ty = typed[s.tool];
     if (ty && ty[1]()) { replace({ [ty[0]]: one }, msg()); return true; }
     return false;
@@ -509,7 +514,6 @@ export function App() {
             {S.tool === 'count' && <Count />}
             {S.tool === 'proc' && <TextProc />}
             {S.tool === 'uuid' && <Uuid />}
-            {S.tool === 'pwd' && <Password />}
             {S.tool === 'cron' && <Cron />}
             {S.tool === 'color' && <Color />}
           </div>
