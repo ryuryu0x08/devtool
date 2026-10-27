@@ -193,7 +193,7 @@ test('the bar between stacked panes sets the input height: remembered per tool; 
   expect(await layout(page)).toBe('col');
   const h0 = (await box(page, 0)).height;
   // Grabbed beside the result's handle, which sits on the middle of the bar.
-  const bar = async () => { const b = (await page.locator('.split-hgutter').boundingBox())!; return { x: b.x + 60, y: b.y + b.height / 2 }; };
+  const bar = async () => { const b = (await page.locator('.split-hgutter:not(.end)').boundingBox())!; return { x: b.x + 60, y: b.y + b.height / 2 }; };
   let p = await bar();
   await page.mouse.move(p.x, p.y);
   await page.mouse.down();
@@ -219,4 +219,40 @@ test('the bar between stacked panes sets the input height: remembered per tool; 
   p = await bar();
   await page.mouse.dblclick(p.x, p.y);
   expect(Math.abs((await box(page, 0)).height - h0)).toBeLessThan(2);
+});
+
+test('the bar below the result sets its height: its content fills it, remembered; a double-click restores it', async ({ page }) => {
+  await open(page, 'TOML 格式化');
+  await page.getByRole('button', { name: '示例' }).first().click();
+  await page.locator('.split-grip').click();
+  expect(await layout(page)).toBe('col');
+  const h0 = (await box(page, 1)).height;
+  const scroller = () => page.locator('.split-pane.result .pane-scroll').boundingBox().then((b) => b!.height);
+  const bar = async () => {
+    await page.locator('.split-hgutter.end').scrollIntoViewIfNeeded();
+    const b = (await page.locator('.split-hgutter.end').boundingBox())!;
+    return { x: b.x + 60, y: b.y + b.height / 2 };
+  };
+  // Taller than the content's usual cap: the scrolling area grows with it.
+  const s0 = await scroller();
+  let p = await bar();
+  await page.mouse.move(p.x, p.y);
+  await page.mouse.down();
+  await page.mouse.move(p.x, p.y - 200, { steps: 6 });
+  await page.mouse.up();
+  const h1 = (await box(page, 1)).height;
+  expect(Math.abs(h1 - (h0 - 200))).toBeLessThan(2);
+  expect(await scroller()).toBeLessThan(s0 - 150);
+  await page.reload();
+  expect(Math.abs((await box(page, 1)).height - h1)).toBeLessThan(2);
+  p = await bar();
+  await page.mouse.move(p.x, p.y);
+  await page.mouse.down();
+  await page.mouse.move(p.x, p.y + 500, { steps: 6 });
+  await page.mouse.up();
+  expect(Math.abs((await box(page, 1)).height - (h1 + 500))).toBeLessThan(2);
+  expect(await scroller()).toBeGreaterThan(s0 + 250);
+  p = await bar();
+  await page.mouse.dblclick(p.x, p.y);
+  expect(Math.abs((await box(page, 1)).height - h0)).toBeLessThan(2);
 });

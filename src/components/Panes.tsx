@@ -60,7 +60,7 @@ export function OutCard(p: { status: ReactNode; bad?: boolean; right?: ReactNode
         {p.right && <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>{p.right}</span>}
       </div>
       {!!p.notes?.length && <div className="out-notes">{p.notes.map((n, i) => <span key={i}><Vis text={n} /></span>)}</div>}
-      <div style={{ padding: '12px 16px', flex: 1, minHeight: 0, overflow: 'auto', maxHeight: '70vh' }}>{p.children}</div>
+      <div className="pane-scroll" style={{ padding: '12px 16px', flex: 1, minHeight: 0, overflow: 'auto', maxHeight: '70vh' }}>{p.children}</div>
     </section>
   );
 }

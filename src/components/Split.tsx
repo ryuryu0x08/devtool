@@ -3,7 +3,8 @@
 // the pointer, and the layout switches as soon as it is carried a short way down (below) or up
 // or right (beside), the input pane moving to make room; a label on it says where it will land.
 // On release it settles into its place, scrolled into view. A click on the handle switches too.
-// Stacked, the bar between them is dragged to set the input's height (also remembered).
+// Stacked, the bar between them sets the input's height and the bar below the result sets its
+// height (both remembered).
 // Narrow screens always stack.
 import { useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
 import { useApp } from '../store';
@@ -19,8 +20,9 @@ const EASE = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
 /** Screen px the result is carried, from where it was picked up or last switched, to switch:
  *  down for below; up, or right (a bit farther), for beside. */
 const SWITCH = 72;
-/** Stacked, the input is never shorter than this (px at 100 %). */
+/** Stacked, the input and the result are never shorter than these (px at 100 %). */
 const MIN_H = 120;
+const MIN_OUT = 160;
 
 type Mode = 'row' | 'col';
 
@@ -36,6 +38,9 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
   /** Stacked input height in px at 100 % (0: the default, set by the stylesheet). */
   const [inH, setInH] = useOpt('hsplit.' + key, 0);
   const [liveH, setLiveH] = useState<number | null>(null);
+  /** Stacked result height, the same way. */
+  const [outH, setOutH] = useOpt('hsplit.' + key + '.out', 0);
+  const [liveOut, setLiveOut] = useState<number | null>(null);
   // Rects and the pointer are in screen px; lengths written into styles here are scaled by the
   // tool area's zoom, so they are divided by it.
   const z = useZoom()[0] / 100;
@@ -137,20 +142,21 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
     window.addEventListener('pointercancel', up);
   };
 
-  // Bar between stacked panes: drag to set the input's height; double-click for the default.
-  const onHGutter = (e: RPointerEvent<HTMLDivElement>) => {
+  // Bars of stacked panes (between them, and below the result): drag to set the height of the pane
+  // above; double-click for the default.
+  const dragHeight = (e: RPointerEvent<HTMLDivElement>, pane: HTMLElement, min: number, setLive: (h: number | null) => void, commit: (h: number) => void) => {
     if (e.button !== 0) return;
     e.preventDefault();
-    const y0 = e.clientY, h0 = paneA.current!.getBoundingClientRect().height / z;
+    const y0 = e.clientY, h0 = pane.getBoundingClientRect().height / z;
     let last = h0;
-    const move = (ev: PointerEvent) => { last = Math.max(MIN_H, h0 + (ev.clientY - y0) / z); setLiveH(last); };
+    const move = (ev: PointerEvent) => { last = Math.max(min, h0 + (ev.clientY - y0) / z); setLive(last); };
     const up = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
       document.body.classList.remove('dragging-y');
-      setLiveH(null);
-      if (last !== h0) setInH(Math.round(last));
+      setLive(null);
+      if (last !== h0) commit(Math.round(last));
     };
     document.body.classList.add('dragging-y');
     window.addEventListener('pointermove', move);
@@ -229,19 +235,21 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
   const carrying = target !== null;
   const h = liveH ?? (Number.isFinite(inH) && inH > 0 ? Math.max(MIN_H, inH) : 0);
   const sized = shown === 'col' && h > 0;
+  const ho = liveOut ?? (Number.isFinite(outH) && outH > 0 ? Math.max(MIN_OUT, outH) : 0);
+  const outSized = shown === 'col' && ho > 0;
 
   return (
-    <div ref={box} className={'split ' + shown + (sized ? ' sized' : '')} style={grid} data-layout={shown}>
+    <div ref={box} className={'split ' + shown + (sized ? ' sized' : '') + (outSized ? ' out-sized' : '')} style={grid} data-layout={shown}>
       <div ref={paneA} className="split-pane" style={sized ? { height: h } : undefined}>{a}</div>
       {shown === 'col' && (
         <div className="split-hgutter" role="separator" aria-orientation="horizontal" title={T.ui.resizeH}
-          onPointerDown={onHGutter} onDoubleClick={() => setInH(0)}><span /></div>
+          onPointerDown={(e) => dragHeight(e, paneA.current!, MIN_H, setLiveH, setInH)} onDoubleClick={() => setInH(0)}><span /></div>
       )}
       {shown === 'row' && (
         <div className="split-gutter" role="separator" aria-orientation="vertical" title={T.ui.resize}
           onPointerDown={onGutter} onDoubleClick={() => setRatio(0.5)}><span /></div>
       )}
-      <div ref={slotB} className={'split-pane result' + (carrying ? ' holding' : '')}>
+      <div ref={slotB} className={'split-pane result' + (carrying ? ' holding' : '')} style={outSized ? { height: ho } : undefined}>
         <div ref={floatB} className={'split-float' + (carrying ? ' carried' : '')}>
           {!narrow && (
             <button className="split-grip" title={T.ui.grip} aria-label={T.ui.grip} onPointerDown={onGrip}
@@ -255,6 +263,10 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
           {b}
         </div>
       </div>
+      {shown === 'col' && (
+        <div className="split-hgutter end" role="separator" aria-orientation="horizontal" title={T.ui.resizeOut}
+          onPointerDown={(e) => dragHeight(e, slotB.current!, MIN_OUT, setLiveOut, setOutH)} onDoubleClick={() => setOutH(0)}><span /></div>
+      )}
     </div>
   );
 }

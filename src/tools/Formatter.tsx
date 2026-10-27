@@ -278,7 +278,7 @@ export function Formatter({ lang }: { lang: FmtLang }) {
               </div>
             )}
           </div>
-          <div className="code" style={{ flex: 1, maxHeight: S.wide ? 'calc(100vh - 250px)' : '70vh', minHeight: taH, overflow: 'auto', padding: '10px 0' }}>
+          <div className="code pane-scroll" style={{ flex: 1, maxHeight: S.wide ? 'calc(100vh - 250px)' : '70vh', minHeight: taH, overflow: 'auto', padding: '10px 0' }}>
             {tree && (
               <>
                 {tree.rows.map((row) => (

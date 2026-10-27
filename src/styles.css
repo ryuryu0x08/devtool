@@ -264,6 +264,9 @@ button.caret { border: 0; background: transparent; padding: 0; font: inherit; fo
 .split.col > .split-pane:first-child textarea { min-height: min(360px, 45vh) !important; }
 .split.col.sized > .split-pane:first-child textarea { min-height: 0 !important; }
 .split.col.sized > .split-pane:first-child > * { min-height: 0; overflow: hidden; }
+/* The bar below the result sets its height; its scrolling area then fills the card. */
+.split.col.out-sized > .split-pane.result > .split-float, .split.col.out-sized > .split-pane.result > .split-float > * { min-height: 0; }
+.split.col.out-sized > .split-pane.result .pane-scroll { max-height: none !important; min-height: 0 !important; }
 /* A line across the full width; the result's handle (moving it) sits on its middle. */
 .split-hgutter { height: 16px; display: flex; align-items: center; padding: 0 14px; cursor: row-resize; touch-action: none; }
 .split-hgutter span { flex: 1; height: 1px; border-radius: 1px; background: var(--line); transition: background .15s, height .15s; }

@@ -8,7 +8,7 @@ export const zhT = {
     zone: '时区：{z}', bytesTo: '{a} 字节 → {b} 字节', loneSur: '结果含孤立代理字符（已标出），它们无法按 UTF-8 保存', notUtf8Out: '{n} 字节 · 不是有效的 UTF-8 文本，以十六进制显示', bigOut: '{n} 字节 · 太大，不在页面里按文本显示（下面是开头部分的十六进制）；请下载', utf8Out: 'UTF-8 文本 · {n} 字节',
     zoom: '字号', zoomIn: '放大右侧内容', zoomOut: '缩小右侧内容', zoomReset: '恢复 100%',
     crashed: '这个工具遇到意外错误，没能显示结果：{m}', retry: '重试', clearInput: '清空这个工具的输入（可撤销）', tooDeep: '嵌套层级太深，超出了浏览器能处理的递归深度', shownFirst: '仅显示前 {n} 个字符；点击复制得到全部',
-    resize: '拖动调整宽度 · 双击恢复各占一半', resizeH: '拖动调整输入框高度 · 双击恢复默认', grip: '拖到右侧或下方 · 单击切换', dropBeside: '松开 · 放在右侧', dropBelow: '松开 · 放在下方',
+    resize: '拖动调整宽度 · 双击恢复各占一半', resizeH: '拖动调整输入框高度 · 双击恢复默认', resizeOut: '拖动调整结果框高度 · 双击恢复默认', grip: '拖到右侧或下方 · 单击切换', dropBeside: '松开 · 放在右侧', dropBelow: '松开 · 放在下方',
   },
   url: {
     component: '组件', uri: '整个链接', form: '表单（空格写成 +）', plusSpace: '+ 表示空格',
@@ -114,7 +114,7 @@ export const enT: ToolDict = {
     zone: 'Time zone: {z}', bytesTo: '{a} bytes → {b} bytes', loneSur: 'The result has lone surrogates (marked); they can’t be saved as UTF-8', notUtf8Out: '{n} bytes · not valid UTF-8 text, shown as hex', bigOut: '{n} bytes · too large to show as text here (the start is shown as hex); download it', utf8Out: 'UTF-8 text · {n} bytes',
     zoom: 'Text size', zoomIn: 'Larger tool area', zoomOut: 'Smaller tool area', zoomReset: 'Back to 100%',
     crashed: 'This tool hit an unexpected error and could not show a result: {m}', retry: 'Try again', clearInput: 'Clear this tool’s input (undo brings it back)', tooDeep: 'Nested too deeply: beyond the recursion depth the browser can handle', shownFirst: 'Showing the first {n} characters; a click copies all of it',
-    resize: 'Drag to resize · double-click for half and half', resizeH: 'Drag to set the input height · double-click for the default', grip: 'Drag to the right or below · click to switch', dropBeside: 'Release · beside', dropBelow: 'Release · below',
+    resize: 'Drag to resize · double-click for half and half', resizeH: 'Drag to set the input height · double-click for the default', resizeOut: 'Drag to set the result height · double-click for the default', grip: 'Drag to the right or below · click to switch', dropBeside: 'Release · beside', dropBelow: 'Release · below',
   },
   url: {
     component: 'Component', uri: 'Whole URL', form: 'Form (space as +)', plusSpace: '+ means space',

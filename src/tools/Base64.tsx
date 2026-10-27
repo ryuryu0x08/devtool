@@ -145,7 +145,7 @@ export function Base64() {
               {notes.map((n, i) => <span key={i}>{n}</span>)}
             </div>
           )}
-          <div style={{ padding: '12px 16px', flex: 1, minHeight: 0, overflow: 'auto', maxHeight: '70vh' }}>
+          <div className="pane-scroll" style={{ padding: '12px 16px', flex: 1, minHeight: 0, overflow: 'auto', maxHeight: '70vh' }}>
             {dec && 'err' in dec ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--del)' }}>
                 <span style={{ fontSize: 13 }}><Vis text={errText(dec.err)} /></span>
