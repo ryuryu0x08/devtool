@@ -3,7 +3,7 @@
 import { useApp } from '../store';
 import { useOpt } from './Panes';
 
-export const ZOOMS = [80, 90, 100, 110, 125, 140, 160];
+export const ZOOMS = [100, 110, 125, 140, 160];
 
 export function useZoom(): [number, (z: number) => void] {
   return useOpt('ui.zoom', 100, ZOOMS);

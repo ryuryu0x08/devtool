@@ -145,10 +145,14 @@ test('text size: the tool area scales as a whole, the sidebar stays; remembered;
   expect(Math.abs(f.x + f.width / 2 - (g.x + g.width / 2 - 120))).toBeLessThan(3);
   await page.mouse.up();
   expect(await layout(page)).toBe('col');
-  // A click on the percentage goes back to 100 %; the smallest size disables A−.
+  // A click on the percentage goes back to 100 %, the smallest size: A− is disabled there.
   await page.locator('.zoom-btn.pct').click();
   expect(Math.abs((await headH()) - h0)).toBeLessThan(0.5);
-  for (let i = 0; i < 2; i++) await page.getByRole('button', { name: '缩小右侧内容' }).click();
-  await expect(page.locator('.zoom-btn.pct')).toHaveText('80%');
+  await expect(page.locator('.zoom-btn.pct')).toHaveText('100%');
   await expect(page.getByRole('button', { name: '缩小右侧内容' })).toBeDisabled();
+  // A size below 100 % stored earlier is not used.
+  await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('tb.prefs') || '{}'); p.o = { ...p.o, 'ui.zoom': 80 }; localStorage.setItem('tb.prefs', JSON.stringify(p)); });
+  await page.reload();
+  await expect(page.locator('.zoom-btn.pct')).toHaveText('100%');
+  expect(Math.abs((await headH()) - h0)).toBeLessThan(0.5);
 });
