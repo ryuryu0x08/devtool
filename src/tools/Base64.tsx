@@ -17,15 +17,15 @@ const SHOW_CHARS = 200_000;
 const SHOW_BYTES = 4096;
 
 /** Bytes of a file, read once per file; never those of a previous file. */
-function useFileBytes(file: File | null) {
+export function useFileBytes(file: File | null, maxMb = FILE_MAX_MB) {
   const [st, setSt] = useState<{ file: File | null; bytes?: Uint8Array; err?: 'big' | 'read' }>({ file: null });
   useEffect(() => {
     if (!file) return;
-    if (file.size > FILE_MAX_MB * 1024 * 1024) { setSt({ file, err: 'big' }); return; }
+    if (file.size > maxMb * 1024 * 1024) { setSt({ file, err: 'big' }); return; }
     let live = true;
     file.arrayBuffer().then((b) => live && setSt({ file, bytes: new Uint8Array(b) }), () => live && setSt({ file, err: 'read' }));
     return () => { live = false; };
-  }, [file]);
+  }, [file, maxMb]);
   return st.file === file ? st : { file };
 }
 

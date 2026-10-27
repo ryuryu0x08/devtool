@@ -1,7 +1,9 @@
 // App shell: navigation, sidebar, search palette, themes, languages, layout, offline.
 import { activeTool, expect, nav, open, test } from './helpers';
 
-const TOOLS = ['时间戳转换', '生成二维码', '识别二维码', 'JSON 格式化', 'TOML 格式化', 'JSON 对比', 'Base64 编解码', '哈希'];
+const TOOLS = ['时间戳转换', 'Cron 表达式', '生成二维码', '识别二维码', 'JSON 格式化', 'TOML 格式化', 'YAML 格式化', 'XML 格式化', 'SQL 格式化', 'JSON Schema 校验',
+  'JSON 对比', '文本对比', 'Base64 编解码', '哈希', 'URL 编解码', 'Unicode 转义', 'HTML 实体', 'Hex 编解码', '进制转换', 'Gzip 压缩解压', '转义 / 还原',
+  'URL 解析', 'JWT 解码', '颜色转换', '正则表达式', '命名转换', '字数统计', '文本处理', 'UUID', '随机密码'];
 
 test('every tool opens; the page has no title / breadcrumb / smart-paste card', async ({ page }) => {
   await open(page);
@@ -40,7 +42,7 @@ test('palette: Ctrl+K, "/", search by pinyin initials, Enter opens, Esc closes',
   await page.keyboard.press('Control+k');
   const input = page.getByPlaceholder('搜索工具，或直接粘贴内容…');
   await input.fill('gsh');
-  await expect(page.locator('.list-item')).toHaveCount(2);
+  await expect(page.locator('.list-item').first()).toContainText('JSON 格式化');
   await input.press('Enter');
   await expect.poll(() => activeTool(page)).toContain('JSON 格式化');
   await page.locator('.content').click({ position: { x: 2, y: 2 } });
@@ -139,7 +141,7 @@ for (const [width, locale, scheme] of [[320, 'zh-CN', 'dark'], [390, 'en-US', 'l
       await page.evaluate(() => localStorage.clear());
       await page.reload();
       const count = width < 800 ? await page.locator('.chip').count() : await page.locator('.nav-item').count();
-      expect(count).toBe(8);
+      expect(count).toBe(TOOLS.length);
       for (let i = 0; i < count; i++) {
         await (width < 800 ? page.locator('.chip').nth(i) : page.locator('.nav-item').nth(i)).click();
         expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
@@ -149,7 +151,8 @@ for (const [width, locale, scheme] of [[320, 'zh-CN', 'dark'], [390, 'en-US', 'l
       await page.goto('/');
       await page.evaluate(() => localStorage.clear());
       await page.reload();
-      await (width < 800 ? page.locator('.chip').nth(3) : page.locator('.nav-item').nth(3)).click();
+      if (width < 800) await page.locator('.chip').filter({ hasText: /^JSON$/ }).click();
+      else await nav(page, 'JSON Formatter');
       await page.locator('textarea[data-autofocus]').fill('{"a_very_long_key_name_that_goes_on_and_on":{"another_long_key_for_the_path":[1,null]}}');
       await page.locator('button', { hasText: /转为 TOML|To TOML/ }).click();
       const box = (await page.locator('.toast').boundingBox())!;

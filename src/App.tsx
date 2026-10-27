@@ -9,6 +9,19 @@ import { smolParse } from './lib/toml';
 import { clipboardUnsafe, decodeUtf8, normEol } from './lib/data';
 import { b64decode, looksB64 } from './lib/b64';
 import { hashLike } from './lib/hash';
+import { looksJwt } from './lib/jwt';
+import { looksUuid, parseUuid } from './lib/uuid';
+import { parseColor, looksColor } from './lib/color';
+import { looksCron } from './lib/cron';
+import { looksXml } from './lib/xml';
+import { looksSql } from './lib/sqlfmt';
+import { looksYaml } from './lib/yamlfmt';
+import { looksPercent, looksUrl } from './lib/url';
+import { looksUniEscaped } from './lib/unicode';
+import { looksHtmlEscaped } from './lib/htmlent';
+import { looksHex } from './lib/hex';
+import { looksSchema } from './lib/schema';
+import { readInt } from './lib/numbase';
 import { MobileBar, Sidebar } from './components/Sidebar';
 import { Palette } from './components/Palette';
 import { Vis } from './components/Vis';
@@ -18,10 +31,23 @@ import { Formatter } from './tools/Formatter';
 import { Diff } from './tools/Diff';
 import { Base64 } from './tools/Base64';
 import { Hash } from './tools/Hash';
+import { EscapeTool, HtmlEntities, UnicodeTool, UrlCodec, looksEscaped } from './tools/EncodeTools';
+import { Jwt, UrlParse } from './tools/WebTools';
+import { Gzip, Hex, NumBase, looksZData } from './tools/BytesTools';
+import { Schema, SqlFmt, XmlFmt, YamlFmt } from './tools/FormatTools';
+import { CaseConv, Count, Regex, TextDiff, TextProc } from './tools/TextTools';
+import { Password, Uuid } from './tools/GenTools';
+import { Color, Cron } from './tools/CronColor';
 
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg|ico|avif|heic|heif|tiff?)$/i;
-/** Files held in memory (Base64 / Hash): replacing one can be undone like replacing text. */
-const FILE_KEYS: (keyof State)[] = ['hashFile', 'b64File'];
+/** Dropped files read as text (then routed by extension or content). */
+const TEXT_EXT = /\.(json|toml|ya?ml|xml|sql|txt|csv|tsv|log|md|ini|conf|cfg|env|html?|js|ts|css|sh|py|java|c|h|go|rs)$/i;
+/** Files held in memory (Base64 / Hash / Hex / Gzip): replacing one can be undone like replacing text. */
+const FILE_KEYS: (keyof State)[] = ['hashFile', 'b64File', 'hexFile', 'gzFile'];
+/** Tools that take any file, or any pasted file, as bytes. */
+const BYTE_TOOLS: ToolId[] = ['b64', 'hash', 'hex', 'gzip'];
+/** ULIDs are written in upper case; a lower-case 26-character word is more likely something else. */
+const ULID = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/;
 
 const reducer = (s: State, p: Patch): State => ({ ...s, ...(typeof p === 'function' ? p(s) : p) });
 
@@ -104,7 +130,20 @@ export function App() {
     if (/^-?\d{9,19}(\.\d+)?$/.test(s)) return 'ts';
     if (/^[[{]/.test(s)) { try { JSON.parse(s); return 'json'; } catch { /* not JSON */ } }
     if (/^\s*(\[[^\]\n]+\]|[\w."'-]+\s*=)/m.test(s)) { try { smolParse(s); return 'toml'; } catch { /* not TOML */ } }
+    if (looksJwt(s)) return 'jwt';
+    if (looksUuid(s)) return 'uuid';
+    if (ULID.test(s)) return 'ts';
     if (looksB64(s)) return 'b64';
+    if (looksColor(s)) return 'color';
+    if (looksCron(s)) return 'cron';
+    if (looksXml(s)) return 'xml';
+    if (looksSql(s)) return 'sql';
+    if (looksYaml(s)) return 'yaml';
+    // A link stays a link (QR code); text with %XX escapes is decoded.
+    if (looksUrl(s)) return null;
+    if (looksPercent(s)) return 'url';
+    if (looksUniEscaped(s)) return 'uni';
+    if (looksHtmlEscaped(s)) return 'html';
     if (s.length < 40 && /\d/.test(s) && hasMs(parseTime(s, ref.current.tz, Date.now()))) return 'tm';
     return null;
   }, []);
@@ -118,6 +157,17 @@ export function App() {
     else if (d === 'json') { tool = 'json'; patch = { json: s, sel: { ...ref.current.sel, json: '' } }; }
     else if (d === 'toml') { tool = 'toml'; patch = { toml: s, sel: { ...ref.current.sel, toml: '' } }; }
     else if (d === 'b64') { const n = normEol(s); tool = 'b64'; patch = { b64In: n.text, b64Cr: n.cr, b64File: null, b64Mode: 'dec' }; }
+    else if (d === 'jwt') { tool = 'jwt'; patch = { jwtIn: s.trim() }; }
+    else if (d === 'uuid') { tool = 'uuid'; patch = { uuidIn: s.trim() }; }
+    else if (d === 'color') { tool = 'color'; patch = { colorIn: s.trim() }; }
+    else if (d === 'cron') { tool = 'cron'; patch = { cronIn: s.trim() }; }
+    else if (d === 'xml') { tool = 'xml'; patch = { xmlIn: normEol(s).text }; }
+    else if (d === 'sql') { tool = 'sql'; patch = { sqlIn: normEol(s).text }; }
+    else if (d === 'yaml') { tool = 'yaml'; patch = { yamlIn: normEol(s).text }; }
+    else if (d === 'url' || d === 'uni' || d === 'html') {
+      tool = d;
+      patch = { [d === 'url' ? 'urlIn' : d === 'uni' ? 'uniIn' : 'htmlIn']: normEol(s).text, o: { ...ref.current.o, [d + '.mode']: 'dec' } };
+    }
     else { tool = 'qrgen'; patch = { qrText: normEol(s).text }; }
     replace({ ...patch, tool, palette: false, pq: '' }, silent ? undefined : f(dictFor(ref.current.lang).routed, { t: toolName(tool) }));
   }, [detect, replace, toolName]);
@@ -143,10 +193,19 @@ export function App() {
     set({ scan: { src, name: nm, busy: false, codes, w: img.naturalWidth, h: img.naturalHeight } });
   }, [toast]);
 
-  /** Base64 and Hash take any file as bytes; decoding Base64 reads a file of Base64 text into the input. */
+  /** Base64, Hash, Hex and Gzip take any file as bytes; decoding Base64 reads a file of Base64 text into the input. */
   const byteFile = useCallback((file: File, note?: string) => {
     const s = ref.current, t = dictFor(s.lang);
     if (s.tool === 'hash') set({ hashFile: file, hashCr: false });
+    else if (s.tool === 'hex') set({ hexFile: file, o: { ...s.o, 'hex.mode': 'enc' } });
+    else if (s.tool === 'gzip') {
+      // A compressed file (by its first bytes) is decompressed; anything else compressed.
+      file.slice(0, 4).arrayBuffer().then((b) => {
+        const h = new Uint8Array(b);
+        const z = (h[0] === 0x1f && h[1] === 0x8b) || (h.length > 1 && (h[0] & 0x0f) === 8 && (h[0] >> 4) <= 7 && ((h[0] << 8) | h[1]) % 31 === 0);
+        set((x) => ({ gzFile: file, o: { ...x.o, 'gz.mode': z ? 'unzip' : 'zip' } }));
+      }, () => toast(t.readFail, 5000));
+    }
     else if (s.b64Mode === 'enc') set({ b64File: file, b64Cr: false });
     else {
       file.arrayBuffer().then((buf) => {
@@ -167,6 +226,13 @@ export function App() {
     const s = ref.current, t = dictFor(s.lang);
     const side = s.diffLast === 'diffA' ? 'diffB' : 'diffA';
     replace({ [side]: normEol(raw).text, diffLast: side }, [note, f(t.filledSide, { s: side === 'diffA' ? 'A' : 'B' })].filter(Boolean).join(' · '));
+  }, [replace]);
+
+  /** Text diff: the same, alternating A / B. */
+  const fillTd = useCallback((raw: string, note?: string) => {
+    const s = ref.current, t = dictFor(s.lang);
+    const side = s.tdLast === 'tdA' ? 'tdB' : 'tdA';
+    replace({ [side]: normEol(raw).text, tdLast: side }, [note, f(t.filledSide, { s: side === 'tdA' ? 'A' : 'B' })].filter(Boolean).join(' · '));
   }, [replace]);
 
   /**
@@ -198,15 +264,52 @@ export function App() {
         fillDiff(raw, note);
         return true;
       }
+      case 'tdiff':
+        fillTd(raw, note);
+        return true;
     }
+    // Text tools take any text; the two-way ones pick their direction from it.
+    const twoWay: Partial<Record<ToolId, [keyof State, boolean]>> = {
+      url: ['urlIn', looksPercent(n.text)], uni: ['uniIn', looksUniEscaped(n.text)], html: ['htmlIn', looksHtmlEscaped(n.text)],
+      esc: ['escIn', looksEscaped(n.text, String(s.o['esc.lang'] ?? 'json'))], hex: ['hexIn', looksHex(n.text)],
+    };
+    const tw = twoWay[s.tool];
+    if (tw) {
+      replace({ [tw[0]]: n.text, ...(s.tool === 'hex' ? { hexFile: null } : {}), o: { ...s.o, [s.tool + '.mode']: tw[1] ? 'dec' : 'enc' } }, msg());
+      return true;
+    }
+    const plain: Partial<Record<ToolId, keyof State>> = { yaml: 'yamlIn', xml: 'xmlIn', sql: 'sqlIn', regex: 'reText', case: 'caseIn', count: 'countIn', proc: 'procIn' };
+    if (plain[s.tool]) { replace({ [plain[s.tool]!]: n.text }, msg()); return true; }
+    if (s.tool === 'gzip') { replace({ gzIn: n.text, gzFile: null, o: { ...s.o, 'gz.mode': looksZData(n.text) ? 'unzip' : 'zip' } }, msg()); return true; }
+    if (s.tool === 'schema') { replace(looksSchema(n.text) ? { schemaIn: n.text } : { schemaData: n.text }, msg()); return true; }
+    // Tools for one kind of value keep a paste only when it is that kind.
+    const one = n.text.trim();
+    const typed: Partial<Record<ToolId, [keyof State, () => boolean]>> = {
+      urlp: ['urlpIn', () => looksUrl(one)], jwt: ['jwtIn', () => looksJwt(one)], uuid: ['uuidIn', () => !!parseUuid(one)],
+      cron: ['cronIn', () => looksCron(one)], color: ['colorIn', () => !!parseColor(one)],
+      base: ['numIn', () => { try { readInt(one, 'auto'); return true; } catch { return false; } }],
+    };
+    const ty = typed[s.tool];
+    if (ty && ty[1]()) { replace({ [ty[0]]: one }, msg()); return true; }
     return false;
-  }, [detect, fillDiff, replace]);
+  }, [detect, fillDiff, fillTd, replace]);
 
   const handleFiles = useCallback((files: File[]) => {
     const s0 = ref.current, t = dictFor(s0.lang);
     if (!files.length) return;
-    if (s0.tool === 'b64' || s0.tool === 'hash') {
+    if (BYTE_TOOLS.includes(s0.tool)) {
       byteFile(files[0], files.length > 1 ? f(t.onlyFirst, { n: files[0].name }) : undefined);
+      return;
+    }
+    // Text diff: one text file fills the next side; two fill A and B.
+    if (s0.tool === 'tdiff') {
+      const two = files.slice(0, 2);
+      Promise.all(two.map((x) => x.arrayBuffer())).then((bufs) => {
+        const texts = bufs.map((b) => decodeUtf8(b));
+        if (texts.some((x) => x === null)) { toast(t.notUtf8, 5000); return; }
+        if (two.length === 2) replace({ tdA: normEol(texts[0]!).text, tdB: normEol(texts[1]!).text, tdLast: 'tdB' }, f(t.diffFiles, { a: two[0].name, b: two[1].name }));
+        else fillTd(texts[0]!);
+      }, () => toast(t.readFail, 5000));
       return;
     }
     const isImage = (x: File) => /^image\//.test(x.type) || (!x.type && IMAGE_EXT.test(x.name));
@@ -222,7 +325,7 @@ export function App() {
       }, () => toast(t.readFail, 5000));
       return;
     }
-    const file = files.find((x) => isImage(x) || /\.(json|toml|txt)$/i.test(x.name));
+    const file = files.find((x) => isImage(x) || TEXT_EXT.test(x.name) || x.type.startsWith('text/'));
     if (!file) { toast(t.unsupportedFile, 5000); return; }
     // Only one file is opened; say which when several were dropped.
     const note = files.length > 1 ? f(t.onlyFirst, { n: file.name }) : undefined;
@@ -237,9 +340,12 @@ export function App() {
       if (s === null) { toast(t.notUtf8, 5000); return; }
       if (/\.toml$/i.test(file.name)) replace({ toml: s, sel: { ...ref.current.sel, toml: '' }, tool: 'toml' }, note);
       else if (/\.json$/i.test(file.name)) replace({ json: s, sel: { ...ref.current.sel, json: '' }, tool: 'json' }, note);
+      else if (/\.ya?ml$/i.test(file.name)) replace({ yamlIn: normEol(s).text, tool: 'yaml' }, note);
+      else if (/\.xml$/i.test(file.name)) replace({ xmlIn: normEol(s).text, tool: 'xml' }, note);
+      else if (/\.sql$/i.test(file.name)) replace({ sqlIn: normEol(s).text, tool: 'sql' }, note);
       else if (!takeText(s, note)) routeText(s);
-    });
-  }, [byteFile, decodeFile, fillDiff, replace, routeText, takeText, toast]);
+    }, () => toast(t.readFail, 5000));
+  }, [byteFile, decodeFile, fillDiff, fillTd, replace, routeText, takeText, toast]);
 
   // Global listeners: resize, system theme, shortcuts, smart paste, drag & drop.
   useEffect(() => {
@@ -269,7 +375,7 @@ export function App() {
 
     const onPaste = (e: ClipboardEvent) => {
       const s = ref.current;
-      const bytes = s.tool === 'b64' || s.tool === 'hash';
+      const bytes = BYTE_TOOLS.includes(s.tool);
       // Text wins: apps like Office put a picture of the selection next to the text.
       const text = e.clipboardData?.getData('text') || '';
       // No text: a file. Base64 / Hash take any file (whitespace is content there); others scan images.
@@ -384,13 +490,35 @@ export function App() {
             {S.tool === 'diff' && <Diff />}
             {S.tool === 'b64' && <Base64 />}
             {S.tool === 'hash' && <Hash />}
+            {S.tool === 'url' && <UrlCodec />}
+            {S.tool === 'urlp' && <UrlParse />}
+            {S.tool === 'jwt' && <Jwt />}
+            {S.tool === 'uni' && <UnicodeTool />}
+            {S.tool === 'html' && <HtmlEntities />}
+            {S.tool === 'esc' && <EscapeTool />}
+            {S.tool === 'hex' && <Hex />}
+            {S.tool === 'base' && <NumBase />}
+            {S.tool === 'gzip' && <Gzip />}
+            {S.tool === 'yaml' && <YamlFmt />}
+            {S.tool === 'xml' && <XmlFmt />}
+            {S.tool === 'sql' && <SqlFmt />}
+            {S.tool === 'schema' && <Schema />}
+            {S.tool === 'tdiff' && <TextDiff />}
+            {S.tool === 'regex' && <Regex />}
+            {S.tool === 'case' && <CaseConv />}
+            {S.tool === 'count' && <Count />}
+            {S.tool === 'proc' && <TextProc />}
+            {S.tool === 'uuid' && <Uuid />}
+            {S.tool === 'pwd' && <Password />}
+            {S.tool === 'cron' && <Cron />}
+            {S.tool === 'color' && <Color />}
           </div>
         </main>
         {S.palette && <Palette />}
         {S.dragOver && (
           <div className="drop-overlay">
             <span style={{ fontSize: 20, fontWeight: 600, color: 'var(--acc)' }}>{T.dropHere}</span>
-            <span style={{ fontSize: 13, color: 'var(--mut)' }}>{S.tool === 'b64' || S.tool === 'hash' ? T.dropAny : S.tool === 'diff' ? T.dropDiff : T.dropHereSub}</span>
+            <span style={{ fontSize: 13, color: 'var(--mut)' }}>{BYTE_TOOLS.includes(S.tool) ? T.dropAny : S.tool === 'diff' ? T.dropDiff : S.tool === 'tdiff' ? T.dropText : T.dropHereSub}</span>
           </div>
         )}
         {S.toast && (

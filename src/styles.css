@@ -197,3 +197,34 @@ button.caret { border: 0; background: transparent; padding: 0; font: inherit; fo
 
 .now-btn:hover { border-color: var(--acc) !important; color: var(--acc) !important; background: var(--card); }
 .path-btn:hover { color: var(--acc); }
+
+/* Tools: shared layout */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.out-notes { padding: 8px 16px; background: var(--chgBg); color: var(--chg); font-size: 12.5px; display: flex; flex-direction: column; gap: 4px; }
+.num-in { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--mut); }
+.num-in .field { font-family: 'Geist Mono', monospace; }
+.tool-stack { display: flex; flex-direction: column; gap: 12px; }
+.field.line { height: 40px; font-size: 14px; font-weight: 400; }
+.kv .v { white-space: pre-wrap; }
+.mark-a { background: oklch(0.85 0.12 85 / 0.6); border-radius: 2px; }
+.mark-b { background: oklch(0.82 0.1 200 / 0.6); border-radius: 2px; }
+.td-row { display: grid; grid-template-columns: 44px 44px 18px minmax(0, 1fr); font: 12.5px/1.6 'Geist Mono', 'PingFang SC', monospace; }
+.td-row .n { color: var(--faint); text-align: right; padding-right: 8px; user-select: none; }
+.td-row .m { user-select: none; font-weight: 700; }
+.td-row .t { white-space: pre-wrap; word-break: break-all; }
+.td-row.del { background: var(--delBg); } .td-row.del .m { color: var(--del); }
+.td-row.add { background: var(--addBg); } .td-row.add .m { color: var(--add); }
+.td-row.del .ch { background: oklch(0.75 0.15 25 / 0.45); }
+.td-row.add .ch { background: oklch(0.78 0.15 145 / 0.5); }
+.td-gap { color: var(--faint); font-size: 12px; padding: 2px 0 2px 106px; }
+.swatch { width: 100%; height: 88px; border-radius: 10px; border: 1px solid var(--line); background-image: linear-gradient(45deg, var(--seg) 25%, transparent 25%, transparent 75%, var(--seg) 75%), linear-gradient(45deg, var(--seg) 25%, transparent 25%, transparent 75%, var(--seg) 75%); background-size: 16px 16px; background-position: 0 0, 8px 8px; position: relative; overflow: hidden; }
+.swatch > div { position: absolute; inset: 0; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.tbl th { text-align: left; font-weight: 500; color: var(--faint); padding: 4px 8px; border-bottom: 1px solid var(--line); }
+.tbl td { padding: 4px 8px; border-bottom: 1px solid var(--line); font-family: 'Geist Mono', 'PingFang SC', monospace; }
+.field.line.mono { font-family: 'Geist Mono', 'PingFang SC', monospace; }
+.part-label { font-size: 12.5px; font-weight: 600; color: var(--mut); margin-bottom: 4px; }
+.out-card .kv { grid-template-columns: 112px minmax(0, 1fr); }
+.out-card .kv .k { overflow-wrap: anywhere; }
+@media (max-width: 480px) { .out-card .kv { grid-template-columns: 88px minmax(0, 1fr); } }
+.pwd-list .copy-block { margin: 0 -8px; padding: 2px 8px; }

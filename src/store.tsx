@@ -72,6 +72,42 @@ export interface State {
   hashCr: boolean;
   hashFile: File | null;
   hashCheck: string;
+  urlIn: string;
+  urlpIn: string;
+  jwtIn: string;
+  uniIn: string;
+  htmlIn: string;
+  hexIn: string;
+  numIn: string;
+  gzIn: string;
+  yamlIn: string;
+  xmlIn: string;
+  sqlIn: string;
+  schemaIn: string;
+  schemaData: string;
+  tdA: string;
+  tdB: string;
+  reSrc: string;
+  reText: string;
+  reRepl: string;
+  caseIn: string;
+  countIn: string;
+  procIn: string;
+  escIn: string;
+  uuidIn: string;
+  cronIn: string;
+  colorIn: string;
+  colorFg: string;
+  colorBg: string;
+  /** Not stored: a JWT key / secret stays in memory only. */
+  jwtKey: string;
+  /** Files for Hex and Gzip (exact bytes); not stored. */
+  hexFile: File | null;
+  gzFile: File | null;
+  /** Text diff: side edited last (the next paste fills the other). */
+  tdLast: 'tdA' | 'tdB' | null;
+  /** Options of the newer tools, by "tool.option"; stored with the preferences. */
+  o: Record<string, string | number | boolean>;
 }
 
 export type Patch = Partial<State> | ((s: State) => Partial<State>);
@@ -92,14 +128,16 @@ export const localTz = (() => {
   try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; }
 })();
 
-type Inputs = Pick<State, 'tsIn' | 'tmIn' | 'qrText' | 'json' | 'toml' | 'diffA' | 'diffB' | 'b64In' | 'hashIn' | 'hashCheck'>;
-type Prefs = Pick<State, 'side' | 'lang' | 'theme' | 'indent' | 'sortKeys' | 'view' | 'ignoreOrder' | 'onlyDiff' | 'diffView' | 'b64Mode' | 'b64Url' | 'b64Pad' | 'b64DataUrl' | 'hashFmt'>;
+type Inputs = Pick<State, 'tsIn' | 'tmIn' | 'qrText' | 'json' | 'toml' | 'diffA' | 'diffB' | 'b64In' | 'hashIn' | 'hashCheck'
+  | 'urlIn' | 'urlpIn' | 'jwtIn' | 'uniIn' | 'htmlIn' | 'hexIn' | 'numIn' | 'gzIn' | 'yamlIn' | 'xmlIn' | 'sqlIn' | 'schemaIn' | 'schemaData' | 'tdA' | 'tdB' | 'reSrc' | 'reText' | 'reRepl' | 'caseIn' | 'countIn' | 'procIn' | 'escIn' | 'uuidIn' | 'cronIn' | 'colorIn' | 'colorFg' | 'colorBg'>;
+type Prefs = Pick<State, 'side' | 'lang' | 'theme' | 'indent' | 'sortKeys' | 'view' | 'ignoreOrder' | 'onlyDiff' | 'diffView' | 'b64Mode' | 'b64Url' | 'b64Pad' | 'b64DataUrl' | 'hashFmt' | 'o'>;
 
-export const INPUT_KEYS: (keyof Inputs)[] = ['tsIn', 'tmIn', 'qrText', 'json', 'toml', 'diffA', 'diffB', 'b64In', 'hashIn', 'hashCheck'];
+export const INPUT_KEYS: (keyof Inputs)[] = ['tsIn', 'tmIn', 'qrText', 'json', 'toml', 'diffA', 'diffB', 'b64In', 'hashIn', 'hashCheck',
+  'urlIn', 'urlpIn', 'jwtIn', 'uniIn', 'htmlIn', 'hexIn', 'numIn', 'gzIn', 'yamlIn', 'xmlIn', 'sqlIn', 'schemaIn', 'schemaData', 'tdA', 'tdB', 'reSrc', 'reText', 'reRepl', 'caseIn', 'countIn', 'procIn', 'escIn', 'uuidIn', 'cronIn', 'colorIn', 'colorFg', 'colorBg'];
 export const pickPrefs = (S: State): Prefs => ({
   side: S.side, lang: S.lang, theme: S.theme, indent: S.indent, sortKeys: S.sortKeys, view: S.view,
   ignoreOrder: S.ignoreOrder, onlyDiff: S.onlyDiff, diffView: S.diffView,
-  b64Mode: S.b64Mode, b64Url: S.b64Url, b64Pad: S.b64Pad, b64DataUrl: S.b64DataUrl, hashFmt: S.hashFmt,
+  b64Mode: S.b64Mode, b64Url: S.b64Url, b64Pad: S.b64Pad, b64DataUrl: S.b64DataUrl, hashFmt: S.hashFmt, o: S.o,
 });
 
 const validTz = (z: string) => {
@@ -167,8 +205,41 @@ export function initState(): State {
     hashFmt: oneOf(pr.hashFmt, ['hex', 'HEX', 'b64'] as const, 'hex'),
     hashEol: 'lf', hashCr: false, hashFile: null,
     hashCheck: inp.hashCheck ?? '',
+    urlIn: inp.urlIn ?? '',
+    urlpIn: inp.urlpIn ?? '',
+    jwtIn: inp.jwtIn ?? '',
+    uniIn: inp.uniIn ?? '',
+    htmlIn: inp.htmlIn ?? '',
+    hexIn: inp.hexIn ?? '',
+    numIn: inp.numIn ?? '',
+    gzIn: inp.gzIn ?? '',
+    yamlIn: inp.yamlIn ?? '',
+    xmlIn: inp.xmlIn ?? '',
+    sqlIn: inp.sqlIn ?? '',
+    schemaIn: inp.schemaIn ?? '',
+    schemaData: inp.schemaData ?? '',
+    tdA: inp.tdA ?? '',
+    tdB: inp.tdB ?? '',
+    reSrc: inp.reSrc ?? '',
+    reText: inp.reText ?? '',
+    reRepl: inp.reRepl ?? '',
+    caseIn: inp.caseIn ?? '',
+    countIn: inp.countIn ?? '',
+    procIn: inp.procIn ?? '',
+    escIn: inp.escIn ?? '',
+    uuidIn: inp.uuidIn ?? '',
+    cronIn: inp.cronIn ?? '',
+    colorIn: inp.colorIn ?? '',
+    colorFg: inp.colorFg ?? '#1b1b1d',
+    colorBg: inp.colorBg ?? '#ffffff',
+    jwtKey: '', hexFile: null, gzFile: null, tdLast: null,
+    // Each option is checked where it is read (useOpt), so damaged values fall back to defaults.
+    o: pr.o && typeof pr.o === 'object' && !Array.isArray(pr.o) ? Object.fromEntries(Object.entries(pr.o as object).filter(([, v]) => ['string', 'number', 'boolean'].includes(typeof v))) : {},
   };
 }
+
+/** What pasted text looks like: a tool, or 'tm' (a date for the timestamp tool's second box). */
+export type Detected = 'ts' | 'tm' | 'json' | 'toml' | 'b64' | 'jwt' | 'uuid' | 'color' | 'cron' | 'xml' | 'sql' | 'yaml' | 'url' | 'uni' | 'html' | null;
 
 export interface Ctx {
   S: State;
@@ -183,7 +254,7 @@ export interface Ctx {
   replace: (patch: Partial<State>, msg?: string) => void;
   toolName: (id: ToolId) => string;
   routeText: (text: string, silent?: boolean) => void;
-  detect: (text: string) => 'ts' | 'tm' | 'json' | 'toml' | 'b64' | null;
+  detect: (text: string) => Detected;
   decodeFile: (file: File, name?: string) => void;
 }
 

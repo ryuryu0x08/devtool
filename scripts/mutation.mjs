@@ -86,6 +86,33 @@ const M = [
   ['QR: GBK not tried', 'src/lib/qr.ts', "for (const enc of ['utf-8', 'gb18030', 'shift_jis']) {", "for (const enc of ['utf-8', 'shift_jis']) {", 'unit'],
   ['QR: no tiles (codes side by side missed)', 'src/lib/qr.ts', '  if (!tiles) return out;', '  return out;', 'several codes'],
   ['QR: files without a type refused', 'src/App.tsx', 'if (!file || (file.type && !/^image\\//.test(file.type)))', 'if (!file || !/^image\\//.test(file.type))', 'generate → download → scan'],
+  // Second round of tools: encoders, formatters, text and time.
+  ['URL: GB18030 fallback removed', 'src/lib/url.ts', "  try { return { text: new TextDecoder('gb18030', { fatal: true }).decode(b), enc: 'GB18030', plus }; } catch { /* neither */ }", '', 'unit'],
+  ['Unicode: astral characters escaped as one \\u', 'src/lib/unicode.ts', "    else if (cp > 0xffff) out += '\\\\u' + hex(0xd800 + ((cp - 0x10000) >> 10)) + '\\\\u' + hex(0xdc00 + ((cp - 0x10000) & 0x3ff));", '', 'unit'],
+  ['Hex: a stray letter reported as an odd digit count', 'src/lib/hex.ts', "    if (j < s.length && !/[\\s:,;\\-_]/.test(s[j]) && s[j] !== '\\\\' && !(s[j] === '0' && /[xX]/.test(s[j + 1] || ''))) throw new HexError('char', j, String.fromCodePoint(s.codePointAt(j)!));", '', 'unit'],
+  ['bases: signed view wrong', 'src/lib/numbase.ts', '    const signed = unsigned >= max >> 1n ? unsigned - max : unsigned;', '    const signed = unsigned;', 'unit'],
+  ['C escape: trigraphs written out', 'src/lib/escape.ts', "    } else if (lang === 'c' && c === '?' && s[i - 1] === '?') out += '\\\\?'; // never \"??\" (a trigraph)", '    }', 'unit'],
+  ['JWT: any signature accepted', 'src/lib/jwt.ts', "    return (await subtle.verify(algo, k, j.sig as BufferSource, data)) ? 'ok' : 'bad';", "    return 'ok';", 'unit'],
+  ['YAML: numbers re-spelled by the library', 'src/lib/yamlfmt.ts', 'uniqueKeys: true, customTags: keepSource,', 'uniqueKeys: true,', 'unit'],
+  ['XML: output not verified', 'src/lib/xml.ts', '  if (canon(parse(src)) !== canon(again)) throw new XmlVerifyError();', '', 'unit'],
+  ["SQL: PostgreSQL E'…' strings mis-read", 'src/lib/sqlfmt.ts', "    const bsHere = backslash || (q === \"'\" && !!prev && prev.k === 'w' && /^[eE]$/.test(prev.t) && prev.pos + 1 === i);", '    const bsHere = backslash;', 'unit'],
+  ['Schema: inexact numbers not reported', 'src/lib/schema.ts', "  if (n.t === 'num' && numKey(n.raw) !== numKey(String(Number(n.raw)))) out.push(path + ' = ' + n.raw);", "  if (n.t === 'num') { /* not checked */ }", 'unit'],
+  ['text diff: changed characters not marked', 'src/lib/textdiff.ts', "segs: cd.filter((c) => !c.removed).map((c) => ({ t: c.value, ch: !!c.added })) });", "segs: [{ t: y, ch: false }] });", 'unit'],
+  ['line sort: equal lines reordered', 'src/lib/textproc.ts', '      return c || x[1] - y[1];', '      return c || y[1] - x[1];', 'unit'],
+  ['count: characters counted as code points', 'src/lib/count.ts', "  const seg = new Intl.Segmenter(locale, { granularity: 'grapheme' });", "  const seg = { segment: (x: string) => [...x] };", 'unit'],
+  ['UUID v7: a batch is not in order', 'src/lib/uuid.ts', '  if (ms <= last.ms) { ms = last.ms; rand = last.rand + 1n; }', '  if (false) { ms = last.ms; rand = last.rand + 1n; }', 'unit'],
+  ['cron: Unix day-of-month OR day-of-week read as AND', 'src/lib/cron.ts', '    return domMatch(dom, y, m, d) || dowMatch(dow, y, m, d);', '    return domMatch(dom, y, m, d) && dowMatch(dow, y, m, d);', 'unit'],
+  ['cron: times skipped by DST still listed', 'src/lib/cron.ts', '          if (w.gap) { skipped++; continue; }', '', 'unit'],
+  ['contrast: translucent text not laid over the background', 'src/lib/color.ts', 'const over = { r: fg.r * fg.a + bg.r * (1 - fg.a), g: fg.g * fg.a + bg.g * (1 - fg.a), b: fg.b * fg.a + bg.b * (1 - fg.a), a: 1 };', 'const over = { ...fg, a: 1 };', 'unit'],
+  ['Snowflake: wrong shift', 'src/lib/ids.ts', '  return Number(v >> 22n) + SNOWFLAKE_EPOCHS[kind];', '  return Number(v >> 20n) + SNOWFLAKE_EPOCHS[kind];', 'unit'],
+  // Their pages: pastes, keys, limits.
+  ['JWT: the key is stored', 'src/store.tsx', "'colorIn', 'colorFg', 'colorBg'];", "'colorIn', 'colorFg', 'colorBg', 'jwtKey'];", 'never stored'],
+  ['regex: a runaway pattern is never stopped', 'src/lib/regex.ts', 'repl: string | null, ms = 1500)', 'repl: string | null, ms = 600_000)', 'runaway patterns stop'],
+  ['text diff: every paste fills A', 'src/App.tsx', "const side = s.tdLast === 'tdA' ? 'tdB' : 'tdA';", "const side = 'tdA';", 'pastes fill A, then B'],
+  ['paste: escaped text not decoded when routed', 'src/App.tsx', "o: { ...ref.current.o, [d + '.mode']: 'dec' } };", '};', 'escaped text is opened decoded'],
+  ['paste: a one-kind tool keeps any paste', 'src/App.tsx', '    if (ty && ty[1]()) { replace({ [ty[0]]: one }, msg()); return true; }', '    if (ty) { replace({ [ty[0]]: one }, msg()); return true; }', 'keeps only that kind'],
+  ['escape: a pasted quoted literal is not unwrapped', 'src/tools/EncodeTools.tsx', "      const wrapped = !!q && /^[\"']$/.test(q) && t.length >= 2 && t[0] === q && t[t.length - 1] === q;", '      const wrapped = false;', 'pasted escaped text is unescaped'],
+  ['contrast: ratio rounded up past a threshold', 'src/tools/CronColor.tsx', "const r2 = ratio === null ? '' : String(Math.floor(ratio * 100) / 100);", "const r2 = ratio === null ? '' : ratio.toFixed(1);", 'contrast checks'],
 ];
 
 const args = process.argv.slice(2);

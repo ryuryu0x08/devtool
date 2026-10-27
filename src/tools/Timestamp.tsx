@@ -3,6 +3,7 @@ import { COMMON_TZ, TZ_ZH, f } from '../i18n';
 import { localTz, lsSet, useApp } from '../store';
 import { Seg } from '../components/Seg';
 import { KvRows } from '../components/Kv';
+import { looksUlid, snowflakeTime, ulidTime, type SnowflakeKind } from '../lib/ids';
 import {
   daysIn, exactUnits, fmtISO, fmtWall, fracStr, hasMs, offLabel, parseTime, parseTs, relTime, resolveWall, tzOffset, tzParts, utc, type TsUnit,
 } from '../lib/time';
@@ -33,7 +34,7 @@ const safeOff = (now: number, id: string) => {
   try { return tzOffset(now, id); } catch { return 0; }
 };
 
-function useNow() {
+export function useNow() {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -42,7 +43,7 @@ function useNow() {
   return now;
 }
 
-function TzPicker({ now }: { now: number }) {
+export function TzPicker({ now }: { now: number }) {
   const { S, set, T, lang } = useApp();
   const zoneLabel = (id: string) => (lang === 'zh' && TZ_ZH[id] ? TZ_ZH[id] : id === 'UTC' ? 'UTC' : id.split('/').pop()!.replace(/_/g, ' '));
 
@@ -134,8 +135,11 @@ export function Timestamp() {
   const offAt = (ms: number) => offLabel(safeOff(ms, tz));
   const np = tzParts(now, tz);
 
-  // Timestamp → date
-  const r = parseTs(S.tsIn, S.tsUnit);
+  // Timestamp → date. A ULID gives its millisecond time.
+  const ulid = looksUlid(S.tsIn) ? ulidTime(S.tsIn) : null;
+  const r = ulid !== null ? { ms: ulid, sub: '', u: 'ms' as TsUnit, dig: 0 } : parseTs(S.tsIn, S.tsUnit);
+  // 15–19 digits may also be a Snowflake ID (X / Twitter, Discord): their times are shown too.
+  const snow = ulid === null ? (['twitter', 'discord'] as SnowflakeKind[]).map((k) => [k, snowflakeTime(S.tsIn, k)] as const).filter((x): x is readonly [SnowflakeKind, number] => x[1] !== null && x[1] <= now + 864e5 * 366) : [];
   const tsOk = hasMs(r) ? (r as { ms: number; sub: string; u: TsUnit; dig: number }) : null;
   const tsErr = r && 'err' in r ? T[r.err] : '';
 
@@ -237,12 +241,18 @@ export function Timestamp() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <button className="hero" title={T.clickCopy} onClick={() => copy(main + msPart)}>
                   <span style={{ fontSize: 12, color: 'var(--mut)' }}>
-                    {S.tsUnit === 'auto' ? f(T.detected, { u: T.units[tsOk.u], d: tsOk.dig }) : f(T.forced, { u: T.units[tsOk.u] })}
+                    {ulid !== null ? T.ts2.ulid : S.tsUnit === 'auto' ? f(T.detected, { u: T.units[tsOk.u], d: tsOk.dig }) : f(T.forced, { u: T.units[tsOk.u] })}
                   </span>
                   <span className="hero-big">{main}<span style={{ color: 'var(--faint)', fontWeight: 500 }}>{msPart}</span></span>
                   <span style={{ fontSize: 13, color: 'var(--mut)' }}>{T.wd[p.wd] + ' · ' + zoneLabel + ' ' + offAt(ms)}</span>
                 </button>
                 <KvRows rows={rows} />
+                {snow.length > 0 && (
+                  <div className="snowflake" style={{ marginTop: 8 }}>
+                    <div style={{ fontSize: 12, color: 'var(--mut)', padding: '0 12px 2px' }}>{T.ts2.snowNote}</div>
+                    <KvRows rows={snow.map(([k, sms]) => [f(T.ts2.snow, { k: T.ts2[k] }), fmtWall(sms, tz, true) + ' ' + offAt(sms)])} />
+                  </div>
+                )}
               </div>
             );
           })()}

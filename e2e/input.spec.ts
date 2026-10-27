@@ -75,14 +75,14 @@ test.describe('drag & drop', () => {
 
   test('several files: one is opened and named', async ({ page }) => {
     await open(page);
-    await drop(page, [{ name: 'notes.yaml', bytes: 'a: 1' }, { name: 'b.json', bytes: '{"b":1}' }]);
+    await drop(page, [{ name: 'notes.docx', bytes: 'a: 1' }, { name: 'b.json', bytes: '{"b":1}' }]);
     await expect(toast(page)).toContainText('一次只处理一个文件，已打开「b.json」');
   });
 
   test('an unsupported file type is explained', async ({ page }) => {
     await open(page);
-    await drop(page, [{ name: 'notes.yaml', bytes: 'a: 1' }]);
-    await expect(toast(page)).toHaveText('这里不支持这种文件：请拖入图片、.json、.toml 或 .txt；任意文件可在「Base64」或「哈希」中处理');
+    await drop(page, [{ name: 'notes.docx', bytes: 'a: 1' }]);
+    await expect(toast(page)).toHaveText('这里不支持这种文件：请拖入图片或文本文件（.json、.toml、.yaml、.xml、.sql、.txt 等）；任意文件可在「Base64」「哈希」「Hex」「Gzip」中处理');
   });
 
   test('an unreadable image says so (not "no QR code")', async ({ page }) => {

@@ -39,7 +39,7 @@ describe('i18n', () => {
     for (const file of files) {
       const src = readFileSync(file, 'utf8');
       // f(T.key, {…}), f(T.key[x], {…}) and f(cond ? T.a : T.b, {…})
-      const re = /\bf\(\s*(?:[^,?]*\?\s*T\.(\w+)\s*:\s*T\.(\w+)|(?:T|t|dictFor\([^)]*\))\.([\w.]+)(?:\[[^\]]+\])?)\s*,\s*\{([^}]*)\}\s*\)/g;
+      const re = /\bf\(\s*(?:[^,?]*\?\s*T\.([\w.]+)\s*:\s*T\.([\w.]+)|(?:T|t|dictFor\([^)]*\))\.([\w.]+)(?:\[[^\]]+\])?)\s*,\s*\{([^}]*)\}\s*\)/g;
       for (const m of src.matchAll(re)) for (const key of [m[1], m[2], m[3]].filter(Boolean)) {
         calls++;
         // `{ n: x, L }`: names before a colon, or shorthand properties.
