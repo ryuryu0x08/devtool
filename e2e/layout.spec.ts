@@ -311,7 +311,7 @@ test('both layouts start at the same height; the carried result is the size of w
   expect(Math.abs(b1.height - a1.height)).toBeLessThan(1);
 });
 
-test('side by side, the bar below sets the height of both: the content fills it, remembered; a double-click restores it', async ({ page }) => {
+test('side by side, the bar below sets the height of both: the content fills it, remembered; a double-click restores it; one height in both layouts', async ({ page }) => {
   await open(page, 'TOML 格式化');
   await page.getByRole('button', { name: '示例' }).first().click();
   const h0 = (await box(page, 0)).height;
@@ -336,6 +336,15 @@ test('side by side, the bar below sets the height of both: the content fills it,
   await page.mouse.up();
   expect(Math.abs((await box(page, 1)).height - (a.height + 400))).toBeLessThan(2);
   expect(await scroller()).toBeGreaterThan(s0 + 150);
+  // Switching layout keeps the input's height, and back.
+  const set = (await box(page, 0)).height;
+  await page.locator('.split-grip').click();
+  await page.waitForFunction(() => document.getAnimations().length === 0);
+  expect(await layout(page)).toBe('col');
+  expect(Math.abs((await box(page, 0)).height - set)).toBeLessThan(2);
+  await page.locator('.split-grip').click();
+  await page.waitForFunction(() => document.getAnimations().length === 0);
+  expect(Math.abs((await box(page, 0)).height - set)).toBeLessThan(2);
   p = await bar();
   await page.mouse.dblclick(p.x, p.y);
   expect(Math.abs((await box(page, 0)).height - h0)).toBeLessThan(2);

@@ -3,9 +3,9 @@
 // the pointer, and the layout switches as soon as it is carried a short way down (below) or up
 // or right (beside), the input pane moving to make room; a label on it says where it will land.
 // On release it settles into its place, scrolled into view. A click on the handle switches too.
-// Both layouts start at the same height (the input's; a longer result can be taller). Side by
-// side, the bar below sets the height of both; stacked, the bar between them sets the input's and
-// the bar below the result sets the result's (all remembered).
+// The input has one height in both layouts, so switching doesn't change it (a longer result can be
+// taller). Side by side, the bar below sets it for both panes; stacked, the bar between them sets it
+// and the bar below the result sets the result's own (all remembered).
 // Narrow screens always stack.
 import { useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
 import { useApp } from '../store';
@@ -36,15 +36,12 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
   const key = id ?? S.tool;
   const [mode, setMode] = useOpt<Mode>('lay.' + key, 'row', ['row', 'col']);
   const [ratio, setRatio] = useOpt('split.' + key, 0.5);
-  /** Stacked input height in px at 100 % (0: the default, set by the stylesheet). */
+  /** Input height in px at 100 %, in both layouts (0: the default, set by the stylesheet). */
   const [inH, setInH] = useOpt('hsplit.' + key, 0);
   const [liveH, setLiveH] = useState<number | null>(null);
   /** Stacked result height, the same way. */
   const [outH, setOutH] = useOpt('hsplit.' + key + '.out', 0);
   const [liveOut, setLiveOut] = useState<number | null>(null);
-  /** Side by side, the height of both, the same way. */
-  const [rowH, setRowH] = useOpt('hsplit.' + key + '.row', 0);
-  const [liveRow, setLiveRow] = useState<number | null>(null);
   // Rects and the pointer are in screen px; lengths written into styles here are scaled by the
   // tool area's zoom, so they are divided by it.
   const z = useZoom()[0] / 100;
@@ -243,11 +240,10 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
   const stored = (v: number, min: number) => (Number.isFinite(v) && v > 0 ? Math.max(min, v) : 0);
   const h = liveH ?? stored(inH, MIN_H);
   const ho = liveOut ?? stored(outH, MIN_OUT);
-  const hr = liveRow ?? stored(rowH, MIN_H);
   const outSized = shown === 'col' && ho > 0;
-  const rowSized = shown === 'row' && hr > 0;
+  const rowSized = shown === 'row' && h > 0;
   const grid: CSSProperties = shown === 'row'
-    ? { display: 'grid', gridTemplateColumns: `minmax(0, ${r}fr) ${GAP}px minmax(0, ${1 - r}fr)`, gridTemplateRows: rowSized ? `${hr}px auto` : undefined, alignItems: 'stretch' }
+    ? { display: 'grid', gridTemplateColumns: `minmax(0, ${r}fr) ${GAP}px minmax(0, ${1 - r}fr)`, gridTemplateRows: rowSized ? `${h}px auto` : undefined, alignItems: 'stretch' }
     : { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)' };
   const carrying = target !== null;
   // Stacked: the input has its height (by default, the shared default height); the result is at
@@ -286,7 +282,7 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
       )}
       {shown === 'row' && (
         <div className="split-hgutter end" role="separator" aria-orientation="horizontal" title={T.ui.resizeRow} style={{ gridColumn: '1 / -1' }}
-          onPointerDown={(e) => dragHeight(e, paneA.current!, MIN_H, setLiveRow, setRowH)} onDoubleClick={() => setRowH(0)}><span /></div>
+          onPointerDown={(e) => dragHeight(e, paneA.current!, MIN_H, setLiveH, setInH)} onDoubleClick={() => setInH(0)}><span /></div>
       )}
     </div>
   );
