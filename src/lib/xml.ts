@@ -106,7 +106,8 @@ const preserve = (el: Extract<Node, { k: 'el' }>) => el.attrs.some((a) => /^xml:
 const elementOnly = (el: Extract<Node, { k: 'el' }>) =>
   !preserve(el) && el.kids.every((k) => k.k === 'el' || k.k === 'comment' || k.k === 'pi' || (k.k === 'text' && !k.raw.trim()));
 
-function print(nodes: Node[], ind: string): string {
+/** One element per line, indented by `ind`; or, with `ind` null, minified (nothing between elements). */
+function print(nodes: Node[], ind: string | null): string {
   const out: string[] = [];
   const tag = (el: Extract<Node, { k: 'el' }>) => '<' + el.name + el.attrs.map((a) => ' ' + a.raw).join('');
   const node = (n: Node, d: string) => {
@@ -116,12 +117,12 @@ function print(nodes: Node[], ind: string): string {
     else if (!n.kids.length) out.push(d + tag(n) + '></' + n.name + '>');
     else if (elementOnly(n)) {
       out.push(d + tag(n) + '>');
-      n.kids.forEach((k) => node(k, d + ind));
+      n.kids.forEach((k) => node(k, ind === null ? '' : d + ind));
       out.push(d + '</' + n.name + '>');
     } else out.push(d + tag(n) + '>' + n.inner + '</' + n.name + '>');
   };
   nodes.forEach((n) => node(n, ''));
-  return out.join('\n') + '\n';
+  return ind === null ? out.join('') : out.join('\n') + '\n';
 }
 
 /** What must survive formatting: everything except whitespace in element-only content. */
@@ -135,7 +136,8 @@ function canon(nodes: Node[], top = true): string {
   }).filter(Boolean).join('\u0000');
 }
 
-export function formatXml(src: string, indent: string): string {
+/** `indent` null: minified. */
+export function formatXml(src: string, indent: string | null): string {
   const s = src.charCodeAt(0) === 0xfeff ? src.slice(1) : src;
   const text = print(parse(s), indent);
   checkXml(s, text);

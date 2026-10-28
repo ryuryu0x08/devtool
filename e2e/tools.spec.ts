@@ -233,6 +233,17 @@ test.describe('formatting', () => {
     await expect(out(page)).toContainText("E'a\\'b'");
   });
 
+  test('XML and SQL can be minified', async ({ page }) => {
+    await open(page, 'XML 格式化');
+    await input(page).fill('<a>\n  <b x="1">t</b>\n  <c/>\n</a>');
+    await seg(page, '压缩').click();
+    await expect(out(page)).toHaveText('<a><b x="1">t</b><c/></a>');
+    await nav(page, 'SQL 格式化');
+    await input(page).fill("select a,\n  count ( * )\nfrom t -- c\nwhere s = 'x  y'");
+    await seg(page, '压缩').click();
+    await expect(out(page)).toHaveText("SELECT a, count(*) FROM t -- c\nWHERE s = 'x  y'");
+  });
+
   test('formatted results are in syntax colours; a click still copies the plain text', async ({ page }) => {
     await open(page, 'SQL 格式化');
     await input(page).fill("select count(*) from t where s = 'x' -- c");

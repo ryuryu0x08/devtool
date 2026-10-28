@@ -10,7 +10,7 @@ import { Empty, ErrLine, Grid, OutCard, TextIn, TextOut, Toolbar, errStatus, use
 import { errInfo, type ErrInfo } from '../lib/data';
 import { YamlError, YamlVerifyError, formatYaml } from '../lib/yamlfmt';
 import { XmlError, XmlVerifyError, formatXml } from '../lib/xml';
-import { DIALECTS, SqlError, SqlVerifyError, formatSql, type KwCase } from '../lib/sqlfmt';
+import { DIALECTS, SqlError, SqlVerifyError, formatSql, minifySql, type KwCase } from '../lib/sqlfmt';
 import { SchemaError, validateJson, type SchemaResult } from '../lib/schema';
 import { parseJsonAst } from '../lib/json';
 import type { HlLang } from '../lib/highlight';
@@ -40,11 +40,14 @@ function FmtPage(p: { inKey: keyof State; lang: HlLang; placeholder: string; opt
   );
 }
 
-function IndentSeg({ id, tab }: { id: string; tab?: boolean }) {
+/** Indent choices; with `min`, also minified output. */
+function IndentSeg({ id, tab, min }: { id: string; tab?: boolean; min?: boolean }) {
   const { T } = useApp();
-  const [v, setV] = useOpt<string>(id + '.indent', '2', tab ? ['2', '4', 'tab'] : ['2', '4']);
-  return <Seg value={v} onChange={setV} opts={[{ value: '2', label: f(T.ui.spaces, { n: 2 }) }, { value: '4', label: f(T.ui.spaces, { n: 4 }) }, ...(tab ? [{ value: 'tab', label: T.ui.tab }] : [])]} />;
+  const [v, setV] = useOpt<string>(id + '.indent', '2', indents(tab, min));
+  return <Seg value={v} onChange={setV} opts={[{ value: '2', label: f(T.ui.spaces, { n: 2 }) }, { value: '4', label: f(T.ui.spaces, { n: 4 }) },
+    ...(tab ? [{ value: 'tab', label: T.ui.tab }] : []), ...(min ? [{ value: 'min', label: T.ui.minify }] : [])]} />;
 }
+const indents = (tab?: boolean, min?: boolean) => ['2', '4', ...(tab ? ['tab'] : []), ...(min ? ['min'] : [])];
 
 export function YamlFmt() {
   const { T } = useApp();
@@ -66,10 +69,10 @@ export function YamlFmt() {
 
 export function XmlFmt() {
   const { T } = useApp();
-  const [indent] = useOpt<string>('xml.indent', '2', ['2', '4', 'tab']);
+  const [indent] = useOpt<string>('xml.indent', '2', indents(true, true));
   const run = useMemo(() => (t: string): FmtOut => {
     try {
-      const text = formatXml(t, indent === 'tab' ? '\t' : ' '.repeat(Number(indent)));
+      const text = formatXml(t, indent === 'min' ? null : indent === 'tab' ? '\t' : ' '.repeat(Number(indent)));
       return { text, notes: [T.xml.note, ...(t.charCodeAt(0) === 0xfeff ? [T.bomRemoved] : [])] };
     } catch (e) {
       if (e instanceof XmlVerifyError) return { err: { msg: T.xml.verify, info: null } };
@@ -78,7 +81,7 @@ export function XmlFmt() {
       throw e;
     }
   }, [indent, T]);
-  return <FmtPage inKey="xmlIn" lang="xml" placeholder={T.xml.ph} run={run} options={<IndentSeg id="xml" tab />} />;
+  return <FmtPage inKey="xmlIn" lang="xml" placeholder={T.xml.ph} run={run} options={<IndentSeg id="xml" tab min />} />;
 }
 
 const DIALECT_NAME: Partial<Record<SqlLanguage, string>> = {
@@ -91,10 +94,10 @@ export function SqlFmt() {
   const { T } = useApp();
   const [dialect, setDialect] = useOpt<SqlLanguage>('sql.dialect', 'sql', DIALECTS);
   const [kw, setKw] = useOpt<KwCase>('sql.kw', 'upper', ['preserve', 'upper', 'lower']);
-  const [indent] = useOpt<string>('sql.indent', '2', ['2', '4']);
+  const [indent] = useOpt<string>('sql.indent', '2', indents(false, true));
   const run = useMemo(() => (t: string): FmtOut => {
     try {
-      const r = formatSql(t, dialect, kw, indent === '4' ? 4 : 2);
+      const r = indent === 'min' ? minifySql(t, dialect, kw) : formatSql(t, dialect, kw, indent === '4' ? 4 : 2);
       return { text: r.text, notes: r.commentsReindented ? [T.sql.reindented] : [] };
     } catch (e) {
       if (e instanceof SqlVerifyError) return { err: { msg: T.sql.verify, info: errInfo(e, t) } };
@@ -111,7 +114,7 @@ export function SqlFmt() {
         </select>
       </label>
       <Seg value={kw} onChange={setKw} opts={[{ value: 'upper', label: T.ui.upper }, { value: 'lower', label: T.sql.lower }, { value: 'preserve', label: T.sql.keep }]} />
-      <IndentSeg id="sql" />
+      <IndentSeg id="sql" min />
     </>} />
   );
 }

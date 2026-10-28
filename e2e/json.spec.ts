@@ -11,8 +11,17 @@ test('formatting keeps every token: numbers, escapes, key spelling', async ({ pa
   await page.getByRole('button', { name: '复制结果' }).click();
   await expect(toast(page)).toHaveText('已复制');
   expect(await clipboard(page)).toBe(text);
-  await page.getByRole('button', { name: '压缩复制' }).click();
+  // Minified: shown in the text view (chosen from the tree view, it goes there), copied as shown.
+  await page.getByRole('button', { name: '结构' }).click();
+  await page.locator('.seg button', { hasText: '压缩' }).click();
+  await expect(page.locator('.seg button.on', { hasText: /^文本$/ })).toHaveCount(1);
+  await expect(page.locator('pre').first()).toHaveText(LOSSLESS);
+  await page.getByRole('button', { name: '复制结果' }).click();
   await expect.poll(() => clipboard(page)).toBe(LOSSLESS);
+  // The choice is remembered.
+  await page.reload();
+  await editor(page).fill(LOSSLESS);
+  await expect.poll(() => textView(page)).toBe(LOSSLESS);
 });
 
 test('indent 4 / Tab', async ({ page }) => {

@@ -33,13 +33,16 @@ const plainErr = (msg: string): ErrInfo => ({ msg, line: null, col: null, before
  * Parse, re-print and verify. The output is only shown if re-parsing it gives back the
  * identical document (every token / literal / comment); anything else is an error.
  */
+/** The indent setting as the JSON printers take it ('' minifies). */
+const gapOf = (indent: string) => (indent === 'tab' ? '\t' : indent === 'min' ? '' : +indent);
+
 function compute(lang: FmtLang, src: string, indent: string, sortKeys: boolean, T: Dict): Result {
   if (!src.trim()) return { empty: true };
   if (lang === 'json') {
     let ast: JNode, bom: boolean;
     try { ({ ast, bom } = parseJsonAst(src)); } catch (e) { return { err: errInfo(e, src) }; }
     if (sortKeys) ast = sortAst(ast);
-    const text = printJson(ast, indent === 'tab' ? '\t' : +indent);
+    const text = printJson(ast, gapOf(indent));
     let back: JNode | null = null;
     try { back = parseJsonAst(text).ast; } catch { /* reported below */ }
     if (!back || !astEqual(back, ast)) return { err: plainErr(f(T.verifyFail, { p: '$' })) };
@@ -193,7 +196,7 @@ export function Formatter({ lang }: { lang: FmtLang }) {
         replace({ toml: toTomlText(v), sel: { ...S.sel, toml: '' }, tool: 'toml' });
       } else {
         const dates: string[] = [];
-        const text = toJsonText(ok.value, S.indent === 'tab' ? '\t' : +S.indent, dates);
+        const text = toJsonText(ok.value, gapOf(S.indent), dates);
         replace({ json: text, sel: { ...S.sel, json: '' }, tool: 'json' }, dates.length ? f(T.datesToStr, { n: dates.length }) : undefined);
       }
     } catch (e) {
@@ -241,11 +244,11 @@ export function Formatter({ lang }: { lang: FmtLang }) {
         <button className="btn" onClick={() => replace({ [lang]: '', sel: { ...S.sel, [lang]: '' } })}>{T.clear}</button>
         <span className="sep" />
         {lang === 'json' && (
-          <Seg value={S.indent} onChange={(k) => set({ indent: k })}
-            opts={[{ value: '2', label: T.indent2 }, { value: '4', label: T.indent4 }, { value: 'tab', label: 'Tab' }]} />
+          // Minified text shows only in the text view, so choosing it goes there.
+          <Seg value={S.indent} onChange={(k) => set(k === 'min' ? { indent: k, view: 'text' } : { indent: k })}
+            opts={[{ value: '2', label: T.indent2 }, { value: '4', label: T.indent4 }, { value: 'tab', label: 'Tab' }, { value: 'min', label: T.ui.minify }]} />
         )}
         <button className={'btn' + (S.sortKeys ? ' on' : '')} onClick={() => set((s) => ({ sortKeys: !s.sortKeys }))}>{S.sortKeys ? '✓' : '○'} {T.sortKeys}</button>
-        {ok?.lang === 'json' && <button className="btn" onClick={() => copy(printJson(ok.ast), T.minCopied)}>{T.minify}</button>}
         <button className="btn" onClick={convert}>{lang === 'json' ? T.toToml : T.toJson}</button>
         <span className="spacer" />
         <Seg value={S.view} onChange={(k) => set({ view: k })} opts={[{ value: 'tree', label: T.viewTree }, { value: 'text', label: T.viewText }]} />

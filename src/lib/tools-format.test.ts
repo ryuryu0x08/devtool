@@ -3,7 +3,7 @@ import { parseAllDocuments } from 'yaml';
 import { describe, expect, it } from 'vitest';
 import { YamlError, formatYaml, looksYaml } from './yamlfmt';
 import { XmlError, XmlVerifyError, checkXml, formatXml, looksXml } from './xml';
-import { SqlError, formatSql, looksSql } from './sqlfmt';
+import { SqlError, formatSql, looksSql, minifySql } from './sqlfmt';
 import { SchemaError, inexact, pointerToPath, validateJson, looksSchema } from './schema';
 import { parseJsonAst } from './json';
 
@@ -81,6 +81,11 @@ describe('XML formatting', () => {
     // CDATA is text: an element holding it keeps its inside exactly.
     expect(formatXml('<r><a/><![CDATA[<x>]]> <b/></r>', '  ')).toBe('<r><a/><![CDATA[<x>]]> <b/></r>\n');
   });
+  it('minifies: nothing between elements; text, mixed content and xml:space="preserve" stay as written', () => {
+    const src = `<?xml version="1.0"?>\n<root a="1"  b='x'>\n  <a>t &amp; u</a>\n  <p>Hi <b>you</b>  !</p>\n  <pre xml:space="preserve">\n  x  \n</pre>\n  <e></e>\n  <!-- c -->\n</root>\n`;
+    expect(formatXml(src, null)).toBe(`<?xml version="1.0"?><root a="1" b='x'><a>t &amp; u</a><p>Hi <b>you</b>  !</p><pre xml:space="preserve">\n  x  \n</pre><e></e><!-- c --></root>`);
+    expect(formatXml(formatXml(src, '  '), null)).toBe(formatXml(src, null));
+  });
   it('is stable and reports what is wrong, where', () => {
     const src = '<a><b>1</b><c><d/></c></a>';
     expect(formatXml(formatXml(src, '\t'), '\t')).toBe(formatXml(src, '\t'));
@@ -116,6 +121,15 @@ describe('SQL formatting', () => {
     expect(up).toMatch(/^SELECT\n/);
     expect(formatSql(Q, 'postgresql', 'preserve', 2).text).toMatch(/^select\n/);
     expect(formatSql(Q, 'postgresql', 'lower', 4).text).toContain('\n    a.id,');
+  });
+  it('minifies onto one line: strings, names, numbers and comments unchanged; a line comment keeps its line end', () => {
+    const up = minifySql(Q, 'postgresql', 'upper').text;
+    expect(up).toBe(`SELECT a.id, b."Name", 'it''s' s, -1 x, a<=b, j->>'k', Users.Total FROM t a JOIN u b ON a.id=b.id WHERE x=-1 AND y IN(1,2) -- tail\nGROUP BY 1 ORDER BY 2 DESC LIMIT 10; INSERT INTO T(a) VALUES($$x y$$, E'a\\'b', :p, ?, $1);`);
+    expect(minifySql('select\n  count ( * )\nfrom   t /* c\n  d */ where a = 1', 'sql', 'preserve').text).toBe('select count(*) from t /* c\n  d */ where a = 1');
+    expect(minifySql(up, 'postgresql', 'upper').text).toBe(up);
+    expect(minifySql(formatSql(Q, 'postgresql', 'upper', 2).text, 'postgresql', 'upper').text).not.toContain('  ');
+    // "- -1" must not become "--1" (a comment): only whitespace next to , ( ) ; is dropped.
+    expect(minifySql('select 1 - -1', 'sql', 'preserve').text).toBe('select 1 - -1');
   });
   it('a block comment re-indented is reported, not hidden', () => {
     expect(formatSql('select 1 /* a\n      b */ from t', 'sql', 'preserve', 2).commentsReindented).toBe(true);

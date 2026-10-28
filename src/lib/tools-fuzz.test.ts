@@ -11,7 +11,7 @@ import { NumError, readInt, widths, writeInt } from './numbase';
 import { JwtError, decodeJwt, looksJwt, times } from './jwt';
 import { YamlError, YamlVerifyError, formatYaml, looksYaml } from './yamlfmt';
 import { XmlError, XmlVerifyError, formatXml, looksXml } from './xml';
-import { SqlError, SqlVerifyError, formatSql, looksSql } from './sqlfmt';
+import { SqlError, SqlVerifyError, formatSql, looksSql, minifySql } from './sqlfmt';
 import { SchemaError, looksSchema, validateJson } from './schema';
 import { diffText } from './textdiff';
 import { runRegex, splitLiteral } from './regex';
@@ -72,6 +72,8 @@ describe('no unexpected exceptions', () => {
       ...check('formatYaml', inputs, (s) => formatYaml(s, 2), [YamlError, YamlVerifyError]),
       ...check('formatXml', inputs.map((s) => (rnd() < 0.5 ? '<r>' + s + '</r>' : s)), (s) => formatXml(s, '  '), [XmlError, XmlVerifyError]),
       ...check('formatSql', some.map((s) => 'select ' + s), (s) => formatSql(s, pick(['sql', 'postgresql', 'mysql'] as const), 'upper', 2), [SqlError, SqlVerifyError]),
+      ...check('formatXml minified', inputs.map((s) => (rnd() < 0.5 ? '<r>' + s + '</r>' : s)), (s) => formatXml(s, null), [XmlError]),
+      ...check('minifySql', some.map((s) => 'select ' + s), (s) => minifySql(s, pick(['sql', 'postgresql', 'mysql'] as const), 'upper')),
       ...check('validateJson', some, (s) => {
         const data = JSON.stringify(s);
         for (const schema of ['{"type":"string","pattern":' + JSON.stringify(s) + '}', '{"type":"string","format":"date-time"}', '{"$ref":' + JSON.stringify(s) + '}']) {

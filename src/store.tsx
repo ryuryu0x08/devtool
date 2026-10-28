@@ -42,7 +42,8 @@ export interface State {
   dragOver: boolean;
   json: string;
   toml: string;
-  indent: '2' | '4' | 'tab';
+  /** JSON output: indented, or minified ('min'). */
+  indent: '2' | '4' | 'tab' | 'min';
   sortKeys: boolean;
   view: 'tree' | 'text';
   collapsed: Record<FmtLang, Record<string, boolean>>;
@@ -183,7 +184,7 @@ export function initState(): State {
     qrEc: 'M', scan: null, dragOver: false,
     json: inp.json ?? SAMPLE_JSON,
     toml: inp.toml ?? SAMPLE_TOML,
-    indent: oneOf(pr.indent, ['2', '4', 'tab'] as const, '2'),
+    indent: oneOf(pr.indent, ['2', '4', 'tab', 'min'] as const, '2'),
     sortKeys: !!pr.sortKeys,
     view: oneOf(pr.view, ['tree', 'text'] as const, CONFIG.defaultView),
     collapsed: { json: {}, toml: {} },

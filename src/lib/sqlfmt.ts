@@ -74,17 +74,15 @@ const indentless = (c: string) => c.split('\n').map((l) => l.trim()).join('\n');
 
 export interface SqlOut { text: string; commentsReindented: boolean }
 
-export function formatSql(src: string, language: SqlLanguage, keywordCase: KwCase, indent: 2 | 4): SqlOut {
-  let text: string;
-  try {
-    text = format(src, { language, keywordCase, tabWidth: indent, linesBetweenQueries: 1 });
-  } catch (e) {
-    const msg = String((e as Error).message || e);
-    const m = /line (\d+) column (\d+)/i.exec(msg);
-    throw new SqlError(msg.split('\n')[0], m ? +m[1] : null, m ? +m[2] : null);
-  }
-  const hash = /mysql|mariadb|tidb|singlestoredb|hive|spark|bigquery/.test(language);
-  const bs = /mysql|mariadb|tidb|singlestoredb|hive|spark|bigquery|clickhouse/.test(language);
+const lexFor = (language: SqlLanguage) => ({
+  hash: /mysql|mariadb|tidb|singlestoredb|hive|spark|bigquery/.test(language),
+  bs: /mysql|mariadb|tidb|singlestoredb|hive|spark|bigquery|clickhouse/.test(language),
+});
+
+/** Throws unless `text` has the same tokens as `src` (keywords may differ in case when a case was
+ *  chosen; a block comment's indentation may differ, which is reported). */
+function verify(src: string, text: string, language: SqlLanguage, keywordCase: KwCase): boolean {
+  const { hash, bs } = lexFor(language);
   const a = lex(src, hash, bs), b = lex(text, hash, bs);
   let reindented = false;
   const n = Math.max(a.length, b.length);
@@ -96,6 +94,39 @@ export function formatSql(src: string, language: SqlLanguage, keywordCase: KwCas
     if (x.k === 'c' && x.t.startsWith('/*') && indentless(x.t) === indentless(y.t)) { reindented = true; continue; }
     throw new SqlVerifyError(x.pos);
   }
+  return reindented;
+}
+
+/** On one line: each run of whitespace becomes one space, or nothing next to "," "(" ")" ";";
+ *  a line comment keeps its line end. Strings and comments are unchanged. */
+export function minifySql(src: string, language: SqlLanguage, keywordCase: KwCase): SqlOut {
+  const { hash, bs } = lexFor(language);
+  const toks = lex(src, hash, bs);
+  let text = '';
+  toks.forEach((t, i) => {
+    const prev = toks[i - 1];
+    if (prev) {
+      const end = prev.pos + prev.t.length;
+      if (prev.k === 'c' && !prev.t.startsWith('/*')) text += '\n';
+      else if (end < t.pos && !/^[,();]$/.test(t.t) && !/^[(]$/.test(prev.t)) text += ' ';
+    }
+    const kw = t.k === 'w' && keywordCase !== 'preserve' && KEYWORDS.has(t.t.toUpperCase());
+    text += kw ? (keywordCase === 'upper' ? t.t.toUpperCase() : t.t.toLowerCase()) : t.t;
+  });
+  verify(src, text, language, keywordCase);
+  return { text, commentsReindented: false };
+}
+
+export function formatSql(src: string, language: SqlLanguage, keywordCase: KwCase, indent: 2 | 4): SqlOut {
+  let text: string;
+  try {
+    text = format(src, { language, keywordCase, tabWidth: indent, linesBetweenQueries: 1 });
+  } catch (e) {
+    const msg = String((e as Error).message || e);
+    const m = /line (\d+) column (\d+)/i.exec(msg);
+    throw new SqlError(msg.split('\n')[0], m ? +m[1] : null, m ? +m[2] : null);
+  }
+  const reindented = verify(src, text, language, keywordCase);
   return { text: text.endsWith('\n') ? text : text + '\n', commentsReindented: reindented };
 }
 
