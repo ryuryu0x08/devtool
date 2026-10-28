@@ -166,7 +166,8 @@ test.describe('a lower window', () => {
   test.use({ viewport: { width: 1440, height: 600 } });
   test('a short carry switches, a label says where it lands; dropped below, the result is in view', async ({ page }) => {
     await open(page, 'TOML 格式化');
-    await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('tb.prefs') || '{}'); p.o = { ...p.o, 'ui.zoom': 140 }; localStorage.setItem('tb.prefs', JSON.stringify(p)); });
+    // A tall input (set with a bar), so a result dropped below lands under the window.
+    await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('tb.prefs') || '{}'); p.o = { ...p.o, 'ui.zoom': 140, 'hsplit.toml': 400 }; localStorage.setItem('tb.prefs', JSON.stringify(p)); });
     await page.reload();
     await page.getByRole('button', { name: '示例' }).first().click();
     const hint = page.locator('.split-hint');
@@ -185,10 +186,8 @@ test.describe('a lower window', () => {
     expect(await layout(page)).toBe('col');
     await page.mouse.up();
     await expect(hint).toHaveCount(0);
-    // Stacked: the result's top is on screen, below a shorter input.
+    // Scrolled so the result shows.
     await expect.poll(async () => { const b = await box(page, 1); return b.y > 0 && b.y < 300; }).toBe(true);
-    await page.evaluate(() => scrollTo(0, 0));
-    expect((await box(page, 1)).y).toBeLessThan(page.viewportSize()!.height);
   });
 });
 
@@ -291,10 +290,15 @@ test('the carried result takes the width of the slot it would land in, and stays
   await page.mouse.up();
 });
 
-test('both layouts start at the same height; the carried result is the size of where it would land', async ({ page }) => {
+/** The page fits the window exactly: the panes reach its bottom margin, and nothing scrolls. */
+const fillsWindow = (page: Page) => page.evaluate(() => document.documentElement.scrollHeight === innerHeight
+  && innerHeight - document.querySelector('.split')!.getBoundingClientRect().bottom < 80);
+
+test('by default the panes fill the window: side by side both, stacked half each; the carried result is the size of where it would land', async ({ page }) => {
   await open(page, 'Gzip 压缩解压');
   const [a0, b0] = [await box(page, 0), await box(page, 1)];
   expect(Math.abs(a0.height - b0.height)).toBeLessThan(1);
+  expect(await fillsWindow(page)).toBe(true);
   const g = (await page.locator('.split-grip').boundingBox())!;
   await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
   await page.mouse.down();
@@ -305,10 +309,17 @@ test('both layouts start at the same height; the carried result is the size of w
   expect(Math.abs(f.height - s.height)).toBeLessThan(1);
   await page.mouse.up();
   await page.waitForFunction(() => document.getAnimations().length === 0);
-  // Stacked: the input keeps the height it had beside; the result below is as tall.
+  // Stacked: half each, still filling the window.
   const [a1, b1] = [await box(page, 0), await box(page, 1)];
-  expect(Math.abs(a1.height - a0.height)).toBeLessThan(1);
   expect(Math.abs(b1.height - a1.height)).toBeLessThan(1);
+  expect(a1.height).toBeLessThan(a0.height / 2 + 20);
+  expect(await fillsWindow(page)).toBe(true);
+  // A taller or shorter window: refilled.
+  await page.setViewportSize({ width: 1280, height: 700 });
+  await expect.poll(() => fillsWindow(page)).toBe(true);
+  await page.locator('.split-grip').click();
+  await page.waitForFunction(() => document.getAnimations().length === 0);
+  await expect.poll(() => fillsWindow(page)).toBe(true);
 });
 
 test('side by side, the bar below sets the height of both: the content fills it, remembered; a double-click restores it; one height in both layouts', async ({ page }) => {

@@ -3,10 +3,11 @@
 // the pointer, and the layout switches as soon as it is carried a short way down (below) or up
 // or right (beside), the input pane moving to make room; a label on it says where it will land.
 // On release it settles into its place, scrolled into view. A click on the handle switches too.
-// The input has one height in both layouts, so switching doesn't change it, and the result never
-// sets the height (a longer result scrolls inside). Side by side, the bar below sets it for both
-// panes; stacked, the bar between them sets it and the bar below the result sets the result's own
-// (all remembered).
+// By default the panes fill the window: side by side, both its height; stacked, half each. A height
+// set with a bar is the input's in both layouts, so switching then doesn't change it. The result
+// never sets the height (a longer result scrolls inside). Side by side, the bar below sets it for
+// both panes; stacked, the bar between them sets it and the bar below the result sets the result's
+// own (all remembered).
 // Narrow screens always stack.
 import { useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
 import { useApp } from '../store';
@@ -25,6 +26,10 @@ const SWITCH = 72;
 /** Stacked, the input and the result are never shorter than these (px at 100 %). */
 const MIN_H = 120;
 const MIN_OUT = 160;
+/** Height of the bars below / between the panes (px at 100 %). */
+const BAR = 16;
+/** Side by side, the default height is never less than this. */
+const MIN_FILL = 240;
 
 type Mode = 'row' | 'col';
 
@@ -70,6 +75,27 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  /** Default heights that fill the window below the panes' top, down to the page's bottom margin
+   *  (px at 100 %): side by side, of both; stacked, of each (half each). Anything below the panes
+   *  scrolls into view. Measured again when the window or anything in the tool area resizes. */
+  const [fill, setFill] = useState<{ row: number; col: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = box.current, area = el?.closest<HTMLElement>('.content');
+    if (!el) return;
+    const measure = () => {
+      const pad = area ? parseFloat(getComputedStyle(area).paddingBottom) || 0 : 0;
+      const room = (innerHeight - (el.getBoundingClientRect().top + scrollY)) / z - pad;
+      const row = Math.floor(Math.max(MIN_FILL, room - BAR));
+      const col = Math.floor(Math.max(MIN_H, (room - 2 * BAR) / 2));
+      setFill((f) => (f && Math.abs(f.row - row) < 2 && Math.abs(f.col - col) < 2 ? f : { row, col }));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(area ?? el);
+    addEventListener('resize', measure);
+    return () => { ro.disconnect(); removeEventListener('resize', measure); };
+  }, [z]);
 
   const narrow = width > 0 && width < STACK_BELOW;
   const shown: Mode = narrow ? 'col' : target ?? mode;
@@ -250,9 +276,10 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
   // tall unless it has its own.
   const inStyle: CSSProperties | undefined = shown === 'col' ? { height: h || 'var(--pane-h)' } : undefined;
   const outStyle: CSSProperties | undefined = shown === 'col' ? { height: ho || h || 'var(--pane-h)' } : undefined;
+  const fillVars = fill ? { '--pane-h': (shown === 'row' ? fill.row : fill.col) + 'px' } as CSSProperties : {};
 
   return (
-    <div ref={box} className={'split ' + shown + (rowSized ? ' row-sized' : '')} style={grid} data-layout={shown}>
+    <div ref={box} className={'split ' + shown + (rowSized ? ' row-sized' : '')} style={{ ...grid, ...fillVars }} data-layout={shown}>
       <div ref={paneA} className="split-pane" style={inStyle}>{a}</div>
       {shown === 'col' && (
         <div className="split-hgutter" role="separator" aria-orientation="horizontal" title={T.ui.resizeH}

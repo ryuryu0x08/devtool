@@ -271,8 +271,8 @@ button.caret { border: 0; background: transparent; padding: 0; font: inherit; fo
   padding: 4px 12px; border-radius: 999px; background: var(--acc); color: var(--accInk); font-size: 12.5px; font-weight: 600;
   box-shadow: 0 6px 18px var(--shadow);
 }
-/* One default height for both layouts, short enough that a stacked result still shows below the
-   input. Side by side, it is the least height of both; stacked, the height of each. */
+/* The default height (Split sets it to fill the window; this is until it is measured). Side by
+   side, it is the least height of both; stacked, the height of each. */
 .split { --pane-h: min(400px, 50vh); }
 .split.row:not(.row-sized) > .split-pane { min-height: var(--pane-h); }
 /* A pane with a set height: its card fills exactly that, and anything that doesn't fit scrolls in it. */
