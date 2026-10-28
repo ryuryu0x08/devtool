@@ -3,8 +3,9 @@
 // the pointer, and the layout switches as soon as it is carried a short way down (below) or up
 // or right (beside), the input pane moving to make room; a label on it says where it will land.
 // On release it settles into its place, scrolled into view. A click on the handle switches too.
-// Stacked, the bar between them sets the input's height and the bar below the result sets its
-// height (both remembered).
+// Both layouts start at the same height (the input's; a longer result can be taller). Side by
+// side, the bar below sets the height of both; stacked, the bar between them sets the input's and
+// the bar below the result sets the result's (all remembered).
 // Narrow screens always stack.
 import { useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
 import { useApp } from '../store';
@@ -41,6 +42,9 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
   /** Stacked result height, the same way. */
   const [outH, setOutH] = useOpt('hsplit.' + key + '.out', 0);
   const [liveOut, setLiveOut] = useState<number | null>(null);
+  /** Side by side, the height of both, the same way. */
+  const [rowH, setRowH] = useOpt('hsplit.' + key + '.row', 0);
+  const [liveRow, setLiveRow] = useState<number | null>(null);
   // Rects and the pointer are in screen px; lengths written into styles here are scaled by the
   // tool area's zoom, so they are divided by it.
   const z = useZoom()[0] / 100;
@@ -235,18 +239,25 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
     window.addEventListener('pointercancel', up);
   };
 
+  /** A stored height, or 0 for the default. */
+  const stored = (v: number, min: number) => (Number.isFinite(v) && v > 0 ? Math.max(min, v) : 0);
+  const h = liveH ?? stored(inH, MIN_H);
+  const ho = liveOut ?? stored(outH, MIN_OUT);
+  const hr = liveRow ?? stored(rowH, MIN_H);
+  const outSized = shown === 'col' && ho > 0;
+  const rowSized = shown === 'row' && hr > 0;
   const grid: CSSProperties = shown === 'row'
-    ? { display: 'grid', gridTemplateColumns: `minmax(0, ${r}fr) ${GAP}px minmax(0, ${1 - r}fr)`, alignItems: 'stretch' }
+    ? { display: 'grid', gridTemplateColumns: `minmax(0, ${r}fr) ${GAP}px minmax(0, ${1 - r}fr)`, gridTemplateRows: rowSized ? `${hr}px auto` : undefined, alignItems: 'stretch' }
     : { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)' };
   const carrying = target !== null;
-  const h = liveH ?? (Number.isFinite(inH) && inH > 0 ? Math.max(MIN_H, inH) : 0);
-  const sized = shown === 'col' && h > 0;
-  const ho = liveOut ?? (Number.isFinite(outH) && outH > 0 ? Math.max(MIN_OUT, outH) : 0);
-  const outSized = shown === 'col' && ho > 0;
+  // Stacked: the input has its height (by default, the shared default height); the result is at
+  // least as tall unless it has its own.
+  const inStyle: CSSProperties | undefined = shown === 'col' ? { height: h || 'var(--pane-h)' } : undefined;
+  const outStyle: CSSProperties | undefined = shown === 'col' ? (outSized ? { height: ho } : { minHeight: h || 'var(--pane-h)' }) : undefined;
 
   return (
-    <div ref={box} className={'split ' + shown + (sized ? ' sized' : '') + (outSized ? ' out-sized' : '')} style={grid} data-layout={shown}>
-      <div ref={paneA} className="split-pane" style={sized ? { height: h } : undefined}>{a}</div>
+    <div ref={box} className={'split ' + shown + (outSized ? ' out-sized' : '') + (rowSized ? ' row-sized' : '')} style={grid} data-layout={shown}>
+      <div ref={paneA} className="split-pane" style={inStyle}>{a}</div>
       {shown === 'col' && (
         <div className="split-hgutter" role="separator" aria-orientation="horizontal" title={T.ui.resizeH}
           onPointerDown={(e) => dragHeight(e, paneA.current!, MIN_H, setLiveH, setInH)} onDoubleClick={() => setInH(0)}><span /></div>
@@ -255,7 +266,7 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
         <div className="split-gutter" role="separator" aria-orientation="vertical" title={T.ui.resize}
           onPointerDown={onGutter} onDoubleClick={() => setRatio(0.5)}><span /></div>
       )}
-      <div ref={slotB} className={'split-pane result' + (carrying ? ' holding' : '')} style={outSized ? { height: ho } : undefined}>
+      <div ref={slotB} className={'split-pane result' + (carrying ? ' holding' : '')} style={outStyle}>
         <div ref={floatB} className={'split-float' + (carrying ? ' carried' : '')}>
           {!narrow && (
             <button className="split-grip" title={T.ui.grip} aria-label={T.ui.grip} onPointerDown={onGrip}
@@ -272,6 +283,10 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
       {shown === 'col' && (
         <div className="split-hgutter end" role="separator" aria-orientation="horizontal" title={T.ui.resizeOut}
           onPointerDown={(e) => dragHeight(e, slotB.current!, MIN_OUT, setLiveOut, setOutH)} onDoubleClick={() => setOutH(0)}><span /></div>
+      )}
+      {shown === 'row' && (
+        <div className="split-hgutter end" role="separator" aria-orientation="horizontal" title={T.ui.resizeRow} style={{ gridColumn: '1 / -1' }}
+          onPointerDown={(e) => dragHeight(e, paneA.current!, MIN_H, setLiveRow, setRowH)} onDoubleClick={() => setRowH(0)}><span /></div>
       )}
     </div>
   );

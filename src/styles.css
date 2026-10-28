@@ -259,14 +259,20 @@ button.caret { border: 0; background: transparent; padding: 0; font: inherit; fo
   padding: 4px 12px; border-radius: 999px; background: var(--acc); color: var(--accInk); font-size: 12.5px; font-weight: 600;
   box-shadow: 0 6px 18px var(--shadow);
 }
-/* Stacked: by default the input is kept short enough that the result shows below it; the bar
-   between them sets its height, and then the input's card fills exactly that. */
-.split.col > .split-pane:first-child textarea { min-height: min(360px, 45vh) !important; }
-.split.col.sized > .split-pane:first-child textarea { min-height: 0 !important; }
-.split.col.sized > .split-pane:first-child > * { min-height: 0; overflow: hidden; }
-/* The bar below the result sets its height; its scrolling area then fills the card. */
-.split.col.out-sized > .split-pane.result > .split-float, .split.col.out-sized > .split-pane.result > .split-float > * { min-height: 0; }
-.split.col.out-sized > .split-pane.result .pane-scroll { max-height: none !important; min-height: 0 !important; }
+/* One default height for both layouts, short enough that a stacked result still shows below the
+   input. Side by side, it is the least height of both; stacked, the input's height and the least
+   height of the result. */
+.split { --pane-h: min(400px, 50vh); }
+.split.row:not(.row-sized) > .split-pane { min-height: var(--pane-h); }
+/* A pane with a set height: its card fills exactly that; the scrolling area inside grows or shrinks
+   with it, and anything else that doesn't fit scrolls in the card. */
+.split.col > .split-pane:first-child > *,
+.split.row.row-sized > .split-pane:first-child > *, .split.row.row-sized > .split-pane.result > .split-float > *,
+.split.col.out-sized > .split-pane.result > .split-float > * { min-height: 0; overflow: auto !important; }
+.split.row.row-sized > .split-pane.result > .split-float, .split.col.out-sized > .split-pane.result > .split-float { min-height: 0; }
+.split.col > .split-pane:first-child textarea, .split.row.row-sized textarea { min-height: 0 !important; }
+.split.col > .split-pane.result .pane-scroll { min-height: 0 !important; }
+.split.row.row-sized .pane-scroll, .split.col.out-sized > .split-pane.result .pane-scroll { max-height: none !important; min-height: 0 !important; }
 /* A line across the full width; the result's handle (moving it) sits on its middle. */
 .split-hgutter { height: 16px; display: flex; align-items: center; padding: 0 14px; cursor: row-resize; touch-action: none; }
 .split-hgutter span { flex: 1; height: 1px; border-radius: 1px; background: var(--line); transition: background .15s, height .15s; }
