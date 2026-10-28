@@ -2,15 +2,15 @@
 // so it can't read the toolbox, its storage or other tools' data. The frame gets a small `toolbox`
 // object; its calls come here as messages and are answered here: network requests (made by the
 // toolbox, so a local forwarder that allows only the toolbox's address works), the plugin's own
-// storage, copy and toast. Every plugin keeps running while the page is open; the chosen one is
-// shown when the "本地插件" tool is.
+// storage, copy and toast. Every plugin keeps running while the page is open; each is a tool of its
+// own in the sidebar ("p:<id>"), shown here with a bar to edit, export or delete it.
 import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import uplotJs from 'uplot/dist/uPlot.iife.min.js?raw';
 import uplotCss from 'uplot/dist/uPlot.min.css?raw';
 import { useApp } from '../store';
-import { useOpt } from './Panes';
 import { useZoom } from './Zoom';
-import { delData, getData, isEditing, plugins, ready, setData, subscribe, type Plugin } from '../lib/plugins';
+import { delData, getData, nameOf, plugins, removePlugin, setData, setPlugins, subscribe, type Plugin } from '../lib/plugins';
+import { download } from './Panes';
 
 const FETCH_MS = 30000;
 /** The toolbox's colours, passed to the plugins as CSS variables. */
@@ -85,18 +85,54 @@ function Frame({ p, shown, height }: { p: Plugin; shown: boolean; height: number
   );
 }
 
-export default function PluginFrames({ visible }: { visible: boolean }) {
+/** The plugin's bar: its name, and edit / export / delete. Editing replaces the frame with its code. */
+function PluginBar({ p, editing, onEdit }: { p: Plugin; editing: boolean; onEdit: (v: boolean) => void }) {
+  const { T, go } = useApp();
+  const L = T.local;
+  const [sure, setSure] = useState(false);
+  useEffect(() => setSure(false), [p.id]);
+  return (
+    <div className="plugin-bar">
+      <span className="plugin-name">{nameOf(p.html)}</span>
+      <span className="spacer" />
+      {!editing && <button className="btn sm" onClick={() => onEdit(true)}>{L.edit}</button>}
+      <button className="btn sm" onClick={() => download(new TextEncoder().encode(p.html), nameOf(p.html) + '.html', 'text/html')}>{L.export}</button>
+      <button className={'btn sm' + (sure ? ' danger' : '')} onClick={() => {
+        if (!sure) { setSure(true); return; }
+        removePlugin(p.id);
+        go('local');
+      }} onBlur={() => setSure(false)}>{sure ? L.removeAsk : L.remove}</button>
+    </div>
+  );
+}
+
+function CodeEditor({ p, onDone }: { p: Plugin; onDone: () => void }) {
+  const { T } = useApp();
+  const L = T.local;
+  const [html, setHtml] = useState(p.html);
+  return (
+    <section className="card local-editor">
+      <textarea className="area mono" value={html} onChange={(e) => setHtml(e.target.value)} spellCheck={false} aria-label={L.codeLabel} />
+      <div className="local-editor-btns">
+        <button className="btn inv" disabled={!html.trim()} onClick={() => { setPlugins(plugins().map((x) => (x.id === p.id ? { ...x, html } : x))); onDone(); }}>{L.save}</button>
+        <button className="btn" onClick={onDone}>{L.cancel}</button>
+        <span className="local-hint">{L.isolation}</span>
+      </div>
+    </section>
+  );
+}
+
+export default function PluginFrames({ active }: { active: string | null }) {
   const { copy, toast, S } = useApp();
   const [, bump] = useReducer((x: number) => x + 1, 0);
   useEffect(() => subscribe(bump), []);
   const list = plugins();
-  const [sel] = useOpt<string>('local.sel', '');
-  const active = list.find((p) => p.id === sel)?.id ?? list[0]?.id;
+  const cur = list.find((p) => p.id === active);
+  const [editing, setEditing] = useState(false);
+  useEffect(() => setEditing(false), [active]);
   const box = useRef<HTMLDivElement>(null);
   const z = useZoom()[0] / 100;
   const [height, setHeight] = useState(0);
-  const [started, setStarted] = useState(false);
-  useEffect(() => { void ready().then(() => setStarted(true)); }, []);
 
   // Answers the frames' calls; a message is trusted as coming from a plugin only by its frame.
   useEffect(() => {
@@ -152,7 +188,7 @@ export default function PluginFrames({ visible }: { visible: boolean }) {
   }, []);
 
   // The shown frame fills the window below its top, down to the page's bottom margin.
-  const shownNow = visible && !isEditing();
+  const shownNow = !!cur && !editing;
   useLayoutEffect(() => {
     const el = box.current, area = el?.closest<HTMLElement>('.content');
     if (!el || !shownNow) return;
@@ -169,8 +205,12 @@ export default function PluginFrames({ visible }: { visible: boolean }) {
   }, [z, shownNow]);
 
   return (
-    <div ref={box} className="plugin-frames" style={{ display: shownNow ? 'block' : 'none' }}>
-      {started && list.map((p) => <Frame key={p.id} p={p} shown={p.id === active} height={height} />)}
-    </div>
+    <>
+      {cur && <PluginBar p={cur} editing={editing} onEdit={setEditing} />}
+      {cur && editing && <CodeEditor key={cur.id} p={cur} onDone={() => setEditing(false)} />}
+      <div ref={box} className="plugin-frames" style={{ display: shownNow ? 'block' : 'none' }}>
+        {list.map((p) => <Frame key={p.id} p={p} shown={p.id === active} height={height} />)}
+      </div>
+    </>
   );
 }

@@ -1,4 +1,5 @@
-import { CATS, CAT_ORDER, TOOLS } from '../i18n';
+import { CATS, CAT_ORDER } from '../i18n';
+import { useTools } from './useTools';
 import { useApp, type Theme } from '../store';
 import { Seg } from './Seg';
 import { LogoGlyph } from './Logo';
@@ -22,7 +23,8 @@ export function useChrome() {
 export function Sidebar() {
   const { S, set, T, lang, isMac, go } = useApp();
   const c = useChrome();
-  const nav = CAT_ORDER.map((cat) => ({ cat, name: CATS[cat][lang], items: TOOLS.filter((x) => x.cat === cat) }));
+  const tools = useTools();
+  const nav = CAT_ORDER.map((cat) => ({ cat, name: CATS[cat][lang], items: tools.filter((x) => x.cat === cat) }));
 
   return (
     <aside className="side" style={{ width: S.side ? 232 : 64 }}>
@@ -92,7 +94,8 @@ export function Sidebar() {
 export function MobileBar() {
   const { S, T, lang, go } = useApp();
   const c = useChrome();
-  const tool = TOOLS.find((x) => x.id === S.tool) || TOOLS[0];
+  const tools = useTools();
+  const tool = tools.find((x) => x.id === S.tool) || tools[0];
   return (
     <div className="mbar">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px 8px 14px' }}>
@@ -103,7 +106,7 @@ export function MobileBar() {
         <button className="btn" onClick={c.openPalette} style={{ height: 44, padding: '0 14px', borderRadius: 10 }}>{T.searchShort}</button>
       </div>
       <div className="chips">
-        {TOOLS.map((x) => (
+        {tools.map((x) => (
           <button key={x.id} className={'chip' + (x.id === S.tool ? ' on' : '')} onClick={() => go(x.id)}>{x[lang][1]}</button>
         ))}
       </div>

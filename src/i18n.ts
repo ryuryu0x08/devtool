@@ -1,13 +1,15 @@
 // Tool registry, categories and UI strings (zh / en).
 import { enT, zhT } from './i18n-tools';
 
-export type ToolId = 'ts' | 'cron' | 'qrgen' | 'qrscan' | 'json' | 'toml' | 'yaml' | 'xml' | 'sql' | 'schema' | 'diff' | 'tdiff'
+/** A built-in tool, or a local plugin ("p:<id>"). */
+export type ToolId = BuiltinId | `p:${string}`;
+export type BuiltinId = 'ts' | 'cron' | 'qrgen' | 'qrscan' | 'json' | 'toml' | 'yaml' | 'xml' | 'sql' | 'schema' | 'diff' | 'tdiff'
   | 'b64' | 'hash' | 'url' | 'uni' | 'html' | 'hex' | 'base' | 'gzip' | 'esc' | 'urlp' | 'jwt' | 'color' | 'regex' | 'case' | 'count' | 'proc' | 'uuid' | 'llm' | 'local';
 export type CatId = 'time' | 'qr' | 'fmt' | 'diff' | 'enc' | 'web' | 'text' | 'gen' | 'ai' | 'local';
 export type Lang = 'zh' | 'en';
 
 export interface Tool {
-  id: ToolId;
+  id: BuiltinId;
   cat: CatId;
   icon: string;
   /** [full name, short name, description] */
@@ -48,7 +50,7 @@ export const TOOLS: Tool[] = [
   { id: 'proc', cat: 'text', icon: '≡', zh: ['文本处理', '文本处理', '去重 · 排序 · 去空行 · 反转'], en: ['Line Tools', 'Lines', 'Dedupe · sort · blank lines · reverse'], kw: 'lines dedupe unique sort trim reverse 去重 排序 空行 文本 处理 qc px wbcl' },
   { id: 'uuid', cat: 'gen', icon: 'ID', zh: ['UUID 生成与解析', 'UUID', 'v4 / v7 批量生成 · 看版本和时间'], en: ['UUID', 'UUID', 'v4 / v7 in batches · version and time'], kw: 'uuid guid v4 v7 ulid generate 生成 sc' },
   { id: 'llm', cat: 'ai', icon: 'AI', zh: ['大模型对话测试', '大模型测试', 'OpenAI / Anthropic 接口 · 多轮对话 · 流式'], en: ['LLM Chat Tester', 'LLM Test', 'OpenAI / Anthropic APIs · multi-turn · streaming'], kw: 'llm ai gpt claude openai anthropic chat api key model 大模型 模型 对话 聊天 dmx moxing duihua' },
-  { id: 'local', cat: 'local', icon: '◫', zh: ['本地插件', '本地插件', '自己写的网页插件 · 只存在本机'], en: ['Local Plugins', 'Local', 'Your own page plugins · kept in this browser'], kw: 'plugin plugins local dashboard monitor quota usage 插件 本地 看板 额度 监控 bdcj' },
+  { id: 'local', cat: 'local', icon: '+', zh: ['添加插件', '添加插件', '粘贴代码或导入 .html，成为左侧的一个工具'], en: ['Add a plugin', 'Add plugin', 'Paste code or import .html — it becomes a tool here'], kw: 'plugin plugins local dashboard monitor quota usage 插件 本地 看板 额度 监控 bdcj' },
 ];
 
 export const CATS: Record<CatId, Record<Lang, string>> = {
@@ -61,7 +63,7 @@ export const CATS: Record<CatId, Record<Lang, string>> = {
   text: { zh: '文本', en: 'Text' },
   gen: { zh: '生成', en: 'Generate' },
   ai: { zh: 'AI', en: 'AI' },
-  local: { zh: '本地', en: 'Local' },
+  local: { zh: '我的插件', en: 'My plugins' },
 };
 export const CAT_ORDER: CatId[] = ['time', 'qr', 'fmt', 'diff', 'enc', 'web', 'text', 'gen', 'ai', 'local'];
 

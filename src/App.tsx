@@ -1,5 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from 'react';
-import { TOOLS, f, type ToolId } from './i18n';
+import { f, type ToolId } from './i18n';
+import { allTools } from './components/useTools';
+import { pluginOfTool } from './lib/plugins';
 import {
   AppCtx, CONFIG, INPUT_KEYS, WIDE_MIN, dictFor, initState, lsSet, pickPrefs, type Ctx, type Patch, type State,
 } from './store';
@@ -136,7 +138,7 @@ export function App() {
   }, [toast]);
 
   const toolName = useCallback((id: ToolId) => {
-    const t = TOOLS.find((x) => x.id === id);
+    const t = allTools().find((x) => x.id === id);
     return t ? t[ref.current.lang === 'en' ? 'en' : 'zh'][0] : '';
   }, []);
 
@@ -553,7 +555,7 @@ export function App() {
             {S.tool === 'llm' && <Suspense fallback={null}><Llm /></Suspense>}
             {S.tool === 'local' && <Suspense fallback={null}><Local /></Suspense>}
             </ToolBoundary>
-            {(framesOn || S.tool === 'local') && <Suspense fallback={null}><PluginFrames visible={S.tool === 'local'} /></Suspense>}
+            {(framesOn || pluginOfTool(S.tool)) && <Suspense fallback={null}><PluginFrames active={pluginOfTool(S.tool)} /></Suspense>}
           </div>
         </main>
         {S.palette && <Palette />}

@@ -102,10 +102,10 @@ export const zhT = {
     sample: '示例文字 Sample text 123', alphaNote: '前景有透明度：先叠加到背景上再计算',
   },
   local: {
-    intro: '本地插件是你自己写的网页（HTML + JavaScript + CSS），只保存在这个浏览器里，不上传、不同步，别人看不到。想做什么都可以：看板、内部工具、定时任务，也可以从 CDN 引入任何库。工具箱打开期间，所有插件都在后台运行。',
-    isolation: '插件在隔离的环境里运行，读不到工具箱和其他工具的数据；通过 toolbox 对象发请求、存数据、复制和提示。',
-    create: '新建插件', template: '额度看板模板', import: '导入 .html', edit: '编辑代码', export: '导出 .html', newCode: '新插件的代码', code: '{n} 的代码', codeLabel: '插件代码（HTML）',
-    install: '安装', save: '保存', cancel: '取消', remove: '删除插件', removeAsk: '再点一次确认删除（连同它保存的数据）', added: '已安装：{n}',
+    intro: '插件是你自己写的网页（HTML + JavaScript + CSS），安装后成为左侧"我的插件"里的一个工具，只保存在这个浏览器里，不上传、不同步，别人看不到。想做什么都可以，也可以从 CDN 引入任何库；工具箱打开期间，所有插件都在后台运行。名字取自网页的 <title>，图标可用 <meta name="toolbox-icon" content="¥"> 指定。',
+    isolation: '插件在隔离的环境里运行，读不到工具箱和其他工具的数据；通过 toolbox 对象发请求、存数据、复制和提示（空白模板里有说明）。',
+    paste: '插件代码', pastePh: '粘贴插件的代码（一个完整的 HTML 网页）', import: '导入 .html', blank: '从空白模板开始', codeLabel: '插件代码（HTML）',
+    install: '安装', installAs: '安装「{n}」', edit: '编辑代码', export: '导出 .html', save: '保存', cancel: '取消', remove: '删除', removeAsk: '再点一次确认删除', added: '已安装：{n}',
     proxy: '接口不允许浏览器直接访问时，在电脑上运行本地转发程序：', proxyCmd: 'python3 local-proxy.py http://你的接口地址', proxyThen: '然后把插件里的地址换成 http://127.0.0.1:8787 开头。',
   },
   llm: {
@@ -225,10 +225,10 @@ export const enT: ToolDict = {
     sample: 'Sample text 示例文字 123', alphaNote: 'The foreground is translucent: laid over the background first',
   },
   local: {
-    intro: 'Local plugins are web pages you write (HTML + JavaScript + CSS), kept in this browser only — not uploaded or synced, invisible to anyone else. Anything goes: dashboards, internal tools, scheduled jobs, any library from a CDN. While the toolbox is open, every plugin runs in the background.',
-    isolation: 'A plugin runs isolated: it can’t read the toolbox or other tools’ data; the toolbox object makes requests, stores data, copies and shows toasts for it.',
-    create: 'New plugin', template: 'Quota dashboard template', import: 'Import .html', edit: 'Edit code', export: 'Export .html', newCode: 'New plugin’s code', code: 'Code of {n}', codeLabel: 'Plugin code (HTML)',
-    install: 'Install', save: 'Save', cancel: 'Cancel', remove: 'Delete plugin', removeAsk: 'Click again to delete it (with the data it stored)', added: 'Installed: {n}',
+    intro: 'A plugin is a web page you write (HTML + JavaScript + CSS). Installed, it becomes a tool under “My plugins” on the left, kept in this browser only — not uploaded or synced, invisible to anyone else. Anything goes, libraries from a CDN included; while the toolbox is open, every plugin runs in the background. Its name is the page’s <title>; <meta name="toolbox-icon" content="¥"> sets its icon.',
+    isolation: 'A plugin runs isolated: it can’t read the toolbox or other tools’ data; the toolbox object makes requests, stores data, copies and shows toasts for it (the blank template explains it).',
+    paste: 'Plugin code', pastePh: 'Paste the plugin’s code (a whole HTML page)', import: 'Import .html', blank: 'Start from the blank template', codeLabel: 'Plugin code (HTML)',
+    install: 'Install', installAs: 'Install “{n}”', edit: 'Edit code', export: 'Export .html', save: 'Save', cancel: 'Cancel', remove: 'Delete', removeAsk: 'Click again to delete', added: 'Installed: {n}',
     proxy: 'When an API doesn’t allow browsers to call it, run the local forwarder on your computer:', proxyCmd: 'python3 local-proxy.py http://your-api', proxyThen: 'and make the plugin’s URL start with http://127.0.0.1:8787.',
   },
   llm: {

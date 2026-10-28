@@ -1,6 +1,7 @@
 // App-wide state, its localStorage persistence, and the context shared by every tool.
 import { createContext, useContext } from 'react';
 import { DICT, SAMPLE_A, SAMPLE_B, SAMPLE_JSON, SAMPLE_TOML, TOOLS, type Dict, type Lang, type ToolId } from './i18n';
+import { pluginOfTool, storedIds } from './lib/plugins';
 import { fmtWall, tzParts, type TsUnit } from './lib/time';
 import type { Ec, FoundCode } from './lib/qr';
 import type { Eol } from './lib/data';
@@ -169,7 +170,7 @@ export function initState(): State {
   let sysDark = false;
   try { sysDark = matchMedia('(prefers-color-scheme: dark)').matches; } catch { /* old browser */ }
   return {
-    tool: (TOOLS.some((t) => t.id === saved) ? saved : 'ts') as ToolId,
+    tool: (TOOLS.some((t) => t.id === saved) || (typeof saved === 'string' && storedIds().includes(pluginOfTool(saved) ?? '')) ? saved : 'ts') as ToolId,
     wide: window.innerWidth >= WIDE_MIN,
     side: pr.side !== false,
     lang: oneOf(pr.lang, ['zh', 'en'] as const, navLang),

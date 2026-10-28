@@ -1,4 +1,5 @@
-import { CATS, TOOLS, f } from '../i18n';
+import { CATS, f } from '../i18n';
+import { useTools } from './useTools';
 import { useApp } from '../store';
 
 interface Item { icon: string; name: string; crumb: string; run: () => void }
@@ -8,7 +9,8 @@ export function Palette() {
   const { S, set, T, lang, go, detect, routeText, toolName } = useApp();
   const raw = S.pq;
   const q = raw.trim().toLowerCase();
-  const items: Item[] = TOOLS
+  const tools = useTools();
+  const items: Item[] = tools
     .filter((t) => !q || (t.zh.join(' ') + ' ' + t.en.join(' ') + ' ' + t.kw + ' ' + CATS[t.cat].zh + ' ' + CATS[t.cat].en).toLowerCase().includes(q))
     .map((t) => ({ icon: t.icon, name: t[lang][0], crumb: CATS[t.cat][lang] + ' · ' + t[lang][2], run: () => go(t.id) }));
   if (q) {
