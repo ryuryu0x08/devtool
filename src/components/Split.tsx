@@ -77,12 +77,14 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
   };
   const r = clamp(live ?? (Number.isFinite(ratio) ? ratio : 0.5));
 
-  /** Keep the carried result under the pointer, wherever its slot is now. */
+  /** Keep the carried result under the pointer, wherever its slot is now; sideways it stays within
+   *  the tool area (as wide as it, when it would land below, it only moves up and down). */
   const place = () => {
-    const g = grab.current, f = floatB.current, s = slotB.current;
-    if (!g || !f || !s) return;
-    const rs = s.getBoundingClientRect();
-    f.style.transform = `translate(${(g.x - g.fx * g.w - rs.left) / z}px, ${(g.y - g.oy - rs.top) / z}px)`;
+    const g = grab.current, f = floatB.current, s = slotB.current, c = box.current;
+    if (!g || !f || !s || !c) return;
+    const rs = s.getBoundingClientRect(), rc = c.getBoundingClientRect();
+    const left = Math.max(rc.left, Math.min(rc.right - g.w, g.x - g.fx * g.w));
+    f.style.transform = `translate(${(left - rs.left) / z}px, ${(g.y - g.oy - rs.top) / z}px)`;
   };
 
   const measure = () => {
@@ -102,21 +104,25 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
     if (!A || !B || !F) return;
     const ra = A.getBoundingClientRect(), rb = B.getBoundingClientRect();
     const p = prev.current;
-    if (animate.current && p && p.shown !== shown && !reduced()) {
-      const opts = { duration: 260, easing: EASE };
+    const g = grab.current;
+    const slide = animate.current && !!p && p.shown !== shown && !reduced();
+    const opts = { duration: 260, easing: EASE };
+    if (slide) {
       A.animate([{ width: p.a.width / z + 'px', transform: `translate(${(p.a.left - ra.left) / z}px, ${(p.a.top - ra.top) / z}px)` }, { width: ra.width / z + 'px', transform: 'none' }], opts);
-      // A carried result follows the pointer; it shrinks to fit a narrower slot, and grows only
-      // when dropped. Otherwise it moves with the layout.
-      const g = grab.current;
-      if (g && rb.width < g.w) {
-        F.animate([{ width: g.w / z + 'px' }, { width: rb.width / z + 'px' }], opts);
-        g.w = rb.width;
-        F.style.width = g.w / z + 'px';
-      }
+      // A result that isn't carried moves with the layout.
       if (!g) F.animate([{ width: p.b.width / z + 'px', transform: `translate(${(p.b.left - rb.left) / z}px, ${(p.b.top - rb.top) / z}px)` }, { width: rb.width / z + 'px', transform: 'none' }], opts);
     }
     animate.current = false;
-    if (grab.current) place();
+    // Carried: as wide as the slot it would land in, so it lands at the size it shows. It grows or
+    // shrinks from where it was.
+    if (g && g.w !== rb.width) {
+      const was = F.getBoundingClientRect();
+      g.w = rb.width;
+      F.style.width = g.w / z + 'px';
+      place();
+      if (slide) F.animate([{ width: was.width / z + 'px', marginLeft: (was.left - F.getBoundingClientRect().left) / z + 'px' }, { width: g.w / z + 'px', marginLeft: '0px' }], opts);
+    }
+    if (g) place();
     prev.current = { shown, a: ra, b: rb };
   }, [shown]); // eslint-disable-line react-hooks/exhaustive-deps
 

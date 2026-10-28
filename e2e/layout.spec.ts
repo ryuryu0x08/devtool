@@ -22,7 +22,8 @@ test('the result is dragged below: both panes take the full width; each tool rem
   await dragBy(page, '.split-grip', 0, 260);
   expect(await layout(page)).toBe('col');
   // After it settles (a short animation), it fills its slot.
-  await expect.poll(async () => Math.round((await page.locator('.split-float').boundingBox())!.width)).toBe(Math.round((await box(page, 1)).width));
+  await page.waitForFunction(() => document.getAnimations().length === 0);
+  expect(Math.round((await page.locator('.split-float').boundingBox())!.width)).toBe(Math.round((await box(page, 1)).width));
   const a = await box(page, 0), b = await box(page, 1);
   expect(b.y).toBeGreaterThan(a.y + a.height);
   // Stacked panes span the content width (its padding stays as the margin).
@@ -136,13 +137,17 @@ test('text size: the tool area scales as a whole, the sidebar stays; remembered;
   expect(await navH()).toBe(n0);
   await page.reload();
   await expect(page.locator('.zoom-btn.pct')).toHaveText('125%');
-  // Carried at 125 %: the result's centre stays under the pointer.
+  // Carried at 125 %: the result's handle stays under the pointer.
   const g = (await page.locator('.split-grip').boundingBox())!;
   await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
   await page.mouse.down();
-  await page.mouse.move(g.x + g.width / 2 - 120, g.y + 260, { steps: 8 });
-  const f = (await page.locator('.split-float').boundingBox())!;
-  expect(Math.abs(f.x + f.width / 2 - (g.x + g.width / 2 - 120))).toBeLessThan(3);
+  await page.mouse.move(g.x + g.width / 2 - 40, g.y + g.height / 2 + 50, { steps: 8 });
+  const f = (await page.locator('.split-grip').boundingBox())!;
+  expect(Math.abs(f.x - (g.x - 40))).toBeLessThan(3);
+  expect(Math.abs(f.y - (g.y + 50))).toBeLessThan(3);
+  await page.mouse.move(g.x + g.width / 2 - 40, g.y + g.height / 2 + 260, { steps: 8 });
+  const f2 = (await page.locator('.split-grip').boundingBox())!;
+  expect(Math.abs(f2.y - (g.y + 260))).toBeLessThan(3);
   await page.mouse.up();
   expect(await layout(page)).toBe('col');
   // A click on the percentage goes back to 100 %, the smallest size: A− is disabled there.
@@ -255,4 +260,32 @@ test('the bar below the result sets its height: its content fills it, remembered
   p = await bar();
   await page.mouse.dblclick(p.x, p.y);
   expect(Math.abs((await box(page, 1)).height - h0)).toBeLessThan(2);
+});
+
+test('the carried result takes the width of the slot it would land in, and stays within the tool area', async ({ page }) => {
+  await open(page, 'Base64 编解码');
+  const content = (await page.locator('.split').boundingBox())!;
+  const g = (await page.locator('.split-grip').boundingBox())!;
+  const x = g.x + g.width / 2, y = g.y + g.height / 2;
+  const sizes = async () => {
+    await page.waitForFunction(() => document.getAnimations().length === 0);
+    const f = (await page.locator('.split-float').boundingBox())!, s = (await box(page, 1));
+    return { f, s };
+  };
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  // Below: as wide as the tool area, moving only up and down even when pulled sideways.
+  await page.mouse.move(x + 150, y + 120, { steps: 8 });
+  expect(await layout(page)).toBe('col');
+  let { f, s } = await sizes();
+  expect(Math.abs(f.width - s.width)).toBeLessThan(1);
+  expect(Math.abs(f.height - s.height)).toBeLessThan(1);
+  expect(Math.abs(f.x - content.x)).toBeLessThan(1);
+  // Beside again: half the width, and pushed right it stops at the edge.
+  await page.mouse.move(x + 400, y + 20, { steps: 8 });
+  expect(await layout(page)).toBe('row');
+  ({ f, s } = await sizes());
+  expect(Math.abs(f.width - s.width)).toBeLessThan(1);
+  expect(f.x + f.width).toBeLessThanOrEqual(content.x + content.width + 1);
+  await page.mouse.up();
 });

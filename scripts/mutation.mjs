@@ -118,7 +118,7 @@ const M = [
   ['layout: stacked panes stay half width', 'src/components/Split.tsx', "{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)' }", "{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)' }", 'each tool remembers'],
   ['layout: a pane can be squeezed to nothing', 'src/components/Split.tsx', '    return Math.min(1 - lo, Math.max(lo, r));', '    return r;', 'share the width'],
   ['layout: narrow screens keep side by side', 'src/components/Split.tsx', "  const shown: Mode = narrow ? 'col' : target ?? mode;", '  const shown: Mode = target ?? mode;', 'always stacked'],
-  ['layout: a carried result does not follow the pointer', 'src/components/Split.tsx', "    f.style.transform = `translate(${(g.x - g.fx * g.w - rs.left) / z}px, ${(g.y - g.oy - rs.top) / z}px)`;", '', 'each tool remembers'],
+  ['layout: a carried result does not follow the pointer', 'src/components/Split.tsx', "    f.style.transform = `translate(${(left - rs.left) / z}px, ${(g.y - g.oy - rs.top) / z}px)`;", '', 'each tool remembers'],
   ['layout: the layout waits for the drop instead of switching while carried', 'src/components/Split.tsx', '      if (next !== tgt) { tgt = next; from.x = ev.clientX; from.y = ev.clientY; animate.current = true; setTarget(next); }', '      if (next !== tgt) tgt = next;', 'each tool remembers'],
   ['layout: switching back is measured from the pickup, not the last switch', 'src/components/Split.tsx', '{ tgt = next; from.x = ev.clientX; from.y = ev.clientY; animate.current = true;', '{ tgt = next; animate.current = true;', 'a short carry'],
   ['layout: the stacked input height is not remembered', 'src/components/Split.tsx', 'onPointerDown={(e) => dragHeight(e, paneA.current!, MIN_H, setLiveH, setInH)}', 'onPointerDown={(e) => dragHeight(e, paneA.current!, MIN_H, setLiveH, () => {})}', 'bar between stacked'],
@@ -126,6 +126,8 @@ const M = [
   ['layout: the result height is not remembered', 'src/components/Split.tsx', 'dragHeight(e, slotB.current!, MIN_OUT, setLiveOut, setOutH)', 'dragHeight(e, slotB.current!, MIN_OUT, setLiveOut, () => {})', 'bar below the result'],
   ['layout: a set result height leaves its content capped', 'src/styles.css', '.split.col.out-sized > .split-pane.result .pane-scroll { max-height: none !important; min-height: 0 !important; }', '', 'bar below the result'],
   ['layout: a double-click on the bar does not restore the default height', 'src/components/Split.tsx', 'onDoubleClick={() => setInH(0)}', '', 'bar between stacked'],
+  ['layout: the carried result keeps its old width', 'src/components/Split.tsx', '    if (g && g.w !== rb.width) {\n      const was', '    if (false) {\n      const was', 'carried result takes'],
+  ['layout: the carried result leaves the tool area', 'src/components/Split.tsx', 'const left = Math.max(rc.left, Math.min(rc.right - g.w, g.x - g.fx * g.w));', 'const left = g.x - g.fx * g.w;', 'carried result takes'],
   ['layout: the carried result does not say where it lands', 'src/components/Split.tsx', "{shown === 'row' ? T.ui.dropBeside : T.ui.dropBelow}", "{''}", 'a short carry'],
   ['layout: a result dropped below stays out of view', 'src/components/Split.tsx', "      if (!cancel && tgt === 'col') requestAnimationFrame(reveal);", '', 'a short carry'],
   ['layout: stacked, a tall input pushes the result off the screen', 'src/styles.css', '.split.col > .split-pane:first-child textarea { min-height: min(360px, 45vh) !important; }', '', 'a short carry'],
@@ -151,7 +153,7 @@ const M = [
   ["layout: a cancelled carry keeps the layout it reached", 'src/components/Split.tsx', '      if (!cancel) setMode(tgt);', '      setMode(tgt);', 'system cancels'],
   ["result: a huge text is laid out whole", 'src/components/Panes.tsx', '  const cut = text.length > SHOW_CHARS;', '  const cut = false;', 'shown in part'],
   // Text size.
-  ['text size: dragging ignores the zoom (the result drifts from the pointer)', 'src/components/Split.tsx', "    f.style.transform = `translate(${(g.x - g.fx * g.w - rs.left) / z}px, ${(g.y - g.oy - rs.top) / z}px)`;", "    f.style.transform = `translate(${g.x - g.fx * g.w - rs.left}px, ${g.y - g.oy - rs.top}px)`;", 'text size'],
+  ['text size: dragging ignores the zoom (the result drifts from the pointer)', 'src/components/Split.tsx', "    f.style.transform = `translate(${(left - rs.left) / z}px, ${(g.y - g.oy - rs.top) / z}px)`;", "    f.style.transform = `translate(${left - rs.left}px, ${g.y - g.oy - rs.top}px)`;", 'text size'],
   ['text size: the sidebar scales too', 'src/App.tsx', "        {S.wide && <Sidebar />}", "        {S.wide && <div style={{ zoom: zoom / 100 }}><Sidebar /></div>}", 'text size'],
 ];
 
