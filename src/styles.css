@@ -370,3 +370,52 @@ body.dragging-move, body.dragging-move * { cursor: grabbing !important; user-sel
 .md a { color: var(--acc); }
 .md img { max-width: 100%; }
 .md hr { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
+/* Local plugins (tools/Local.tsx) */
+.local-intro { padding: 18px; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; font-size: 13.5px; line-height: 1.6; }
+.local-intro p { margin: 0; color: var(--mut); max-width: 720px; }
+.local-proxy { font-size: 12px; color: var(--faint); line-height: 1.7; }
+.local-proxy code { font: 12px 'Geist Mono', monospace; background: var(--sub); padding: 1px 5px; border-radius: 4px; color: var(--ink); }
+.local-editor { display: flex; flex-direction: column; overflow: hidden; }
+.local-editor textarea { min-height: 360px; padding: 14px 16px; font: 13px/1.6 'Geist Mono', monospace; white-space: pre; border: 0; }
+.local-errors { padding: 10px 16px; background: var(--delBg); color: var(--del); font-size: 12.5px; }
+.local-errors ul { margin: 6px 0 0; padding-left: 18px; }
+.local-editor-btns { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); align-items: center; }
+.btn.danger { color: var(--del); }
+.local-bar-line { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--mut); flex-wrap: wrap; }
+.local-keys { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.local-keys summary { font-size: 13px; font-weight: 600; cursor: pointer; }
+.local-keys[open] summary { margin-bottom: 8px; }
+.local-keys[open] .local-key-row + .local-key-row, .local-keys[open] .local-key-foot { margin-top: 8px; }
+.local-key-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) 32px; gap: 8px; align-items: center; }
+.local-key-row .field { height: 32px; font-size: 13px; }
+.local-key-row .ghost { width: 32px; height: 32px; border-radius: 7px; color: var(--faint); font-size: 16px; }
+.local-key-foot { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--faint); flex-wrap: wrap; }
+.local-wait { font-size: 13px; color: var(--faint); }
+.local-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+.local-card { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.local-card.bad { border-color: var(--del); }
+.local-card-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.local-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gut); flex: none; align-self: center; }
+.local-dot.ok { background: var(--add); }
+.local-dot.bad { background: var(--del); }
+.local-card-title { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.local-card-sub { font-size: 12px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.local-card-time { margin-left: auto; font-size: 11.5px; color: var(--faint); flex: none; font-variant-numeric: tabular-nums; }
+.local-err { font-size: 12.5px; color: var(--del); overflow-wrap: anywhere; line-height: 1.5; }
+.local-values { display: flex; gap: 18px; flex-wrap: wrap; }
+.local-values > div { display: flex; flex-direction: column; gap: 2px; }
+.local-values span { font-size: 11.5px; color: var(--faint); }
+.local-values b { font-size: 20px; font-weight: 600; }
+.local-bar { display: flex; flex-direction: column; gap: 4px; }
+.local-bar-text { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--mut); }
+.local-bar-text .mono { font-size: 12px; font-variant-numeric: tabular-nums; }
+.local-bar-track { height: 6px; border-radius: 3px; background: var(--sub); overflow: hidden; }
+.local-bar-fill { height: 100%; border-radius: 3px; background: var(--acc); transition: width .3s; }
+.local-bar.high .local-bar-fill { background: var(--chg); }
+.local-bar.high .local-bar-text .mono { color: var(--chg); }
+.local-bar.full .local-bar-fill { background: var(--del); }
+.local-bar.full .local-bar-text .mono { color: var(--del); }
+.local-trends { overflow: hidden; }
+.local-chart { padding: 8px 12px 4px; }
+.local-chart .u-title { font-size: 13px; font-weight: 600; color: var(--mut); }
+.local-chart .u-legend { font-size: 12px; color: var(--mut); }

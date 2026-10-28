@@ -51,6 +51,7 @@ const FILE_KEYS: (keyof State)[] = ['hashFile', 'b64File', 'hexFile', 'gzFile'];
 /** Each tool's inputs: a tool that fails unexpectedly offers to clear them (undo brings them back). */
 // Loaded when opened: the API SDKs and Markdown renderer it needs are large.
 const Llm = lazy(() => import('./tools/Llm'));
+const Local = lazy(() => import('./tools/Local'));
 
 const TOOL_INPUTS: Partial<Record<ToolId, (keyof State)[]>> = {
   ts: ['tsIn', 'tmIn'], qrgen: ['qrText'], qrscan: ['scan'], json: ['json'], toml: ['toml'], diff: ['diffA', 'diffB'],
@@ -452,6 +453,13 @@ export function App() {
 
   // Persist the current tool, preferences and (debounced) inputs.
   useEffect(() => { lsSet('tool', S.tool); }, [S.tool]);
+  // Local dashboards refresh while the page is open, whichever tool is shown (so their history has
+  // no gaps). Their code loads only when one exists.
+  useEffect(() => {
+    let has = false;
+    try { has = (localStorage.getItem('tb.plugins') ?? '[]') !== '[]'; } catch { /* storage off */ }
+    if (has) void Promise.all([import('./lib/plugins'), import('./lib/pluginRun')]).then(([p, r]) => r.sync(p.loadPlugins()));
+  }, []);
   const prefs = JSON.stringify(pickPrefs(S));
   useEffect(() => { try { localStorage.setItem('tb.prefs', prefs); } catch { /* ignore */ } }, [prefs]);
   // Inputs are saved one key at a time. If one doesn't fit, its stored copy is removed (so a
@@ -545,6 +553,7 @@ export function App() {
             {S.tool === 'cron' && <Cron />}
             {S.tool === 'color' && <Color />}
             {S.tool === 'llm' && <Suspense fallback={null}><Llm /></Suspense>}
+            {S.tool === 'local' && <Suspense fallback={null}><Local /></Suspense>}
             </ToolBoundary>
           </div>
         </main>

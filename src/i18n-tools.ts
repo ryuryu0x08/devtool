@@ -101,6 +101,16 @@ export const zhT = {
     ratio: '{r} : 1', aa: 'AA 正文（≥ 4.5）', aaLarge: 'AA 大号文字（≥ 3）', aaa: 'AAA 正文（≥ 7）', aaaLarge: 'AAA 大号文字（≥ 4.5）', pass: '✓ 通过', fail: '✗ 不通过',
     sample: '示例文字 Sample text 123', alphaNote: '前景有透明度：先叠加到背景上再计算',
   },
+  local: {
+    intro: '本地插件只保存在这个浏览器里，不上传、不同步，别人看不到。插件是一段 JSON：调用哪个接口、多久一次、显示返回里的哪些字段。',
+    create: '新建看板', template: '用额度看板模板', edit: '编辑定义', done: '完成', save: '保存', cancel: '取消', remove: '删除插件', removeAsk: '再点一次确认删除（连同 key 和历史数据）',
+    def: '插件定义（JSON）', errors: '定义有 {n} 处问题：', keys: 'Key', keysCount: 'Key（{n} 个）', addKey: '添加 key', keyName: '名称（可留空）', keyValue: 'sk-…', removeKey: '删除这个 key',
+    keysNote: 'key 保存在本机浏览器，只发送给插件定义里的地址。', noKeys: '先添加 key，每个 key 一张卡片。',
+    every: '每 {s} 秒刷新', updated: '更新于 {t}', refresh: '立即刷新', refreshing: '刷新中…', waiting: '等待第一次刷新…',
+    connect: '连不上接口：本地转发程序没有运行、地址不对，或浏览器还没允许本页访问本地网络（地址栏附近会有询问）。', timeout: '20 秒内没有响应',
+    noLimit: '{u}（无上限）', trends: '趋势', range: { h1: '1 小时', h24: '24 小时', d7: '7 天' }, noData: '这段时间还没有数据。看板打开期间每次刷新都会记一个点，保留 7 天。',
+    proxy: '接口不允许浏览器直接访问时，在电脑上运行本地转发程序：', proxyCmd: 'python3 local-proxy.py http://你的接口地址', proxyThen: '然后把定义里的 url 换成 http://127.0.0.1:8787 开头。',
+  },
   llm: {
     provider: '接口', anthropic: 'Anthropic', openai: 'OpenAI 兼容', base: '接口地址', model: '模型', modelPh: '如 claude-opus-5-5', modelPhOpenai: '如 gpt-4o，或该接口的模型名',
     key: 'API Key', keyPh: '只发送给上面的接口地址', remember: '记住 key（存在本机浏览器）', listModels: '列出模型', listing: '正在获取…', models: '找到 {n} 个模型，在模型框里选择',
@@ -216,6 +226,16 @@ export const enT: ToolDict = {
     mapped: 'This OKLCH colour is outside what sRGB can show; its chroma was lowered to the nearest displayable colour', rounded: 'HEX and RGB are 8-bit integers, rounded', contrast: 'Contrast', fg: 'Foreground (text)', bg: 'Background',
     ratio: '{r} : 1', aa: 'AA body text (≥ 4.5)', aaLarge: 'AA large text (≥ 3)', aaa: 'AAA body text (≥ 7)', aaaLarge: 'AAA large text (≥ 4.5)', pass: '✓ Pass', fail: '✗ Fail',
     sample: 'Sample text 示例文字 123', alphaNote: 'The foreground is translucent: laid over the background first',
+  },
+  local: {
+    intro: 'Local plugins are kept in this browser only — not uploaded or synced, invisible to anyone else. A plugin is a piece of JSON: which API to call, how often, and which fields of the reply to show.',
+    create: 'New dashboard', template: 'Use the quota dashboard template', edit: 'Edit definition', done: 'Done', save: 'Save', cancel: 'Cancel', remove: 'Delete plugin', removeAsk: 'Click again to delete it (with its keys and history)',
+    def: 'Plugin definition (JSON)', errors: '{n} problem(s) in the definition:', keys: 'Keys', keysCount: 'Keys ({n})', addKey: 'Add a key', keyName: 'Name (optional)', keyValue: 'sk-…', removeKey: 'Remove this key',
+    keysNote: 'Keys are kept in this browser and sent only to the URL in the plugin definition.', noKeys: 'Add a key first — one card per key.',
+    every: 'every {s} s', updated: 'updated {t}', refresh: 'Refresh now', refreshing: 'Refreshing…', waiting: 'Waiting for the first refresh…',
+    connect: 'Can’t reach the API: the local forwarder isn’t running, the URL is wrong, or the browser hasn’t yet allowed this page to reach the local network (it asks near the address bar).', timeout: 'No answer within 20 s',
+    noLimit: '{u} (no limit)', trends: 'Trends', range: { h1: '1 hour', h24: '24 hours', d7: '7 days' }, noData: 'No data in this range yet. Each refresh while the dashboard is open adds a point, kept for 7 days.',
+    proxy: 'When the API doesn’t allow browsers to call it, run the local forwarder on your computer:', proxyCmd: 'python3 local-proxy.py http://your-api', proxyThen: 'and make the definition’s url start with http://127.0.0.1:8787.',
   },
   llm: {
     provider: 'API', anthropic: 'Anthropic', openai: 'OpenAI-compatible', base: 'Base URL', model: 'Model', modelPh: 'e.g. claude-opus-5-5', modelPhOpenai: 'e.g. gpt-4o, or the endpoint’s model name',
