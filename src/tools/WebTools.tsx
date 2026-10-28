@@ -114,8 +114,8 @@ export function Jwt() {
           {!r ? <Empty /> : r.err ? <ErrLine msg={r.err} /> : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {timeRows.length > 0 && <div className="jwt-times"><KvRows rows={timeRows} /></div>}
-              <div className="jwt-part"><div className="part-label">{T.jwt.payload}</div><TextOut text={j!.payload.text} /></div>
-              <div className="jwt-part"><div className="part-label">{T.jwt.header}</div><TextOut text={j!.header.text} /></div>
+              <div className="jwt-part"><div className="part-label">{T.jwt.payload}</div><TextOut text={j!.payload.text} lang="json" /></div>
+              <div className="jwt-part"><div className="part-label">{T.jwt.header}</div><TextOut text={j!.header.text} lang="json" /></div>
               {j!.sig.length > 0 && <Kv label={T.jwt.sig + ' (hex)'} value={toHex(j!.sig)} />}
             </div>
           )}

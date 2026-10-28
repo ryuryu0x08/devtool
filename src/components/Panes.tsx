@@ -4,6 +4,8 @@ import { f } from '../i18n';
 import { useApp } from '../store';
 import { Seg } from './Seg';
 import { Vis, countInvisible } from './Vis';
+import { Hl } from './Hl';
+import type { HlLang } from '../lib/highlight';
 import { CopyBlock } from './Kv';
 import { decodeUtf8, type ErrInfo } from '../lib/data';
 import { hexDump, sniff } from '../lib/b64';
@@ -77,12 +79,13 @@ export function head(s: string, n: number): string {
 }
 
 /** Text result: a click copies all of it; invisible characters are marked. */
-export function TextOut({ text, className }: { text: string; className?: string }) {
+/** A text result; with `lang`, in syntax colours. */
+export function TextOut({ text, className, lang }: { text: string; className?: string; lang?: HlLang }) {
   const { T } = useApp();
   const cut = text.length > SHOW_CHARS;
   return (
     <CopyBlock value={text}>
-      <pre className={'tool-out ' + (className ?? '')} style={{ margin: 0, font: "13px/1.6 'Geist Mono', 'PingFang SC', monospace", whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}><Vis text={cut ? head(text, SHOW_CHARS) : text} /></pre>
+      <pre className={'tool-out ' + (className ?? '')} style={{ margin: 0, font: "13px/1.6 'Geist Mono', 'PingFang SC', monospace", whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}><Hl lang={lang} text={cut ? head(text, SHOW_CHARS) : text} /></pre>
       {cut && <div className="shown-first" style={{ marginTop: 10, fontSize: 12, color: 'var(--faint)' }}>{f(T.ui.shownFirst, { n: SHOW_CHARS.toLocaleString('en-US') })}</div>}
     </CopyBlock>
   );

@@ -5,6 +5,7 @@
   --acc: oklch(0.52 0.2 262); --accInk: #ffffff; --accSoft: oklch(0.97 0.015 262); --accSoft2: oklch(0.94 0.035 262); --accRing: oklch(0.52 0.2 262 / 0.14);
   --inv: #1b1b1d; --invInk: #ffffff;
   --str: oklch(0.5 0.13 150); --num: oklch(0.5 0.19 262); --bool: oklch(0.56 0.15 50); --date: oklch(0.5 0.15 320);
+  --kw: oklch(0.5 0.2 300); --fn: oklch(0.5 0.1 210);
   --add: oklch(0.48 0.13 150); --addBg: oklch(0.96 0.04 150); --del: oklch(0.52 0.18 25); --delBg: oklch(0.96 0.03 25); --chg: oklch(0.52 0.12 70); --chgBg: oklch(0.97 0.05 90);
   --shadow: rgba(20, 20, 15, 0.14); --scrim: rgba(24, 24, 20, 0.28);
   color-scheme: light;
@@ -15,6 +16,7 @@
   --acc: oklch(0.72 0.15 262); --accInk: #0d0d14; --accSoft: oklch(0.24 0.035 262); --accSoft2: oklch(0.29 0.05 262); --accRing: oklch(0.72 0.15 262 / 0.2);
   --inv: #ededeb; --invInk: #121211;
   --str: oklch(0.8 0.13 150); --num: oklch(0.78 0.12 262); --bool: oklch(0.8 0.12 60); --date: oklch(0.8 0.11 320);
+  --kw: oklch(0.78 0.13 300); --fn: oklch(0.8 0.09 210);
   --add: oklch(0.8 0.13 150); --addBg: oklch(0.27 0.05 150); --del: oklch(0.76 0.13 25); --delBg: oklch(0.28 0.05 25); --chg: oklch(0.82 0.12 85); --chgBg: oklch(0.29 0.05 80);
   --shadow: rgba(0, 0, 0, 0.5); --scrim: rgba(0, 0, 0, 0.5);
   color-scheme: dark;
@@ -232,6 +234,16 @@ button.caret { border: 0; background: transparent; padding: 0; font: inherit; fo
 .base-label { border: 0; background: transparent; text-align: left; font-size: 12.5px; color: var(--mut); padding: 8px 6px; margin-left: -6px; border-radius: 6px; cursor: pointer; }
 .base-label:hover { background: var(--sub); color: var(--ink); }
 .field.bad, .field.bad:focus { border-color: var(--del); }
+/* Syntax colours (components/Hl.tsx) */
+.hl-key, .hl-tag { color: var(--acc); }
+.hl-str { color: var(--str); }
+.hl-num { color: var(--num); }
+.hl-bool, .hl-attr { color: var(--bool); }
+.hl-date, .hl-var { color: var(--date); }
+.hl-kw { color: var(--kw); font-weight: 500; }
+.hl-fn { color: var(--fn); }
+.hl-punc { color: var(--faint); }
+.hl-com { color: var(--faint); font-style: italic; }
 /* Input / result split (components/Split.tsx) */
 .split-pane { display: flex; flex-direction: column; min-width: 0; position: relative; }
 .split-float { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }

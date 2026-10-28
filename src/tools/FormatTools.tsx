@@ -13,6 +13,7 @@ import { XmlError, XmlVerifyError, formatXml } from '../lib/xml';
 import { DIALECTS, SqlError, SqlVerifyError, formatSql, type KwCase } from '../lib/sqlfmt';
 import { SchemaError, validateJson, type SchemaResult } from '../lib/schema';
 import { parseJsonAst } from '../lib/json';
+import type { HlLang } from '../lib/highlight';
 
 /** The browser's recursion limit was hit (very deeply nested input); the libraries report it in their own words. */
 const tooDeep = (e: unknown) => e instanceof RangeError || /maximum call stack|too much recursion/i.test(String((e as { message?: unknown } | null)?.message ?? ''));
@@ -20,7 +21,7 @@ const tooDeep = (e: unknown) => e instanceof RangeError || /maximum call stack|t
 interface FmtOut { text?: string; status?: string; notes?: string[]; err?: { msg: string; info: ErrInfo | null } }
 
 /** One input, one formatted result. */
-function FmtPage(p: { inKey: keyof State; placeholder: string; options: ReactNode; run: (t: string) => FmtOut }) {
+function FmtPage(p: { inKey: keyof State; lang: HlLang; placeholder: string; options: ReactNode; run: (t: string) => FmtOut }) {
   const { S, set, T, replace } = useApp();
   const value = S[p.inKey] as string;
   const [text, pending] = useSettled(value);
@@ -32,7 +33,7 @@ function FmtPage(p: { inKey: keyof State; placeholder: string; options: ReactNod
         <TextIn title={T.input} value={value} placeholder={p.placeholder} size={value ? f(T.ui.lines, { n: value.split('\n').length }) : ''}
           onChange={(v) => set({ [p.inKey]: v })} onClear={() => replace({ [p.inKey]: '' })} minH={320} />
         <OutCard status={pending ? T.processing : !r ? T.result : r.err ? errStatus(T, r.err.info) : r.status ?? T.ui.ok} bad={!!r?.err} notes={r?.notes}>
-          {!r || pending ? <Empty /> : r.err ? <ErrLine msg={r.err.msg} info={r.err.info} /> : <TextOut text={r.text ?? ''} />}
+          {!r || pending ? <Empty /> : r.err ? <ErrLine msg={r.err.msg} info={r.err.info} /> : <TextOut text={r.text ?? ''} lang={p.lang} />}
         </OutCard>
       </Pair>
     </div>
@@ -60,7 +61,7 @@ export function YamlFmt() {
       throw e;
     }
   }, [indent, T]);
-  return <FmtPage inKey="yamlIn" placeholder={T.yaml.ph} run={run} options={<IndentSeg id="yaml" />} />;
+  return <FmtPage inKey="yamlIn" lang="yaml" placeholder={T.yaml.ph} run={run} options={<IndentSeg id="yaml" />} />;
 }
 
 export function XmlFmt() {
@@ -77,7 +78,7 @@ export function XmlFmt() {
       throw e;
     }
   }, [indent, T]);
-  return <FmtPage inKey="xmlIn" placeholder={T.xml.ph} run={run} options={<IndentSeg id="xml" tab />} />;
+  return <FmtPage inKey="xmlIn" lang="xml" placeholder={T.xml.ph} run={run} options={<IndentSeg id="xml" tab />} />;
 }
 
 const DIALECT_NAME: Partial<Record<SqlLanguage, string>> = {
@@ -103,7 +104,7 @@ export function SqlFmt() {
     }
   }, [dialect, kw, indent, T]);
   return (
-    <FmtPage inKey="sqlIn" placeholder={T.sql.ph} run={run} options={<>
+    <FmtPage inKey="sqlIn" lang="sql" placeholder={T.sql.ph} run={run} options={<>
       <label className="num-in"><span>{T.sql.dialect}</span>
         <select className="field" value={dialect} onChange={(e) => setDialect(e.target.value as SqlLanguage)} aria-label={T.sql.dialect} style={{ height: 32, fontSize: 13, padding: '0 8px', fontWeight: 400, width: 'auto' }}>
           {DIALECTS.map((d) => <option key={d} value={d}>{DIALECT_NAME[d] ?? d}</option>)}

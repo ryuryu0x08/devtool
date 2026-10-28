@@ -5,6 +5,7 @@ import { useApp, type FmtLang } from '../store';
 import { Seg } from '../components/Seg';
 import { useSettled } from '../components/useSettled';
 import { Vis, countInvisible } from '../components/Vis';
+import { Hl } from '../components/Hl';
 import { CopyBlock } from '../components/Kv';
 import { SHOW_CHARS, head } from '../components/Panes';
 import { ConvertError, DateTime, Num, bytesLabel, byteLen, clipboardUnsafe, cp, errInfo, isCont, isObj, sortDeep, stats, type ErrInfo, type Obj } from '../lib/data';
@@ -305,7 +306,7 @@ export function Formatter({ lang }: { lang: FmtLang }) {
             )}
             {ok && S.view === 'text' && (
               <CopyBlock value={ok.text} style={{ margin: '0 8px' }}>
-                <pre style={{ margin: 0, padding: '0 8px', font: 'inherit', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}><Vis text={head(ok.text, SHOW_CHARS)} /></pre>
+                <pre style={{ margin: 0, padding: '0 8px', font: 'inherit', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}><Hl lang={ok.lang} text={head(ok.text, SHOW_CHARS)} /></pre>
                 {ok.text.length > SHOW_CHARS && <div className="shown-first" style={{ margin: '10px 8px 0', fontSize: 12, fontFamily: "'Geist Sans', 'Geist', sans-serif", color: 'var(--faint)' }}>{f(T.ui.shownFirst, { n: SHOW_CHARS.toLocaleString('en-US') })}</div>}
               </CopyBlock>
             )}

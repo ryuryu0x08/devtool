@@ -233,6 +233,32 @@ test.describe('formatting', () => {
     await expect(out(page)).toContainText("E'a\\'b'");
   });
 
+  test('formatted results are in syntax colours; a click still copies the plain text', async ({ page }) => {
+    await open(page, 'SQL 格式化');
+    await input(page).fill("select count(*) from t where s = 'x' -- c");
+    await expect(out(page).locator('.hl-kw').first()).toHaveText('SELECT');
+    await expect(out(page).locator('.hl-fn')).toHaveText('count');
+    await expect(out(page).locator('.hl-str')).toHaveText("'x'");
+    await expect(out(page).locator('.hl-com')).toHaveText('-- c');
+    const shown = (await out(page).textContent())!;
+    expect(shown).toContain("WHERE\n  s = 'x' -- c");
+    await out(page).click();
+    await expect.poll(() => clipboard(page)).toBe(shown);
+    for (const [tool, text, cls, word] of [['YAML 格式化', 'a: 1', 'hl-key', 'a'], ['XML 格式化', '<a x="1"/>', 'hl-tag', 'a']]) {
+      await nav(page, tool);
+      await input(page).fill(text);
+      await expect(out(page).locator('.' + cls).first(), tool).toHaveText(word);
+    }
+    // JSON's text view and a JWT's parts too.
+    await nav(page, 'JSON 格式化');
+    await input(page).fill('{"k": [1, true]}');
+    await page.getByRole('button', { name: '文本', exact: true }).click();
+    await expect(page.locator('.hl-key').first()).toHaveText('"k"');
+    await nav(page, 'JWT 解码');
+    await input(page).fill('eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.c2ln');
+    await expect(page.locator('.jwt-part .hl-key').first()).toHaveText('"sub"');
+  });
+
   test('JSON Schema: problems with paths; the box with a syntax error is named', async ({ page }) => {
     await open(page, 'JSON Schema 校验');
     await input(page).fill('{"type":"object","required":["id"],"properties":{"id":{"type":"integer"}},"additionalProperties":false}');
