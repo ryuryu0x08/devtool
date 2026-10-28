@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head>
+<title>我的插件</title>
+<style>
+  /* Your styles. The toolbox's colours are CSS variables: --ink, --mut, --faint, --bg, --card, --sub,
+     --line, --acc, --add, --del, --chg … and .card, .btn, .btn.primary, input, textarea are styled. */
+  pre { white-space: pre-wrap; word-break: break-all; }
+</style>
+</head>
+<body>
+<div class="card">
+  <p class="muted">
+    这是一个完整的网页：写任何 HTML、CSS、JavaScript，也可以用 &lt;script src="https://…"&gt; 引入库。
+    它在隔离的环境里运行，读不到工具箱的数据；需要时通过 <code>toolbox</code>：
+  </p>
+  <ul class="muted">
+    <li><code>await toolbox.fetch(url, { method, headers, body })</code> → <code>{ ok, status, headers, text, json() }</code>，由工具箱代发（连不上时抛出 <code>connect: …</code>）</li>
+    <li><code>await toolbox.storage.get(key)</code> / <code>set(key, value)</code> / <code>remove(key)</code>：这个插件自己的存储，保存在本机浏览器</li>
+    <li><code>toolbox.copy(text)</code>、<code>toolbox.toast(text)</code></li>
+  </ul>
+  <input id="url" placeholder="https://… 一个返回 JSON 的地址" style="width: 100%">
+  <p><button class="btn primary" id="go">请求</button></p>
+  <pre id="out" class="mono"></pre>
+</div>
+<script>
+document.getElementById('go').onclick = async () => {
+  const out = document.getElementById('out');
+  try {
+    const r = await toolbox.fetch(document.getElementById('url').value);
+    out.textContent = 'HTTP ' + r.status + '\n' + r.text;
+  } catch (e) {
+    out.textContent = e.message;
+  }
+};
+</script>
+</body>
+</html>

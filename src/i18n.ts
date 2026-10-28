@@ -48,7 +48,7 @@ export const TOOLS: Tool[] = [
   { id: 'proc', cat: 'text', icon: '≡', zh: ['文本处理', '文本处理', '去重 · 排序 · 去空行 · 反转'], en: ['Line Tools', 'Lines', 'Dedupe · sort · blank lines · reverse'], kw: 'lines dedupe unique sort trim reverse 去重 排序 空行 文本 处理 qc px wbcl' },
   { id: 'uuid', cat: 'gen', icon: 'ID', zh: ['UUID 生成与解析', 'UUID', 'v4 / v7 批量生成 · 看版本和时间'], en: ['UUID', 'UUID', 'v4 / v7 in batches · version and time'], kw: 'uuid guid v4 v7 ulid generate 生成 sc' },
   { id: 'llm', cat: 'ai', icon: 'AI', zh: ['大模型对话测试', '大模型测试', 'OpenAI / Anthropic 接口 · 多轮对话 · 流式'], en: ['LLM Chat Tester', 'LLM Test', 'OpenAI / Anthropic APIs · multi-turn · streaming'], kw: 'llm ai gpt claude openai anthropic chat api key model 大模型 模型 对话 聊天 dmx moxing duihua' },
-  { id: 'local', cat: 'local', icon: '◫', zh: ['本地插件', '本地插件', '只存在本机的看板 · 定时请求接口'], en: ['Local Plugins', 'Local', 'Dashboards kept in this browser · polled APIs'], kw: 'plugin plugins local dashboard monitor quota usage 插件 本地 看板 额度 监控 bdcj' },
+  { id: 'local', cat: 'local', icon: '◫', zh: ['本地插件', '本地插件', '自己写的网页插件 · 只存在本机'], en: ['Local Plugins', 'Local', 'Your own page plugins · kept in this browser'], kw: 'plugin plugins local dashboard monitor quota usage 插件 本地 看板 额度 监控 bdcj' },
 ];
 
 export const CATS: Record<CatId, Record<Lang, string>> = {

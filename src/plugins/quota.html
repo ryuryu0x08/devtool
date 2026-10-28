@@ -1,0 +1,203 @@
+<!doctype html>
+<html>
+<head>
+<title>额度看板</title>
+<!-- uPlot (time-series charts), supplied by the toolbox; any other library can come from a CDN. -->
+<link rel="stylesheet" href="toolbox:uplot.css">
+<script src="toolbox:uplot"></script>
+<style>
+  .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--mut); margin-bottom: 12px; }
+  .top .spacer { flex: 1; }
+  .settings { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) 32px; gap: 8px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+  .card.bad { border-color: var(--del); }
+  .head { display: flex; align-items: baseline; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line2); align-self: center; }
+  .dot.ok { background: var(--add); } .dot.bad { background: var(--del); }
+  .title { font-weight: 600; } .sub, .time { font-size: 12px; color: var(--faint); } .time { margin-left: auto; }
+  .err { color: var(--del); font-size: 12.5px; margin-top: 8px; }
+  .val { margin-top: 8px; } .val span { font-size: 11.5px; color: var(--faint); display: block; } .val b { font-size: 20px; }
+  .bar { margin-top: 10px; } .bar .t { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--mut); }
+  .track { height: 6px; border-radius: 3px; background: var(--sub); overflow: hidden; margin-top: 4px; }
+  .fill { height: 100%; background: var(--acc); }
+  .bar.high .fill { background: var(--chg); } .bar.high .n { color: var(--chg); }
+  .bar.full .fill { background: var(--del); } .bar.full .n { color: var(--del); }
+  .trends { margin-top: 12px; } .trends .head { margin-bottom: 8px; }
+  .chart .u-title { font-size: 13px; color: var(--mut); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="top">
+  <span id="status"></span><span class="spacer"></span>
+  <button class="btn" id="refresh">立即刷新</button>
+  <button class="btn" id="toggle">设置</button>
+</div>
+<div class="card settings" id="settings" hidden>
+  <label>接口地址 <input id="url" class="mono"></label>
+  <label>刷新间隔（秒） <input id="interval" type="number" min="10" style="width: 120px"></label>
+  <div id="keys"></div>
+  <div><button class="btn" id="add">＋ 添加 key</button> <button class="btn primary" id="save">保存</button></div>
+  <div class="muted">key 保存在本机浏览器（这个插件自己的存储），只发送给上面的地址。</div>
+</div>
+<div class="cards" id="cards"></div>
+<div class="card trends" id="trends" hidden>
+  <div class="head"><b>趋势</b><span class="spacer" style="flex:1"></span>
+    <button class="btn" data-range="3600">1 小时</button><button class="btn" data-range="86400">24 小时</button><button class="btn" data-range="604800">7 天</button>
+  </div>
+  <div id="charts"></div>
+</div>
+<script>
+// Which fields of the reply to show. Change freely: this is your own plugin.
+const VALUES = [{ label: '余额', get: (d) => d.balance }];
+const BARS = [
+  { label: '今日', used: (d) => d.daily_usage, limit: (d) => d.daily_limit },
+  { label: '超额', used: (d) => d.overflow_usage, limit: (d) => d.overflow_limit },
+  { label: '额度池', used: (d) => d.pool_usage, limit: (d) => d.pool_limit },
+  { label: '本周', used: (d) => d.user_weekly_usage, limit: (d) => d.user_weekly_limit },
+  { label: '本月', used: (d) => d.user_monthly_usage, limit: (d) => d.user_monthly_limit },
+];
+const TRENDS = [{ label: '今日用量', get: (d) => d.daily_usage }, { label: '余额', get: (d) => d.balance }];
+const KEEP = 7 * 86400e3;
+
+const $ = (id) => document.getElementById(id);
+const num = (v) => (typeof v === 'number' && isFinite(v) ? v : null);
+const fmt = (n) => (n === null ? '—' : Math.abs(n) >= 1000 ? n.toFixed(0) : String(+n.toFixed(2)));
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+let config = { url: 'http://127.0.0.1:8787/api/v1/billing/usage', interval: 60, keys: [] };
+let latest = {}, history = [], timer = null, range = 86400, last = 0;
+
+async function load() {
+  const c = await toolbox.storage.get('config');
+  if (c) config = { ...config, ...Object.fromEntries(Object.entries(c).filter(([, v]) => v !== undefined)) };
+  config.keys = (config.keys || []).map((k) => ({ id: k.id || Math.random().toString(36).slice(2), name: k.name || '', key: k.key || '' }));
+  history = (await toolbox.storage.get('history')) || [];
+  range = (await toolbox.storage.get('range')) || range;
+  fillSettings();
+  if (!config.keys.length) $('settings').hidden = false;
+  restart();
+}
+
+function fillSettings() {
+  $('url').value = config.url;
+  $('interval').value = config.interval;
+  $('keys').innerHTML = '';
+  for (const k of config.keys) addRow(k);
+}
+function addRow(k = { id: Math.random().toString(36).slice(2), name: '', key: '' }) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.dataset.id = k.id;
+  row.innerHTML = '<input placeholder="名称（可留空）" class="n"><input type="password" placeholder="sk-…" class="k mono" autocomplete="off"><button class="btn ghost" title="删除">×</button>';
+  row.querySelector('.n').value = k.name;
+  row.querySelector('.k').value = k.key;
+  row.querySelector('button').onclick = () => row.remove();
+  $('keys').append(row);
+}
+
+async function one(k) {
+  try {
+    const r = await toolbox.fetch(config.url, { headers: { Authorization: 'Bearer ' + k.key, Accept: 'application/json' } });
+    let body;
+    try { body = r.json(); } catch { return { ok: false, error: 'HTTP ' + r.status + ': ' + (r.text.slice(0, 120) || '(empty)') }; }
+    if (body && body.proxy_error) return { ok: false, error: body.proxy_error };
+    if (!r.ok) return { ok: false, error: 'HTTP ' + r.status + (body && body.message ? ': ' + body.message : '') };
+    if (!body || body.code !== 0 || !body.data || body.data.valid !== true) return { ok: false, error: (body && body.message) || '返回不是成功', title: body && body.data && body.data.nick_name };
+    return { ok: true, data: body.data, title: body.data.nick_name };
+  } catch (e) {
+    return { ok: false, error: /^connect/.test(e.message) ? '连不上接口：本地转发程序没有运行、地址不对，或浏览器还没允许访问本地网络。' : e.message };
+  }
+}
+
+async function refresh() {
+  const keys = config.keys.filter((k) => k.key);
+  if (!keys.length) { render(); return; }
+  $('refresh').disabled = true;
+  const t = Date.now();
+  const rs = await Promise.all(keys.map(one));
+  keys.forEach((k, i) => {
+    latest[k.id] = { ...rs[i], at: t };
+    if (rs[i].ok) history.push({ t, k: k.id, v: TRENDS.map((tr) => num(tr.get(rs[i].data))) });
+  });
+  history = history.filter((s) => s.t > Date.now() - KEEP);
+  await toolbox.storage.set('history', history);
+  last = t;
+  $('refresh').disabled = false;
+  render();
+}
+
+function restart() {
+  clearInterval(timer);
+  timer = setInterval(refresh, Math.max(10, config.interval) * 1000);
+  refresh();
+}
+
+function bar(b, d) {
+  const used = num(b.used(d)), limit = num(b.limit(d));
+  if (!limit || limit <= 0) return used ? '<div class="bar"><div class="t"><span>' + b.label + '</span><span class="mono">' + fmt(used) + '（无上限）</span></div></div>' : '';
+  const pct = ((used || 0) / limit) * 100;
+  const cls = pct >= 100 ? 'full' : pct >= 80 ? 'high' : '';
+  return '<div class="bar ' + cls + '"><div class="t"><span>' + b.label + '</span><span class="n mono">' + fmt(used) + ' / ' + fmt(limit) + ' · ' + pct.toFixed(1) + '%</span></div><div class="track"><div class="fill" style="width:' + Math.min(100, pct) + '%"></div></div></div>';
+}
+
+function render() {
+  $('status').textContent = '每 ' + config.interval + ' 秒刷新' + (last ? ' · 更新于 ' + new Date(last).toLocaleTimeString() : '');
+  const keys = config.keys.filter((k) => k.key);
+  $('cards').innerHTML = keys.length ? keys.map((k) => {
+    const r = latest[k.id];
+    const title = k.name || (r && r.title) || k.key.slice(0, 6) + '…';
+    const sub = k.name && r && r.title && r.title !== k.name ? '<span class="sub">' + esc(r.title) + '</span>' : '';
+    let body = !r ? '<div class="muted">等待第一次刷新…</div>' : !r.ok ? '<div class="err">' + esc(r.error) + '</div>' : '';
+    if (r && r.ok) body = VALUES.map((v) => '<div class="val"><span>' + v.label + '</span><b class="mono">' + fmt(num(v.get(r.data))) + '</b></div>').join('') + BARS.map((b) => bar(b, r.data)).join('');
+    return '<div class="card' + (r && !r.ok ? ' bad' : '') + '"><div class="head"><span class="dot ' + (r ? (r.ok ? 'ok' : 'bad') : '') + '"></span><span class="title">' + esc(title) + '</span>' + sub + '<span class="time">' + (r ? new Date(r.at).toLocaleTimeString() : '') + '</span></div>' + body + '</div>';
+  }).join('') : '<div class="muted">在"设置"里添加 key，每个 key 一张卡片。</div>';
+  charts();
+}
+
+let plots = [];
+function charts() {
+  plots.forEach((p) => p.destroy());
+  plots = [];
+  const keys = config.keys.filter((k) => k.key);
+  const from = Date.now() - range * 1000;
+  const shown = history.filter((s) => s.t >= from);
+  $('trends').hidden = !keys.length;
+  document.querySelectorAll('[data-range]').forEach((b) => b.classList.toggle('on', +b.dataset.range === range));
+  const box = $('charts');
+  box.innerHTML = '';
+  const xs = [...new Set(shown.map((s) => s.t))].sort((a, b) => a - b);
+  if (!xs.length) { box.innerHTML = '<div class="muted">这段时间还没有数据：页面打开期间每次刷新记一个点，保留 7 天。</div>'; return; }
+  const idx = new Map(xs.map((t, i) => [t, i]));
+  const css = getComputedStyle(document.documentElement);
+  const colors = ['--acc', '--str', '--bool', '--date', '--num', '--del', '--chg'].map((v) => css.getPropertyValue(v).trim());
+  const axis = { stroke: css.getPropertyValue('--faint').trim(), grid: { stroke: css.getPropertyValue('--line').trim() }, ticks: { stroke: css.getPropertyValue('--line').trim() } };
+  TRENDS.forEach((tr, ti) => {
+    const el = document.createElement('div');
+    el.className = 'chart';
+    box.append(el);
+    const series = keys.map((k) => { const ys = xs.map(() => null); for (const s of shown) if (s.k === k.id) ys[idx.get(s.t)] = s.v[ti]; return ys; });
+    plots.push(new uPlot({
+      width: el.clientWidth || 600, height: 200, title: tr.label, scales: { x: { time: true } }, axes: [axis, { ...axis, size: 60 }],
+      series: [{}, ...keys.map((k, i) => ({ label: k.name || (latest[k.id] && latest[k.id].title) || '#' + (i + 1), stroke: colors[i % colors.length], width: 2, value: (u, v) => fmt(v) }))],
+    }, [xs.map((t) => t / 1000), ...series], el));
+  });
+}
+new ResizeObserver(() => plots.forEach((p) => p.setSize({ width: p.root.parentElement.clientWidth, height: 200 }))).observe(document.body);
+
+$('refresh').onclick = refresh;
+$('toggle').onclick = () => { $('settings').hidden = !$('settings').hidden; };
+$('add').onclick = () => addRow();
+$('save').onclick = async () => {
+  config.url = $('url').value.trim();
+  config.interval = Math.max(10, +$('interval').value || 60);
+  config.keys = [...$('keys').children].map((row) => ({ id: row.dataset.id, name: row.querySelector('.n').value.trim(), key: row.querySelector('.k').value.trim() })).filter((k) => k.key);
+  await toolbox.storage.set('config', config);
+  $('settings').hidden = true;
+  toolbox.toast('已保存');
+  restart();
+};
+document.querySelectorAll('[data-range]').forEach((b) => { b.onclick = () => { range = +b.dataset.range; toolbox.storage.set('range', range); charts(); }; });
+load();
+</script>
+</body>
+</html>
