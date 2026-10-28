@@ -443,3 +443,16 @@ describe('QR', () => {
     expect(performance.now() - t).toBeLessThan(200);
   });
 });
+
+describe('TOML indentation', () => {
+  it('indents headers by depth and keys one level under their table; comments with the line below; multi-line strings untouched', () => {
+    const src = 'title = "t"\n# about server\n[server]\nhost = "h"\nlist = [\n1,\n2,\n]\n[server.limits]\n# limits\nrps = 1 # per second\ntext = \"\"\"\nline one\n  line two\"\"\"\n[[owners]]\nid = 1\n[owners.x.y]\nz = 1\n';
+    const doc = parseTomlDoc(src);
+    const out = formatToml(doc, false, '  ');
+    expect(out).toBe('title = "t"\n\n# about server\n[server]\n  host = "h"\n  list = [\n    1,\n    2,\n  ]\n\n  [server.limits]\n    # limits\n    rps = 1 # per second\n    text = \"\"\"\nline one\n  line two\"\"\"\n\n[[owners]]\n  id = 1\n\n    [owners.x.y]\n      z = 1\n');
+    verifyToml(doc, out, false);
+    expect(formatToml(parseTomlDoc(out), false, '  ')).toBe(out);
+    // No indent: as before.
+    expect(formatToml(parseTomlDoc(out))).toBe(formatToml(doc));
+  });
+});

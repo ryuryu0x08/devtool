@@ -2,7 +2,7 @@
 
 export const zhT = {
   ui: {
-    enc: '编码', dec: '解码', escape: '转义', unescape: '还原', upper: '大写', indent: '缩进', spaces: '{n} 空格', tab: 'Tab', minify: '压缩',
+    enc: '编码', dec: '解码', escape: '转义', unescape: '还原', upper: '大写', indent: '缩进', spaces: '{n} 空格', tab: 'Tab', minify: '压缩', noIndent: '不缩进',
     chars: '{n} 个字符', lines: '{n} 行', switched: '已按内容切换到「{m}」', empty: '结果实时显示', ok: '格式正确',
     regen: '重新生成', count: '数量', length: '长度', download: '下载', textView: '文本', hexView: '十六进制', swap: '交换',
     zone: '时区：{z}', bytesTo: '{a} 字节 → {b} 字节', loneSur: '结果含孤立代理字符（已标出），它们无法按 UTF-8 保存', notUtf8Out: '{n} 字节 · 不是有效的 UTF-8 文本，以十六进制显示', bigOut: '{n} 字节 · 太大，不在页面里按文本显示（下面是开头部分的十六进制）；请下载', utf8Out: 'UTF-8 文本 · {n} 字节',
@@ -108,7 +108,7 @@ export type ToolDict = typeof zhT;
 
 export const enT: ToolDict = {
   ui: {
-    enc: 'Encode', dec: 'Decode', escape: 'Escape', unescape: 'Unescape', upper: 'Uppercase', indent: 'Indent', spaces: '{n} spaces', tab: 'Tab', minify: 'Minify',
+    enc: 'Encode', dec: 'Decode', escape: 'Escape', unescape: 'Unescape', upper: 'Uppercase', indent: 'Indent', spaces: '{n} spaces', tab: 'Tab', minify: 'Minify', noIndent: 'No indent',
     chars: '{n} characters', lines: '{n} lines', switched: 'Switched to {m} for this content', empty: 'The result appears as you type', ok: 'Well-formed',
     regen: 'Generate again', count: 'Count', length: 'Length', download: 'Download', textView: 'Text', hexView: 'Hex', swap: 'Swap',
     zone: 'Time zone: {z}', bytesTo: '{a} bytes → {b} bytes', loneSur: 'The result has lone surrogates (marked); they can’t be saved as UTF-8', notUtf8Out: '{n} bytes · not valid UTF-8 text, shown as hex', bigOut: '{n} bytes · too large to show as text here (the start is shown as hex); download it', utf8Out: 'UTF-8 text · {n} bytes',

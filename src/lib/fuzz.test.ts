@@ -272,10 +272,10 @@ describe('fuzz: TOML', () => {
     for (let n = 0; n < 2000; n++) {
       const s = genToml(r);
       const doc = parseTomlDoc(s);
-      for (const sort of [false, true]) {
-        const out = formatToml(doc, sort);
-        try { verifyToml(doc, out, sort); } catch (e) { throw new Error('verify failed (sort=' + sort + '):\n' + s + '\n---\n' + out + '\n' + (e as Error).message); }
-        expect(formatToml(parseTomlDoc(out), sort)).toBe(out);
+      for (const sort of [false, true]) for (const ind of ['', '  ', '\t']) {
+        const out = formatToml(doc, sort, ind);
+        try { verifyToml(doc, out, sort); } catch (e) { throw new Error('verify failed (sort=' + sort + ', indent=' + JSON.stringify(ind) + '):\n' + s + '\n---\n' + out + '\n' + (e as Error).message); }
+        expect(formatToml(parseTomlDoc(out), sort, ind)).toBe(out);
       }
     }
   });

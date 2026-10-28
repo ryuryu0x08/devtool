@@ -8,7 +8,17 @@ test.describe('TOML formatter', () => {
   test('keeps every literal and comment; only whitespace changes', async ({ page }) => {
     await open(page, 'TOML 格式化');
     await editor(page).fill(TOML_SRC);
-    await expect.poll(() => textView(page)).toBe("# config\nhex = 0xFF # trailing\npi = 3.14159265358979323846\npath = 'C:\\dir'\nt = 07:32:00.999999\na.b = 1\n\n[srv]\nport = 8080\nlist = [\n  # note\n  1,\n  2,\n]\n");
+    const head = "# config\nhex = 0xFF # trailing\npi = 3.14159265358979323846\npath = 'C:\\dir'\nt = 07:32:00.999999\na.b = 1\n\n[srv]\n";
+    // Keys under a table are indented (2 spaces by default), and so is what is inside their arrays.
+    await expect.poll(() => textView(page)).toBe(head + '  port = 8080\n  list = [\n    # note\n    1,\n    2,\n  ]\n');
+    await page.locator('.seg button', { hasText: '4 空格' }).click();
+    await expect.poll(() => textView(page)).toBe(head + '    port = 8080\n    list = [\n        # note\n        1,\n        2,\n    ]\n');
+    await page.locator('.seg button', { hasText: '不缩进' }).click();
+    await expect.poll(() => textView(page)).toBe(head + 'port = 8080\nlist = [\n  # note\n  1,\n  2,\n]\n');
+    // Remembered.
+    await page.reload();
+    await editor(page).fill(TOML_SRC);
+    await expect.poll(() => textView(page)).toBe(head + 'port = 8080\nlist = [\n  # note\n  1,\n  2,\n]\n');
   });
 
   test('tree is laid out as TOML with values as written', async ({ page }) => {

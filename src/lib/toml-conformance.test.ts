@@ -67,13 +67,13 @@ describe('toml-test conformance', () => {
     const bad: string[] = [];
     for (const f of valid) {
       const doc = parseTomlDoc(files[f]);
-      for (const sort of [false, true]) {
+      for (const sort of [false, true]) for (const ind of ['', '  ']) {
         try {
-          const out = formatToml(doc, sort);
+          const out = formatToml(doc, sort, ind);
           verifyToml(doc, out, sort);
           // Formatting is stable.
-          expect(formatToml(parseTomlDoc(out), sort)).toBe(out);
-        } catch (e) { bad.push(f + (sort ? ' (sorted)' : '') + ': ' + (e as Error).message); }
+          expect(formatToml(parseTomlDoc(out), sort, ind)).toBe(out);
+        } catch (e) { bad.push(f + (sort ? ' (sorted)' : '') + (ind ? ' (indented)' : '') + ': ' + (e as Error).message); }
       }
     }
     expect(bad).toEqual([]);

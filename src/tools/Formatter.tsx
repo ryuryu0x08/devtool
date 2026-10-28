@@ -7,7 +7,7 @@ import { useSettled } from '../components/useSettled';
 import { Vis, countInvisible } from '../components/Vis';
 import { Hl } from '../components/Hl';
 import { CopyBlock } from '../components/Kv';
-import { SHOW_CHARS, head } from '../components/Panes';
+import { SHOW_CHARS, head, useOpt } from '../components/Panes';
 import { ConvertError, DateTime, Num, bytesLabel, byteLen, clipboardUnsafe, cp, errInfo, isCont, isObj, sortDeep, stats, type ErrInfo, type Obj } from '../lib/data';
 import { astEqual, dupKeys, jsonValue, parseJsonAst, printJson, sortAst, statsAst, toJsonText, type JNode } from '../lib/json';
 import { TomlMismatch, TomlSyntaxError, VerifyError, bareKey, formatToml, parseTomlDoc, toTomlText, tomlStr, tomlValue, verifyToml, walkToml, type TomlDoc } from '../lib/toml';
@@ -56,7 +56,7 @@ function compute(lang: FmtLang, src: string, indent: string, sortKeys: boolean, 
     if (e instanceof TomlSyntaxError) info.msg = f(T.tomlUnsupported, { m: info.msg });
     return { err: info };
   }
-  const text = formatToml(doc, sortKeys);
+  const text = formatToml(doc, sortKeys, indent === 'tab' ? '\t' : ' '.repeat(+indent || 0));
   try { verifyToml(doc, text, sortKeys); } catch (e) {
     return { err: plainErr(f(T.verifyFail, { p: e instanceof VerifyError ? e.path : '$' })) };
   }
@@ -164,7 +164,10 @@ export function Formatter({ lang }: { lang: FmtLang }) {
   // Large inputs are processed when typing pauses; until then nothing can be copied or converted,
   // so a result is never used for text it wasn't made from.
   const [settled, pending] = useSettled(src);
-  const r = useMemo(() => compute(lang, settled, S.indent, S.sortKeys, T), [lang, settled, S.indent, S.sortKeys, T]);
+  // TOML has its own indent choice: it has no minified form, and '0' (none) is a choice there.
+  const [tomlIndent, setTomlIndent] = useOpt<string>('toml.indent', '2', ['2', '4', 'tab', '0']);
+  const indent = lang === 'json' ? S.indent : tomlIndent;
+  const r = useMemo(() => compute(lang, settled, indent, S.sortKeys, T), [lang, settled, indent, S.sortKeys, T]);
   const ok = 'text' in r && !pending ? r : null;
   const err = 'err' in r && !pending ? r.err : null;
   const isTree = !!ok && S.view === 'tree';
@@ -243,6 +246,10 @@ export function Formatter({ lang }: { lang: FmtLang }) {
         <button className="btn" onClick={() => replace({ [lang]: SAMPLE[lang], sel: { ...S.sel, [lang]: '' } })}>{T.sample}</button>
         <button className="btn" onClick={() => replace({ [lang]: '', sel: { ...S.sel, [lang]: '' } })}>{T.clear}</button>
         <span className="sep" />
+        {lang === 'toml' && (
+          <Seg value={tomlIndent} onChange={setTomlIndent}
+            opts={[{ value: '2', label: T.indent2 }, { value: '4', label: T.indent4 }, { value: 'tab', label: 'Tab' }, { value: '0', label: T.ui.noIndent }]} />
+        )}
         {lang === 'json' && (
           // Minified text shows only in the text view, so choosing it goes there.
           <Seg value={S.indent} onChange={(k) => set(k === 'min' ? { indent: k, view: 'text' } : { indent: k })}

@@ -410,18 +410,21 @@ const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
  * line before each table). `sort` orders keys within each blank-line-separated group
  * of a table (with the comments directly above them) and within inline tables.
  */
-export function formatToml(doc: TomlDoc, sort = false): string {
+/** `ind` indents by nesting: a table header by its depth ([a] 0, [a.b] 1), the keys under it one
+ *  level deeper, a comment like the line it is above. Text inside multi-line strings is unchanged. */
+export function formatToml(doc: TomlDoc, sort = false, ind = ''): string {
   const val = (v: TVal, cur: string): string => {
     if (v.t === 'scalar') return v.raw;
     const parts = sort && v.t === 'itab' ? [...v.items].sort((a, b) => cmp(keySort(a.key!), keySort(b.key!))) : v.items;
     const [o, c] = v.t === 'arr' ? ['[', ']'] : ['{', '}'];
-    const one = (p: Part) => (p.key ? keyText(p.key) + ' = ' : '') + val(p.v, cur + '  ');
+    const step = ind || '  ';
+    const one = (p: Part) => (p.key ? keyText(p.key) + ' = ' : '') + val(p.v, cur + step);
     const comments = v.end.length > 0 || parts.some((p) => p.before.length || p.after !== undefined);
     if (!v.ml && !comments) {
       if (!parts.length) return o + c;
       return v.t === 'arr' ? '[' + parts.map(one).join(', ') + ']' : '{ ' + parts.map(one).join(', ') + ' }';
     }
-    const inner = cur + '  ';
+    const inner = cur + step;
     const out = [o];
     for (const p of parts) {
       p.before.forEach((x) => out.push(inner + x));
@@ -461,15 +464,28 @@ export function formatToml(doc: TomlDoc, sort = false): string {
     while (st > 0 && items[st - 1].t === 'comment') st--;
     blankBefore.add(st);
   });
+  // Indentation of each item: headers by depth, keys one deeper than their table's header.
+  const depth: number[] = [];
+  let entries = 0;
+  items.forEach((it, x) => {
+    if (it.t === 'table') { depth[x] = it.key.length - 1; entries = it.key.length; } else depth[x] = entries;
+  });
+  // A comment takes the indentation of the line it is above.
+  for (let x = items.length - 1, next = entries; x >= 0; x--) {
+    const it = items[x];
+    if (it.t === 'comment') depth[x] = next;
+    else if (it.t !== 'blank') next = depth[x];
+  }
   const lines: string[] = [];
   let blank = false;
   items.forEach((it, x) => {
     if (it.t === 'blank') { blank = true; return; }
     if ((blank || blankBefore.has(x)) && lines.length) lines.push('');
     blank = false;
-    if (it.t === 'comment') lines.push(it.text);
-    else if (it.t === 'table') lines.push((it.aot ? '[[' : '[') + keyText(it.key) + (it.aot ? ']]' : ']') + (it.comment !== undefined ? ' ' + it.comment : ''));
-    else lines.push(keyText(it.key) + ' = ' + val(it.v, '') + (it.comment !== undefined ? ' ' + it.comment : ''));
+    const pre = ind.repeat(depth[x]);
+    if (it.t === 'comment') lines.push(pre + it.text);
+    else if (it.t === 'table') lines.push(pre + (it.aot ? '[[' : '[') + keyText(it.key) + (it.aot ? ']]' : ']') + (it.comment !== undefined ? ' ' + it.comment : ''));
+    else lines.push(pre + keyText(it.key) + ' = ' + val(it.v, pre) + (it.comment !== undefined ? ' ' + it.comment : ''));
   });
   return lines.length ? lines.join('\n') + '\n' : '';
 }
