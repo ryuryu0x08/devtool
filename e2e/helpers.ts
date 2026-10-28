@@ -1,5 +1,8 @@
 import { expect, test as base, type Locator, type Page } from '@playwright/test';
 
+/** Host of the stand-in LLM endpoint in e2e/llm.spec.ts. */
+export const STAND_IN_API = 'https://api.test.example/';
+
 /**
  * Every test fails on a page error / console error, and on text that should never reach the
  * screen: an unfilled placeholder like "{n}", "undefined", "NaN" or "[object Object]".
@@ -8,7 +11,8 @@ export const test = base.extend<{ page: Page }>({
   page: async ({ page }, use) => {
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(String(e)));
-    page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+    // The browser logs a failed request as an error; the stand-in API used by the LLM tests fails on purpose.
+    page.on('console', (m) => { if (m.type() === 'error' && !m.location().url.startsWith(STAND_IN_API)) errors.push(m.text()); });
     await use(page);
     expect(errors, 'page errors').toEqual([]);
     const text = await page.evaluate(() => {

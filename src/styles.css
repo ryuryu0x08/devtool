@@ -319,3 +319,54 @@ body.dragging-move, body.dragging-move * { cursor: grabbing !important; user-sel
 .zoom-btn.pct { min-width: 46px; }
 .zoom-ctl.vertical .zoom-btn { min-width: 36px; padding: 0 2px; }
 .zoom-ctl.vertical .zoom-btn.pct { font-size: 10.5px; }
+/* LLM chat tester (tools/Llm.tsx) */
+.llm-cfg { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.llm-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.llm-row .field { height: 34px; font-size: 13px; }
+.llm-row .grow { flex: 1 1 220px; min-width: 0; width: auto; }
+.llm-check { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--mut); cursor: pointer; white-space: nowrap; }
+.llm-max { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--mut); white-space: nowrap; }
+.llm-max .field { width: 120px; }
+.llm-sys summary { font-size: 12.5px; color: var(--mut); cursor: pointer; }
+.llm-sys textarea { margin-top: 6px; width: 100%; resize: vertical; padding: 8px 10px; font: 13px/1.5 'Geist Sans', 'Geist', 'PingFang SC', sans-serif; }
+.llm-note { font-size: 12px; color: var(--faint); }
+.llm-chat { display: flex; flex-direction: column; overflow: hidden; min-height: 360px; }
+.llm-head { min-height: 40px; padding: 4px 10px 4px 16px; gap: 8px; }
+.llm-title { font-weight: 600; font-size: 13px; }
+.llm-head-btns { display: flex; gap: 6px; }
+.llm-log { flex: 1; min-height: 0; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+.llm-empty { margin: auto; font-size: 13px; color: var(--faint); text-align: center; max-width: 420px; }
+.llm-msg { display: flex; flex-direction: column; gap: 6px; max-width: 100%; }
+.llm-msg.user { align-self: flex-end; max-width: min(720px, 85%); }
+.llm-msg.user .llm-who { text-align: right; }
+.llm-who { font-size: 11.5px; font-weight: 600; color: var(--faint); }
+.llm-user-text { white-space: pre-wrap; word-break: break-word; font-size: 14px; line-height: 1.6; padding: 8px 12px; border-radius: 10px; background: var(--accSoft); }
+.llm-think { font-size: 12.5px; color: var(--mut); }
+.llm-think summary { cursor: pointer; color: var(--faint); }
+.llm-think-text { white-space: pre-wrap; margin-top: 6px; padding-left: 10px; border-left: 2px solid var(--line2); }
+.llm-meta { font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.llm-err { font-size: 13px; color: var(--del); overflow-wrap: anywhere; }
+.llm-warn { font-size: 13px; color: var(--chg); }
+.llm-cursor { width: 8px; height: 14px; background: var(--acc); border-radius: 2px; animation: llm-blink 1s steps(2) infinite; }
+@keyframes llm-blink { 50% { opacity: 0; } }
+.llm-input { border-top: 1px solid var(--line); padding: 10px 12px; display: flex; gap: 10px; align-items: stretch; }
+.llm-input textarea { flex: 1; resize: none; font: 14px/1.5 'Geist Sans', 'Geist', 'PingFang SC', sans-serif; padding: 8px 10px; }
+.llm-send { min-width: 84px; height: auto; }
+/* Markdown replies */
+.md { font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p, .md ul, .md ol, .md blockquote, .md pre, .md table { margin: 0 0 10px; }
+.md h1, .md h2, .md h3, .md h4 { margin: 14px 0 8px; line-height: 1.35; }
+.md h1 { font-size: 20px; } .md h2 { font-size: 17px; } .md h3, .md h4 { font-size: 15px; }
+.md ul, .md ol { padding-left: 22px; }
+.md blockquote { padding-left: 12px; border-left: 3px solid var(--line2); color: var(--mut); }
+.md code { font: 12.5px/1.6 'Geist Mono', 'PingFang SC', monospace; background: var(--sub); padding: 1px 4px; border-radius: 4px; }
+.md pre { background: var(--sub); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow: auto; }
+.md pre code { background: none; padding: 0; white-space: pre; }
+.md table { border-collapse: collapse; display: block; overflow: auto; }
+.md th, .md td { border: 1px solid var(--line); padding: 4px 10px; text-align: left; }
+.md th { background: var(--sub); }
+.md a { color: var(--acc); }
+.md img { max-width: 100%; }
+.md hr { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }

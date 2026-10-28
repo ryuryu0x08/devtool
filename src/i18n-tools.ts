@@ -101,6 +101,16 @@ export const zhT = {
     ratio: '{r} : 1', aa: 'AA 正文（≥ 4.5）', aaLarge: 'AA 大号文字（≥ 3）', aaa: 'AAA 正文（≥ 7）', aaaLarge: 'AAA 大号文字（≥ 4.5）', pass: '✓ 通过', fail: '✗ 不通过',
     sample: '示例文字 Sample text 123', alphaNote: '前景有透明度：先叠加到背景上再计算',
   },
+  llm: {
+    provider: '接口', anthropic: 'Anthropic', openai: 'OpenAI 兼容', base: '接口地址', model: '模型', modelPh: '如 claude-opus-5-5', modelPhOpenai: '如 gpt-4o，或该接口的模型名',
+    key: 'API Key', keyPh: '只发送给上面的接口地址', remember: '记住 key（存在本机浏览器）', listModels: '列出模型', listing: '正在获取…', models: '找到 {n} 个模型，在模型框里选择',
+    noModels: '这个接口没有返回模型列表', system: '系统提示词', systemPh: '可留空', maxTokens: '最大输出 tokens', maxTokensNone: '不限（由接口决定）',
+    ph: '输入消息，Enter 发送，Shift+Enter 换行', send: '发送', stop: '停止', clear: '清空对话', regen: '重新生成', you: '你', ai: '回复', thinking: '思考过程', turns: '对话 · {n} 轮',
+    needKey: '先填写 API Key', needModel: '先填写模型名', empty: '在下面输入消息开始对话。对话只保存在本页面，刷新后清空。',
+    first: '首字 {s} 秒', total: '共 {s} 秒', tokens: '输入 {i} · 输出 {o} tokens', stopReason: '结束原因：{r}',
+    stopped: '已停止', refused: '模型拒绝回答（{r}）', connect: '连不上接口：可能是地址写错、网络不通，或者该接口不允许浏览器直接访问（CORS，需要接口方允许或经代理转发）。浏览器开发者工具的控制台里有具体原因。',
+    http: 'HTTP {s}：{d}', other: '请求失败：{d}', keyNote: 'key 只在本机浏览器使用，直接发给你填写的接口，不经过本网站的服务器。',
+  },
   ts2: { ulid: '识别为 ULID · 前 10 位是毫秒时间', snow: 'Snowflake ID（{k}）', twitter: 'X / Twitter', discord: 'Discord', snowNote: '这串数字也可能是 Snowflake ID：' },
 };
 
@@ -206,6 +216,16 @@ export const enT: ToolDict = {
     mapped: 'This OKLCH colour is outside what sRGB can show; its chroma was lowered to the nearest displayable colour', rounded: 'HEX and RGB are 8-bit integers, rounded', contrast: 'Contrast', fg: 'Foreground (text)', bg: 'Background',
     ratio: '{r} : 1', aa: 'AA body text (≥ 4.5)', aaLarge: 'AA large text (≥ 3)', aaa: 'AAA body text (≥ 7)', aaaLarge: 'AAA large text (≥ 4.5)', pass: '✓ Pass', fail: '✗ Fail',
     sample: 'Sample text 示例文字 123', alphaNote: 'The foreground is translucent: laid over the background first',
+  },
+  llm: {
+    provider: 'API', anthropic: 'Anthropic', openai: 'OpenAI-compatible', base: 'Base URL', model: 'Model', modelPh: 'e.g. claude-opus-5-5', modelPhOpenai: 'e.g. gpt-4o, or the endpoint’s model name',
+    key: 'API key', keyPh: 'Sent only to the base URL above', remember: 'Remember the key (in this browser)', listModels: 'List models', listing: 'Fetching…', models: '{n} models found — pick one in the model box',
+    noModels: 'The endpoint returned no models', system: 'System prompt', systemPh: 'Optional', maxTokens: 'Max output tokens', maxTokensNone: 'No limit (endpoint decides)',
+    ph: 'Type a message — Enter sends, Shift+Enter for a new line', send: 'Send', stop: 'Stop', clear: 'Clear chat', regen: 'Regenerate', you: 'You', ai: 'Reply', thinking: 'Thinking', turns: 'Chat · {n} turns',
+    needKey: 'Enter an API key first', needModel: 'Enter a model name first', empty: 'Type a message below to start. The chat stays on this page only and is gone after a reload.',
+    first: 'first token {s} s', total: 'total {s} s', tokens: 'in {i} · out {o} tokens', stopReason: 'stop: {r}',
+    stopped: 'Stopped', refused: 'The model declined to answer ({r})', connect: 'Can’t reach the endpoint: the URL may be wrong, the network down, or the endpoint doesn’t allow browsers to call it directly (CORS — the endpoint must allow it, or go through a proxy). The browser’s developer console shows the exact reason.',
+    http: 'HTTP {s}: {d}', other: 'Request failed: {d}', keyNote: 'The key is used only in this browser and sent straight to the endpoint you entered, never to this site’s server.',
   },
   ts2: { ulid: 'Detected ULID · the first 10 characters are milliseconds', snow: 'Snowflake ID ({k})', twitter: 'X / Twitter', discord: 'Discord', snowNote: 'This number may also be a Snowflake ID:' },
 };

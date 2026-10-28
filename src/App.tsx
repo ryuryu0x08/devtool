@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from 'react';
 import { TOOLS, f, type ToolId } from './i18n';
 import {
   AppCtx, CONFIG, INPUT_KEYS, WIDE_MIN, dictFor, initState, lsSet, pickPrefs, type Ctx, type Patch, type State,
@@ -49,6 +49,9 @@ const TEXT_EXT = /\.(json|toml|ya?ml|xml|sql|txt|csv|tsv|log|md|ini|conf|cfg|env
 /** Files held in memory (Base64 / Hash / Hex / Gzip): replacing one can be undone like replacing text. */
 const FILE_KEYS: (keyof State)[] = ['hashFile', 'b64File', 'hexFile', 'gzFile'];
 /** Each tool's inputs: a tool that fails unexpectedly offers to clear them (undo brings them back). */
+// Loaded when opened: the API SDKs and Markdown renderer it needs are large.
+const Llm = lazy(() => import('./tools/Llm'));
+
 const TOOL_INPUTS: Partial<Record<ToolId, (keyof State)[]>> = {
   ts: ['tsIn', 'tmIn'], qrgen: ['qrText'], qrscan: ['scan'], json: ['json'], toml: ['toml'], diff: ['diffA', 'diffB'],
   b64: ['b64In', 'b64File'], hash: ['hashIn', 'hashFile', 'hashCheck'], url: ['urlIn'], urlp: ['urlpIn'], jwt: ['jwtIn', 'jwtKey'],
@@ -541,6 +544,7 @@ export function App() {
             {S.tool === 'uuid' && <Uuid />}
             {S.tool === 'cron' && <Cron />}
             {S.tool === 'color' && <Color />}
+            {S.tool === 'llm' && <Suspense fallback={null}><Llm /></Suspense>}
             </ToolBoundary>
           </div>
         </main>
