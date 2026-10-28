@@ -3,9 +3,10 @@
 // the pointer, and the layout switches as soon as it is carried a short way down (below) or up
 // or right (beside), the input pane moving to make room; a label on it says where it will land.
 // On release it settles into its place, scrolled into view. A click on the handle switches too.
-// The input has one height in both layouts, so switching doesn't change it (a longer result can be
-// taller). Side by side, the bar below sets it for both panes; stacked, the bar between them sets it
-// and the bar below the result sets the result's own (all remembered).
+// The input has one height in both layouts, so switching doesn't change it, and the result never
+// sets the height (a longer result scrolls inside). Side by side, the bar below sets it for both
+// panes; stacked, the bar between them sets it and the bar below the result sets the result's own
+// (all remembered).
 // Narrow screens always stack.
 import { useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
 import { useApp } from '../store';
@@ -240,19 +241,18 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
   const stored = (v: number, min: number) => (Number.isFinite(v) && v > 0 ? Math.max(min, v) : 0);
   const h = liveH ?? stored(inH, MIN_H);
   const ho = liveOut ?? stored(outH, MIN_OUT);
-  const outSized = shown === 'col' && ho > 0;
   const rowSized = shown === 'row' && h > 0;
   const grid: CSSProperties = shown === 'row'
     ? { display: 'grid', gridTemplateColumns: `minmax(0, ${r}fr) ${GAP}px minmax(0, ${1 - r}fr)`, gridTemplateRows: rowSized ? `${h}px auto` : undefined, alignItems: 'stretch' }
     : { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)' };
   const carrying = target !== null;
-  // Stacked: the input has its height (by default, the shared default height); the result is at
-  // least as tall unless it has its own.
+  // Stacked: the input has its height (by default, the shared default height); the result is as
+  // tall unless it has its own.
   const inStyle: CSSProperties | undefined = shown === 'col' ? { height: h || 'var(--pane-h)' } : undefined;
-  const outStyle: CSSProperties | undefined = shown === 'col' ? (outSized ? { height: ho } : { minHeight: h || 'var(--pane-h)' }) : undefined;
+  const outStyle: CSSProperties | undefined = shown === 'col' ? { height: ho || h || 'var(--pane-h)' } : undefined;
 
   return (
-    <div ref={box} className={'split ' + shown + (outSized ? ' out-sized' : '') + (rowSized ? ' row-sized' : '')} style={grid} data-layout={shown}>
+    <div ref={box} className={'split ' + shown + (rowSized ? ' row-sized' : '')} style={grid} data-layout={shown}>
       <div ref={paneA} className="split-pane" style={inStyle}>{a}</div>
       {shown === 'col' && (
         <div className="split-hgutter" role="separator" aria-orientation="horizontal" title={T.ui.resizeH}

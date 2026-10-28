@@ -335,7 +335,8 @@ test('side by side, the bar below sets the height of both: the content fills it,
   await page.mouse.move(p.x, p.y + 400, { steps: 6 });
   await page.mouse.up();
   expect(Math.abs((await box(page, 1)).height - (a.height + 400))).toBeLessThan(2);
-  expect(await scroller()).toBeGreaterThan(s0 + 150);
+  // The scrolling area takes all of it (the card's header stays the same).
+  expect(Math.abs((await box(page, 1)).height - (await scroller()) - (h0 - s0))).toBeLessThan(2);
   // Switching layout keeps the input's height, and back.
   const set = (await box(page, 0)).height;
   await page.locator('.split-grip').click();
@@ -348,4 +349,23 @@ test('side by side, the bar below sets the height of both: the content fills it,
   p = await bar();
   await page.mouse.dblclick(p.x, p.y);
   expect(Math.abs((await box(page, 0)).height - h0)).toBeLessThan(2);
+});
+
+test('what the result says never changes the size of the panes: minified, long or empty', async ({ page }) => {
+  await open(page, 'JSON 格式化');
+  const long = JSON.stringify(Object.fromEntries(Array.from({ length: 80 }, (_, i) => ['key' + i, i])));
+  const sizes = async () => [(await box(page, 0)).height, (await box(page, 1)).height].map(Math.round);
+  for (const lay of ['row', 'col']) {
+    if ((await layout(page)) !== lay) { await page.locator('.split-grip').click(); await page.waitForFunction(() => document.getAnimations().length === 0); }
+    await page.locator('textarea').first().fill(long);
+    await page.locator('.seg button', { hasText: '2 空格' }).click();
+    const s0 = await sizes();
+    expect(s0[0], lay).toBe(s0[1]);
+    await page.locator('.seg button', { hasText: '压缩' }).click();
+    expect(await sizes(), lay).toEqual(s0);
+    await page.locator('.seg button', { hasText: '4 空格' }).click();
+    expect(await sizes(), lay).toEqual(s0);
+    await page.locator('textarea').first().fill('1');
+    expect(await sizes(), lay).toEqual(s0);
+  }
 });
