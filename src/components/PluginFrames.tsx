@@ -11,6 +11,7 @@ import { useApp } from '../store';
 import { useZoom } from './Zoom';
 import { delData, getData, nameOf, plugins, removePlugin, setData, setPlugins, subscribe, type Plugin } from '../lib/plugins';
 import { download } from './Panes';
+import { proxyCommand } from '../lib/proxyCommand';
 
 const FETCH_MS = 30000;
 /** The toolbox's colours, passed to the plugins as CSS variables. */
@@ -57,6 +58,7 @@ const BRIDGE = `(() => {
   window.toolbox = {
     fetch: (url, init) => call('fetch', { url: String(url), init: init || {} }).then((r) => ({ ...r, json: () => JSON.parse(r.text) })),
     storage: { get: (k) => call('get', { k }), set: (k, v) => call('set', { k, v }), remove: (k) => call('del', { k }) },
+    proxyCommand: (target, port, python) => call('proxyCommand', { target: String(target), port: port === undefined ? 8787 : Number(port), python: python === 'python' ? 'python' : 'python3' }),
     copy: (text) => call('copy', { text: String(text) }),
     toast: (text) => call('toast', { text: String(text) }),
   };
@@ -160,6 +162,7 @@ export default function PluginFrames({ active }: { active: string | null }) {
         if (d.op === 'get') return reply({ result: await getData(id, String(a.k)) });
         if (d.op === 'set') { await setData(id, String(a.k), a.v); return reply({ result: true }); }
         if (d.op === 'del') { await delData(id, String(a.k)); return reply({ result: true }); }
+        if (d.op === 'proxyCommand') return reply({ result: await proxyCommand(String(a.target), Number(a.port), location.origin, a.python === 'python' ? 'python' : 'python3') });
         if (d.op === 'copy') { copy(String(a.text)); return reply({ result: true }); }
         if (d.op === 'toast') { toast(String(a.text)); return reply({ result: true }); }
         reply({ error: 'unknown call: ' + d.op });

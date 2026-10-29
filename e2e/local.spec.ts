@@ -83,6 +83,13 @@ test('a plugin is isolated: it can’t read the toolbox page or its storage; it 
   await frame(page).locator('#go').waitFor();
   const fr2 = page.frames().find((x) => x !== page.mainFrame())!;
   expect(await fr2.evaluate(() => (window as unknown as TB).toolbox.storage.get('n'))).toEqual({ a: [1, 2] });
+  // The local forwarder as one command, for the toolbox's own address.
+  type PC = { toolbox: { proxyCommand: (t: string, p?: number, py?: string) => Promise<{ command: string; local: string }> } };
+  const origin = await page.evaluate(() => location.origin);
+  const r = await fr2.evaluate(() => (window as unknown as PC).toolbox.proxyCommand('http://10.1.2.3/api/v1/billing/usage', 8800, 'python'));
+  expect(r.local).toBe('http://127.0.0.1:8800/api/v1/billing/usage');
+  expect(r.command).toMatch(new RegExp(`^python -c ".*" "http://10\\.1\\.2\\.3" --port 8800 --origin "${origin.replace(/[.]/g, '\\.')}"$`));
+  await expect(fr2.evaluate(() => (window as unknown as PC).toolbox.proxyCommand('ftp://x'))).rejects.toThrow('expected http:// or https://');
 });
 
 test('plugins keep running while another tool is shown, and start on load whichever tool it opens on', async ({ page }) => {

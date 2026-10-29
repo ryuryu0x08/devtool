@@ -164,6 +164,8 @@ const M = [
   ['local: styles can show what a plugin hides', 'src/components/PluginFrames.tsx', '[hidden] { display: none !important; }', '', 'tool of its own'],
   ['local: deleting asks once', 'src/components/PluginFrames.tsx', '        if (!sure) { setSure(true); return; }\n', '', 'delete asks twice'],
   ['local: an unreachable API is not explained', 'src/components/PluginFrames.tsx', ": 'connect: ' + String((err as Error)?.message ?? err) });", ": String((err as Error)?.message ?? err) });", 'can’t be reached'],
+  ['local: the forwarder command is for another address', 'src/components/PluginFrames.tsx', 'Number(a.port), location.origin,', "Number(a.port), 'http://public-pages.ryuryu.fun:8081',", 'is isolated'],
+  ['local: the forwarder command drops the script', 'src/lib/proxyCommand.ts', "exec(zlib.decompress(base64.b64decode('${await zlibB64(script)}')))", "exec(zlib.decompress(base64.b64decode('${await zlibB64(script.slice(0, -200))}')))", 'unit'],
   ['layout: the carried result does not say where it lands', 'src/components/Split.tsx', "{shown === 'row' ? T.ui.dropBeside : T.ui.dropBelow}", "{''}", 'a short carry'],
   ['layout: a result dropped below stays out of view', 'src/components/Split.tsx', "      if (!cancel && tgt === 'col') requestAnimationFrame(reveal);", '', 'a short carry'],
   ['layout: stacked, a tall input pushes the result off the screen', 'src/components/Split.tsx', "{ height: h || 'var(--pane-h)' }", '{ height: h || undefined }', 'fill the window'],

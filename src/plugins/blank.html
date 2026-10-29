@@ -18,6 +18,7 @@
     <li><code>await toolbox.fetch(url, { method, headers, body })</code> → <code>{ ok, status, headers, text, json() }</code>，由工具箱代发（连不上时抛出 <code>connect: …</code>）</li>
     <li><code>await toolbox.storage.get(key)</code> / <code>set(key, value)</code> / <code>remove(key)</code>：这个插件自己的存储，保存在本机浏览器</li>
     <li><code>toolbox.copy(text)</code>、<code>toolbox.toast(text)</code></li>
+    <li><code>await toolbox.proxyCommand(接口地址, 端口 = 8787, 'python3' | 'python')</code> → <code>{ command, local }</code>：接口不允许浏览器直接访问时，<code>command</code> 是一行可粘贴到终端运行的本地转发程序，<code>local</code> 是之后要请求的 <code>http://127.0.0.1:端口/…</code> 地址</li>
   </ul>
   <input id="url" placeholder="https://… 一个返回 JSON 的地址" style="width: 100%">
   <p><button class="btn primary" id="go">请求</button></p>
