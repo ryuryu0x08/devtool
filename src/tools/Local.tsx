@@ -37,11 +37,6 @@ export default function Local() {
           <button className="btn inv" disabled={!html.trim()} onClick={install}>{html.trim() ? f(L.installAs, { n: nameOf(html) }) : L.install}</button>
         </div>
       </section>
-      <section className="card local-intro">
-        <p>{L.intro}</p>
-        <p>{L.isolation}</p>
-        <p className="local-proxy">{L.proxy} <code>{L.proxyCmd}</code> {L.proxyThen}</p>
-      </section>
     </div>
   );
 }

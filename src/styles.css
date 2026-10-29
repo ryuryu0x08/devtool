@@ -371,10 +371,6 @@ body.dragging-move, body.dragging-move * { cursor: grabbing !important; user-sel
 .md img { max-width: 100%; }
 .md hr { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
 /* Local plugins (tools/Local.tsx, components/PluginFrames.tsx) */
-.local-intro { padding: 18px; display: flex; flex-direction: column; gap: 10px; font-size: 13.5px; line-height: 1.7; }
-.local-intro p { margin: 0; color: var(--mut); max-width: 760px; }
-.local-proxy { font-size: 12px; color: var(--faint); }
-.local-proxy code { font: 12px 'Geist Mono', monospace; background: var(--sub); padding: 1px 5px; border-radius: 4px; color: var(--ink); }
 .local-editor { display: flex; flex-direction: column; overflow: hidden; }
 .local-hint { font-size: 12px; color: var(--faint); }
 .local-editor textarea { min-height: 320px; height: 50vh; padding: 14px 16px; font: 13px/1.6 'Geist Mono', monospace; white-space: pre; border: 0; resize: vertical; }
