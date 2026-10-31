@@ -3,7 +3,7 @@
 // unchanged. Unknown or broken input just gets fewer colours.
 
 export type HlLang = 'json' | 'toml' | 'yaml' | 'xml' | 'sql';
-export type Kind = 'key' | 'str' | 'num' | 'bool' | 'date' | 'kw' | 'fn' | 'com' | 'punc' | 'tag' | 'attr' | 'var';
+export type Kind = 'key' | 'str' | 'num' | 'bool' | 'date' | 'kw' | 'fn' | 'com' | 'punc' | 'tag' | 'attr' | 'var' | 'null';
 export type Tok = { t: string; k?: Kind };
 
 /** Adds a piece, joining it to the previous one when they look the same (fewer elements). */
@@ -43,7 +43,8 @@ function json(s: string): Tok[] {
     // A string followed by ":" is a key.
     [/"(?:[^"\\\n]|\\.)*"?/y, (_m, src, end) => (/^\s*:/.test(src.slice(end, end + 64)) ? 'key' : 'str')],
     [NUM, 'num'],
-    [/(?:true|false|null)\b/y, 'bool'],
+    [/(?:true|false)\b/y, 'bool'],
+    [/null\b/y, 'null'],
     [/[{}[\],:]/y, 'punc'],
   ]);
 }
@@ -69,7 +70,8 @@ function toml(s: string): Tok[] {
 
 /** A plain YAML value: a number, true/false/null, or else a string. */
 function yamlScalar(v: string): Kind {
-  if (/^(?:null|Null|NULL|~|true|True|TRUE|false|False|FALSE)$/.test(v)) return 'bool';
+  if (/^(?:null|Null|NULL|~)$/.test(v)) return 'null';
+  if (/^(?:true|True|TRUE|false|False|FALSE)$/.test(v)) return 'bool';
   if (/^[-+]?(?:\d[\d_]*(?:\.\d*)?(?:[eE][-+]?\d+)?|\.\d+(?:[eE][-+]?\d+)?|0x[0-9a-fA-F]+|0o[0-7]+|\.inf|\.Inf|\.INF|\.nan|\.NaN|\.NAN)$/.test(v)) return 'num';
   if (/^\d{4}-\d{2}-\d{2}(?:[Tt ]\d{1,2}:\d{2}:\d{2}(?:\.\d+)?(?:[ \t]*(?:Z|[-+]\d{1,2}(?::\d{2})?))?)?$/.test(v)) return 'date';
   return 'str';

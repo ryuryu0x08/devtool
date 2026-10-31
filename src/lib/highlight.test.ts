@@ -48,7 +48,8 @@ describe('highlight', () => {
     expect(of('json', s, 'key')).toEqual(['"a"', '"b"', '"c"']);
     expect(of('json', s, 'str')).toEqual(['"x"']);
     expect(of('json', s, 'num')).toEqual(['1', '-2.5e3']);
-    expect(of('json', s, 'bool')).toEqual(['true', 'null']);
+    expect(of('json', s, 'bool')).toEqual(['true']);
+    expect(of('json', s, 'null')).toEqual(['null']);
   });
 
   it('TOML: tables, keys (dotted too), strings, dates, numbers, comments', () => {
@@ -66,7 +67,8 @@ describe('highlight', () => {
     expect(of('yaml', s, 'key')).toEqual(['name', 'port', 'on', 'nothing', 'url', 'list', 'key', 'ref', 'text', 'flow', 'when']);
     expect(of('yaml', s, 'str')).toEqual(['my app', 'http://a.b/c#d', 'a, b', '"q"', 'line one: x', '# not a comment', 'x']);
     expect(of('yaml', s, 'num')).toEqual(['8080', '1']);
-    expect(of('yaml', s, 'bool')).toEqual(['true', '~']);
+    expect(of('yaml', s, 'bool')).toEqual(['true']);
+    expect(of('yaml', s, 'null')).toEqual(['~']);
     expect(of('yaml', s, 'com')).toEqual(['# c']);
     expect(of('yaml', s, 'var')).toEqual(['*base']);
     expect(of('yaml', s, 'date')).toEqual(['2024-01-02']);

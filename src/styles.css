@@ -242,7 +242,7 @@ button.caret { border: 0; background: transparent; padding: 0; font: inherit; fo
 .hl-date, .hl-var { color: var(--date); }
 .hl-kw { color: var(--kw); font-weight: 500; }
 .hl-fn { color: var(--fn); }
-.hl-punc { color: var(--faint); }
+.hl-punc, .hl-null { color: var(--faint); }
 .hl-com { color: var(--faint); font-style: italic; }
 /* Input / result split (components/Split.tsx) */
 .split-pane { display: flex; flex-direction: column; min-width: 0; position: relative; }

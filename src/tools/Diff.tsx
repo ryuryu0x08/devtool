@@ -84,7 +84,7 @@ function buildDiff(root: DiffNode, col: Record<string, boolean>, onlyDiff: boole
     (nd.keyFmt ? 1 : 0) + (nd.ch ? nd.ch.reduce((a, c) => a + cnt(c), 0) : nd.st === 'same' ? (nd.fmt ? 1 : 0) : 1);
   const base = (key: DiffNode['key'], depth: number, isIdx: boolean, keyB: DiffNode['key'] = key): DRow => ({
     indent: depth * 18, keyText: key === null ? '' : !isIdx ? JSON.stringify(key) : keyB === key || keyB == null ? String(key) : key + '→' + keyB,
-    keyColor: isIdx ? 'var(--faint)' : 'var(--ink)', colon: key === null ? '' : ': ', mark: '', markColor: 'var(--faint)', bg: 'transparent',
+    keyColor: isIdx ? 'var(--faint)' : 'var(--acc)', colon: key === null ? '' : ': ', mark: '', markColor: 'var(--faint)', bg: 'transparent',
     caret: '', meta: '', deco: 'none', isChg: false, newText: '', newColor: 'var(--add)', valText: '', valColor: 'var(--ink)',
   });
   const walk = (nd: DiffNode, depth: number, isIdx: boolean) => {

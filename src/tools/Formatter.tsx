@@ -5,7 +5,8 @@ import { useApp, type FmtLang } from '../store';
 import { Seg } from '../components/Seg';
 import { useSettled } from '../components/useSettled';
 import { Vis, countInvisible } from '../components/Vis';
-import { Hl } from '../components/Hl';
+import { HL_MAX, Hl } from '../components/Hl';
+import { highlight } from '../lib/highlight';
 import { CopyBlock } from '../components/Kv';
 import { SHOW_CHARS, head, useOpt } from '../components/Panes';
 import { ConvertError, DateTime, Num, bytesLabel, byteLen, clipboardUnsafe, cp, errInfo, isCont, isObj, sortDeep, stats, type ErrInfo, type Obj } from '../lib/data';
@@ -66,6 +67,8 @@ function compute(lang: FmtLang, src: string, indent: string, sortKeys: boolean, 
 interface Row {
   n: number; id: string; path: string; indent: number; caret: string; keyText: string; keyColor: string; colon: string;
   valText: string; valColor: string; comma: string; meta: string; selectable: boolean; foldable: boolean;
+  /** An inline TOML array or table: coloured piece by piece, as in the text view. */
+  valToml?: boolean;
 }
 
 const COLOR = { str: 'var(--str)', num: 'var(--num)', bool: 'var(--bool)', date: 'var(--date)', faint: 'var(--faint)' };
@@ -79,7 +82,7 @@ function buildJsonTree(ast: JNode, col: Record<string, boolean>, T: Dict) {
     sel[id] = { path, node: x };
     const comma = last ? '' : ',';
     const base = {
-      id, path, indent: depth * 18, keyText, keyColor: dup ? 'var(--chg)' : isIdx ? 'var(--faint)' : 'var(--ink)',
+      id, path, indent: depth * 18, keyText, keyColor: dup ? 'var(--chg)' : isIdx ? 'var(--faint)' : 'var(--acc)',
       colon: keyText ? ': ' : '', selectable: true, foldable: false, caret: '', meta: dup ? T.dupMark : '',
     };
     if (x.t === 'obj' || x.t === 'arr') {
@@ -108,6 +111,21 @@ function buildJsonTree(ast: JNode, col: Record<string, boolean>, T: Dict) {
   return { rows, sel, capped: rows.length >= TREE_CAP };
 }
 
+/** An inline TOML value coloured as in the text view: read after "x = " so it is taken as a value. */
+function TomlInline({ text }: { text: string }) {
+  const toks = useMemo(() => {
+    if (text.length > HL_MAX) return null;
+    let skip = 4;
+    return highlight('toml', 'x = ' + text).flatMap((t) => {
+      const cut = Math.min(skip, t.t.length);
+      skip -= cut;
+      return cut === t.t.length ? [] : [{ ...t, t: t.t.slice(cut) }];
+    });
+  }, [text]);
+  if (!toks) return <Vis text={text} />;
+  return <>{toks.map((t, i) => <span key={i} className={t.k ? 'hl-' + t.k : undefined}><Vis text={t.t} /></span>)}</>;
+}
+
 function scalarColor(y: unknown) {
   return typeof y === 'string' ? COLOR.str : y instanceof Num ? COLOR.num : y instanceof DateTime ? COLOR.date : COLOR.bool;
 }
@@ -118,13 +136,13 @@ function buildTomlTree(v: Obj, raw: Map<string, string>, col: Record<string, boo
   let n = 0;
   const row = (r: Partial<Row> & Pick<Row, 'path'>) => {
     if (rows.length >= TREE_CAP) return;
-    rows.push({ n: ++n, id: r.path, indent: 0, caret: '', keyText: '', keyColor: 'var(--ink)', colon: '', valText: '', valColor: 'var(--ink)', comma: '', meta: '', selectable: true, foldable: false, ...r });
+    rows.push({ n: ++n, id: r.path, indent: 0, caret: '', keyText: '', keyColor: 'var(--acc)', colon: '', valText: '', valColor: 'var(--ink)', comma: '', meta: '', selectable: true, foldable: false, ...r });
   };
   walkToml(
     v,
     (k, y, path, depth) => {
       sel[path] = { path, value: y };
-      row({ path, indent: depth * 18, keyText: bareKey(k), colon: ' = ', valText: tomlValue(y, path, raw), valColor: isCont(y) ? 'var(--ink)' : scalarColor(y) });
+      row({ path, indent: depth * 18, keyText: bareKey(k), colon: ' = ', valText: tomlValue(y, path, raw), valColor: isCont(y) ? 'var(--ink)' : scalarColor(y), valToml: isCont(y) });
     },
     (label, obj, path, depth) => {
       sel[path] = { path, value: obj };
@@ -305,7 +323,7 @@ export function Formatter({ lang }: { lang: FmtLang }) {
                       <span className="caret" onClick={row.foldable ? (e) => { e.stopPropagation(); toggleFold(row.id); } : undefined}>{row.caret}</span>
                       <span style={{ color: row.keyColor, whiteSpace: 'pre' }}><Vis text={row.keyText} /></span>
                       <span style={{ color: 'var(--faint)', whiteSpace: 'pre' }}>{row.colon}</span>
-                      <span style={{ color: row.valColor, wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}><Vis text={row.valText} /></span>
+                      <span style={{ color: row.valColor, wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>{row.valToml ? <TomlInline text={row.valText} /> : <Vis text={row.valText} />}</span>
                       <span style={{ color: 'var(--faint)' }}>{row.comma}</span>
                       <span className="meta">{row.meta}</span>
                     </div>

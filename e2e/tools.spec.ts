@@ -270,6 +270,24 @@ test.describe('formatting', () => {
     await expect(page.locator('.jwt-part .hl-key').first()).toHaveText('"sub"');
   });
 
+  test('the structure view uses the same colours as the text view', async ({ page }) => {
+    const color = (l: import('@playwright/test').Locator) => l.evaluate((e) => getComputedStyle(e).color);
+    const tree = async (text: string) => color(page.locator('.trow .body span', { hasText: new RegExp('^' + text.replace(/[[\]]/g, '\\$&') + '$') }).first());
+    const flat = async (cls: string, text: string) => color(page.locator('.' + cls, { hasText: text }).first());
+    const view = (name: string) => page.getByRole('button', { name, exact: true }).click();
+    await open(page, 'JSON 格式化');
+    await input(page).fill('{"k": "v", "n": 1, "b": true, "z": null}');
+    const t = [await tree('"k"'), await tree('"v"'), await tree('1'), await tree('true'), await tree('null')];
+    await view('文本');
+    expect(t).toEqual([await flat('hl-key', '"k"'), await flat('hl-str', '"v"'), await flat('hl-num', '1'), await flat('hl-bool', 'true'), await flat('hl-null', 'null')]);
+    await nav(page, 'TOML 格式化');
+    await input(page).fill('k = [8001, "a"]');
+    await view('文本');
+    const x = [await flat('hl-key', 'k'), await flat('hl-num', '8001'), await flat('hl-str', '"a"')];
+    await view('结构');
+    expect([await tree('k'), await color(page.locator('.trow .hl-num')), await color(page.locator('.trow .hl-str'))]).toEqual(x);
+  });
+
   test('JSON Schema: problems with paths; the box with a syntax error is named', async ({ page }) => {
     await open(page, 'JSON Schema 校验');
     await input(page).fill('{"type":"object","required":["id"],"properties":{"id":{"type":"integer"}},"additionalProperties":false}');
