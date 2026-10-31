@@ -162,7 +162,7 @@ export function Schema() {
               : res && !res.valid ? (
                 <table className="tbl schema-issues">
                   <tbody>{res.issues.map((i, k) => (
-                    <tr key={k}><td className="mono" style={{ whiteSpace: 'nowrap' }}>{i.path}</td><td>{i.message}</td><td className="mono" style={{ color: 'var(--faint)' }}>{i.schemaPath}</td></tr>
+                    <tr key={k}><td className="mono" style={{ whiteSpace: 'nowrap', color: 'var(--acc)' }}>{i.path}</td><td>{i.message}</td><td className="mono" style={{ color: 'var(--faint)' }}>{i.schemaPath}</td></tr>
                   ))}</tbody>
                 </table>
               ) : null}

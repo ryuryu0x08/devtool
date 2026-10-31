@@ -9,7 +9,7 @@ import { HL_MAX, Hl } from '../components/Hl';
 import { highlight } from '../lib/highlight';
 import { CopyBlock } from '../components/Kv';
 import { SHOW_CHARS, head, useOpt } from '../components/Panes';
-import { ConvertError, DateTime, Num, bytesLabel, byteLen, clipboardUnsafe, cp, errInfo, isCont, isObj, sortDeep, stats, type ErrInfo, type Obj } from '../lib/data';
+import { ConvertError, DateTime, Num, byteLen, clipboardUnsafe, cp, errInfo, isCont, isObj, sortDeep, stats, type ErrInfo, type Obj } from '../lib/data';
 import { astEqual, dupKeys, jsonValue, parseJsonAst, printJson, sortAst, statsAst, toJsonText, type JNode } from '../lib/json';
 import { TomlMismatch, TomlSyntaxError, VerifyError, bareKey, formatToml, parseTomlDoc, toTomlText, tomlStr, tomlValue, verifyToml, walkToml, type TomlDoc } from '../lib/toml';
 
@@ -284,7 +284,7 @@ export function Formatter({ lang }: { lang: FmtLang }) {
         <section className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div className="card-head" style={{ height: 44 }}>
             <span style={{ fontWeight: 600 }}>{T.input} {L}</span>
-            <span className="mono" style={{ fontSize: 12, color: 'var(--faint)' }}>{bytesLabel(byteLen(src))}</span>
+            <span className="mono" style={{ fontSize: 12, color: 'var(--faint)' }}>{src && f(T.bytes, { n: byteLen(src).toLocaleString('en-US') })}</span>
           </div>
           <textarea data-autofocus="1" className="area" value={src} onChange={(e) => set({ [lang]: e.target.value })} spellCheck={false}
             placeholder={f(T.fmtPh, { L })}

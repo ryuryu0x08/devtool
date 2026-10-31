@@ -235,7 +235,7 @@ export function Diff() {
                 <span style={{ display: 'flex', alignItems: 'baseline', gap: 10, flex: '0 1 280px', minWidth: 0, flexWrap: 'wrap' }}>
                   <span className="mono" style={{ width: 14, flex: 'none', fontSize: 13, fontWeight: 700, color: it.color }}>{it.mark}</span>
                   <button className="mono path-btn" onClick={() => copy(it.path)} title={T.copyPath}
-                    style={{ border: 0, background: 'transparent', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 500, textAlign: 'left', wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}><Vis text={it.path} /></button>
+                    style={{ border: 0, background: 'transparent', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--acc)', textAlign: 'left', wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}><Vis text={it.path} /></button>
                   {it.pathB && (
                     <button className="mono path-btn" onClick={() => copy(it.pathB!)} title={T.copyPath}
                       style={{ border: 0, background: 'transparent', padding: 0, cursor: 'pointer', fontSize: 12, color: 'var(--faint)', textAlign: 'left', wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>→ <Vis text={it.pathB} /></button>

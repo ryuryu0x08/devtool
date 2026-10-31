@@ -111,7 +111,7 @@ export function Base64() {
 
       <Pair>
         <Source title={T.input} placeholder={enc ? T.b64.encPh : T.b64.decPh} text={S.b64In}
-          size={file ? '' : f(T.bytes, { n: (textBytes(S.b64In, enc ? S.b64Eol : 'lf')?.length ?? 0).toLocaleString('en-US') })}
+          size={file || !S.b64In ? '' : f(T.bytes, { n: (textBytes(S.b64In, enc ? S.b64Eol : 'lf')?.length ?? 0).toLocaleString('en-US') })}
           onText={(v) => set({ b64In: v, ...(v ? {} : { b64Cr: false }) })}
           file={file} onFile={(fl) => set({ b64File: fl, b64Cr: false })}
           eol={S.b64Eol} onEol={enc ? (e) => set({ b64Eol: e }) : undefined} cr={enc && S.b64Cr} onCr={() => set({ b64Cr: true })}

@@ -198,7 +198,7 @@ button.caret { border: 0; background: transparent; padding: 0; font: inherit; fo
 .dropzone:hover { border-color: var(--acc); background: var(--accSoft); }
 
 .now-btn:hover { border-color: var(--acc) !important; color: var(--acc) !important; background: var(--card); }
-.path-btn:hover { color: var(--acc); }
+.path-btn:hover { text-decoration: underline; }
 
 /* Tools: shared layout */
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

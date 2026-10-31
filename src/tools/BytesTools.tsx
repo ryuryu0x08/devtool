@@ -61,7 +61,7 @@ export function Hex() {
       </Toolbar>
       <Pair>
         <Source title={T.input} placeholder={enc ? T.hex.ph : T.hex.hexPh} text={S.hexIn}
-          size={file ? '' : enc ? f(T.bytes, { n: (textBytes(S.hexIn, 'lf')?.length ?? 0).toLocaleString('en-US') }) : ''}
+          size={file || !S.hexIn ? '' : enc ? f(T.bytes, { n: (textBytes(S.hexIn, 'lf')?.length ?? 0).toLocaleString('en-US') }) : f(T.ui.chars, { n: [...S.hexIn].length.toLocaleString('en-US') })}
           onText={(v) => set({ hexIn: v })} file={file} onFile={enc ? (fl) => set({ hexFile: fl }) : undefined}
           onFirstPaste={(t) => {
             const m = looksHex(t) ? 'dec' : 'enc';
@@ -148,7 +148,7 @@ export function Gzip() {
       </Toolbar>
       <Pair>
         <Source title={T.input} placeholder={zip ? T.gzip.ph : T.gzip.unPh} text={S.gzIn}
-          size={file ? '' : f(T.ui.chars, { n: [...S.gzIn].length.toLocaleString('en-US') })}
+          size={file || !S.gzIn ? '' : zip ? f(T.bytes, { n: (textBytes(S.gzIn, 'lf')?.length ?? 0).toLocaleString('en-US') }) : f(T.ui.chars, { n: [...S.gzIn].length.toLocaleString('en-US') })}
           onText={(v) => set({ gzIn: v })} file={file} onFile={(fl) => set({ gzFile: fl })}
           onFirstPaste={(t) => { if (mode === 'zip' && looksZData(t)) setMode('unzip'); }}
           onClear={() => replace({ gzIn: '', gzFile: null })} />

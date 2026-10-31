@@ -40,8 +40,8 @@ export function QrGen() {
         <div className="card-head" style={{ minHeight: 0, padding: '12px 16px' }}>
           <span style={{ fontWeight: 600 }}>{T.qrContent}</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span className="mono" style={{ fontSize: 12, color: 'var(--faint)' }}>{f(T.bytes, { n: byteLen(S.qrText) })}</span>
-            <button className="btn" onClick={() => replace({ qrText: '' })} style={{ height: 28, padding: '0 10px', borderRadius: 7, fontSize: 12, fontWeight: 400, borderColor: 'var(--line)', background: 'transparent' }}>{T.clear}</button>
+            <span className="mono" style={{ fontSize: 12, color: 'var(--faint)' }}>{S.qrText && f(T.bytes, { n: byteLen(S.qrText).toLocaleString('en-US') })}</span>
+            <button className="btn sm" onClick={() => replace({ qrText: '' })}>{T.clear}</button>
           </span>
         </div>
         <textarea data-autofocus="1" className="area" value={S.qrText} onChange={(e) => set({ qrText: e.target.value })} spellCheck={false}
