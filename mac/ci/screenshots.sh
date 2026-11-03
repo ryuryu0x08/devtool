@@ -75,7 +75,7 @@ echo "--- copied with ⌘A ⌘C: $(pbpaste)"
 printf 'http://127.0.0.1:9931/pasted' | pbcopy
 osa -e 'tell application "System Events" to keystroke "a" using command down' -e 'tell application "System Events" to keystroke "v" using command down' || true
 sleep 2
-echo "--- address after ⌘V: $(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["url"])' "$DIR/config.json")"
+echo "--- model API after ⌘V: $(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["baseURL"])' "$DIR/config.json")"
 screencapture -x "$SHOTS/pasted.png"
 pkill -x QuotaBar || true
 sleep 1
