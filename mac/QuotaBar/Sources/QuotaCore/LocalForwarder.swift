@@ -174,7 +174,7 @@ public final class LocalForwarder: @unchecked Sendable {
       case .ready:
         guard started.first() else { return }
         let line = String(decoding: first.prefix(while: { $0 != 13 }), as: UTF8.self)
-        self.log?("\(line) → \(self.host):\(self.targetPort)")
+        self.log?("\(line) → \(self.host):\(self.targetPort) (\(up.currentPath?.remoteEndpoint.map { "\($0)" } ?? "?"))")
         up.send(content: first, completion: .contentProcessed { e in
           if e != nil { return self.close(c, up) }
           self.pipe(c, to: up, last: false)
@@ -207,8 +207,12 @@ public final class LocalForwarder: @unchecked Sendable {
       guard let self else { return }
       let finish = complete || error != nil
       let content = (data?.isEmpty ?? true) ? nil : data
+      if last || error != nil {
+        self.log?("\(last ? "reply" : "request") \(content?.count ?? 0) bytes" + (complete ? ", end" : "") + (error.map { ", \($0)" } ?? ""))
+      }
       if content == nil && !finish { return self.pipe(from, to: to, last: last) }
       to.send(content: content, contentContext: finish ? .finalMessage : .defaultMessage, isComplete: finish, completion: .contentProcessed { e in
+        if let e { self.log?("passing on failed: \(e)") }
         if e != nil { return self.close(from, to) }
         if !finish { self.pipe(from, to: to, last: last) } else if last { self.close(from, to) }
       })
