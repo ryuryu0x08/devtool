@@ -34,12 +34,20 @@ wait_for() { for _ in $(seq 40); do [[ "$(desktop_url)" == "$1" ]] && return 0; 
 check() {
   local port=$1
   wait_for "http://127.0.0.1:$port"
-  out="$(curl -s -H 'Authorization: Bearer sk-demo-ye' "http://127.0.0.1:$port/v1/billing/usage")"
+  out="$(curl -sS -m 10 -H 'Authorization: Bearer sk-demo-ye' "http://127.0.0.1:$port/v1/billing/usage" 2>&1 || true)"
   echo "through 127.0.0.1:$port: $out"
-  [[ "$out" == *'"nick_name": "ye"'* ]] || { echo "the forwarder did not pass the request on"; return 1; }
+  if [[ "$out" != *'"nick_name": "ye"'* ]]; then
+    echo "the forwarder did not pass the request on"
+    pgrep -lx QuotaBar || echo "QuotaBar is not running"
+    lsof -nP -iTCP -sTCP:LISTEN | grep -E "4783[0-9]" || true
+    echo "--- app output"; cat "$TMP/app.log" || true
+    ls -t ~/Library/Logs/DiagnosticReports/ 2>/dev/null | grep -i quotabar | head -1 | while read f; do head -60 ~/Library/Logs/DiagnosticReports/"$f"; done
+    return 1
+  fi
 }
 
-open build/QuotaBar.app
+launch() { build/QuotaBar.app/Contents/MacOS/QuotaBar >>"$TMP/app.log" 2>&1 & }
+launch
 check 47831
 echo "OK: forwarder on 47831, Desktop moved to it without asking, requests pass"
 pkill -x QuotaBar
@@ -50,7 +58,8 @@ while nc -z 127.0.0.1 47831 2>/dev/null; do sleep 0.2; done
 python3 -c 'import socket,time; s=socket.socket(); s.bind(("127.0.0.1",47831)); s.listen(); time.sleep(120)' &
 BUSY=$!
 sleep 1
-open build/QuotaBar.app
+launch
+sleep 2
 grep -o '"forwardPort" : [0-9]*' "$DIR/config.json" || true
 check 47832
 echo "OK: 47831 taken, forwarder on 47832, Desktop followed without asking"
