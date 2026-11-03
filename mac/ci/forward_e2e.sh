@@ -5,6 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../QuotaBar"
 DIR="$HOME/Library/Application Support/QuotaBar"
+mkdir -p "$DIR"
 IP=model-api.quotabar.test
 grep -q "$IP" /etc/hosts || echo "127.0.0.1 $IP" | sudo tee -a /etc/hosts >/dev/null
 TMP="$(mktemp -d)"

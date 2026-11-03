@@ -79,12 +79,12 @@ public final class LocalForwarder: @unchecked Sendable {
     guard let l = try? NWListener(using: params) else { return nil }
     l.newConnectionHandler = { [weak self] c in self?.handle(c) }
     return await withCheckedContinuation { (k: CheckedContinuation<NWListener?, Never>) in
-      var done = false
+      // The state handler runs on `queue` only; this is set once there.
+      let once = Once()
       l.stateUpdateHandler = { s in
-        guard !done else { return }
         switch s {
-        case .ready: done = true; k.resume(returning: l)
-        case .failed, .cancelled, .waiting: done = true; l.cancel(); k.resume(returning: nil)
+        case .ready: if once.first() { k.resume(returning: l) }
+        case .failed, .cancelled, .waiting: if once.first() { l.cancel(); k.resume(returning: nil) }
         default: break
         }
       }
@@ -140,23 +140,25 @@ public final class LocalForwarder: @unchecked Sendable {
 
   private func forward(_ c: NWConnection, _ first: Data) {
     let up = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: targetPort)!, using: .tcp)
-    var started = false
+    // The state handler runs on `queue` only.
+    let started = Once()
     up.stateUpdateHandler = { [weak self] s in
       guard let self else { return }
       switch s {
-      case .ready where !started:
-        started = true
+      case .ready:
+        guard started.first() else { return }
         up.send(content: first, completion: .contentProcessed { e in
           if e != nil { return self.close(c, up) }
           self.pipe(c, to: up, last: false)
           self.pipe(up, to: c, last: true)
         })
-      case .failed(let e) where !started, .waiting(let e) where !started:
-        started = true
-        up.cancel()
-        self.reply(c, 502, "QuotaBar 本地转发连不上 \(self.host):\(self.targetPort)（\(e)）")
-      case .failed:
-        self.close(c, up)
+      case .failed(let e), .waiting(let e):
+        if started.first() {
+          up.cancel()
+          self.reply(c, 502, "QuotaBar 本地转发连不上 \(self.host):\(self.targetPort)（\(e)）")
+        } else if case .failed = s {
+          self.close(c, up)
+        }
       default: break
       }
     }
@@ -186,6 +188,15 @@ public final class LocalForwarder: @unchecked Sendable {
     let body = Data(text.utf8)
     let head = "HTTP/1.1 \(status) \(status == 502 ? "Bad Gateway" : "Bad Request")\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n"
     c.send(content: Data(head.utf8) + body, contentContext: .finalMessage, isComplete: true, completion: .contentProcessed { _ in c.cancel() })
+  }
+}
+
+/// True the first time only (used from one serial queue).
+private final class Once: @unchecked Sendable {
+  private var done = false
+  func first() -> Bool {
+    defer { done = true }
+    return !done
   }
 }
 
