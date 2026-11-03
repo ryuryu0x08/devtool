@@ -67,14 +67,25 @@ struct QuotaMeter: View {
   }
 
   private func segment(fill: Double, color: Color, full: Bool) -> some View {
-    let c = full ? Color.red : color
-    return GeometryReader { g in
+    FillBar(fraction: fill / 100, color: full ? .red : color, height: height)
+  }
+}
+
+/// A bar filled to `fraction` (0…1), keeping its colour whether or not the window is in front.
+struct FillBar: View {
+  let fraction: Double
+  let color: Color
+  var height: CGFloat = 8
+
+  var body: some View {
+    GeometryReader { g in
       ZStack(alignment: .leading) {
-        Capsule().fill(c.opacity(0.16))
-        Capsule().fill(c.gradient).frame(width: g.size.width * min(1, max(0, fill / 100)))
+        Capsule().fill(color.opacity(0.16))
+        Capsule().fill(color.gradient).frame(width: g.size.width * min(1, max(0, fraction)))
       }
     }
-    .animation(.smooth(duration: 0.5), value: fill)
+    .frame(height: height)
+    .animation(.smooth(duration: 0.5), value: fraction)
   }
 }
 

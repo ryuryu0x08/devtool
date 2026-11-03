@@ -129,7 +129,7 @@ struct PoolRow: View {
         Text("/ \(Fmt.num(q.poolLimit))").font(.callout).foregroundStyle(.secondary).monospacedDigit()
         Text(String(format: "%.1f%%", p)).font(.caption.weight(.semibold)).foregroundStyle(color).monospacedDigit()
       }
-      ProgressView(value: min(1, p / 100)).tint(color)
+      FillBar(fraction: p / 100, color: color, height: 6)
     }
     .card(padding: 10)
   }

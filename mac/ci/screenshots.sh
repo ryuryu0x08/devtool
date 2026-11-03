@@ -31,17 +31,25 @@ for i in range(288, 0, -1):
 json.dump(h, open(d + "/history.json", "w"))
 PY
 
+# The dashboard window as large as the screen allows, so the trends show too.
+defaults write local.quotabar "NSWindow Frame dashboard" "20 20 1400 1150 0 0 1600 1200"
 shot() {
-  open build/QuotaBar.app --args --dashboard --panel-window
+  open build/QuotaBar.app --args "$2"
   sleep 8
   screencapture -x "$SHOTS/$1.png"
   pkill -x QuotaBar || true
   sleep 1
 }
-shot light
-defaults write -g AppleInterfaceStyle Dark
-shot dark
-defaults delete -g AppleInterfaceStyle || true
+dark() {
+  osascript -e "tell application \"System Events\" to tell appearance preferences to set dark mode to $1" \
+    || defaults write -g AppleInterfaceStyle Dark
+}
+shot panel-light --panel-window
+shot dashboard-light --dashboard
+dark true
+shot panel-dark --panel-window
+shot dashboard-dark --dashboard
+dark false || true
 ls -la "$SHOTS"
 # Also in the log, smaller, for reading without downloading the artifact.
 for f in "$SHOTS"/*.png; do

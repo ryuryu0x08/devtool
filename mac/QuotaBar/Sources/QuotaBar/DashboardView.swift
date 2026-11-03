@@ -72,7 +72,7 @@ struct PoolCard: View {
           .contentTransition(.numericText(value: p))
           .animation(.snappy, value: p)
       }
-      ProgressView(value: min(1, p / 100)).tint(color)
+      FillBar(fraction: p / 100, color: color)
       Text(p >= 100
            ? "共用额度池已满：今日额度用完后无法再用超额。"
            : "还剩 \(Fmt.num((q.poolLimit ?? 0) - (q.pool ?? 0)))。今日额度用完后，超额从这里扣，每人最多用到自己的超额上限；池子剩的不够时，超额以池子剩余为准。")
