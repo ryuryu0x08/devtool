@@ -40,36 +40,49 @@ public enum ClaudeSettings {
     return obj["apiKeyHelper"] != nil
   }
 
-  /// `text` with env.ANTHROPIC_AUTH_TOKEN set to `token` and env.ANTHROPIC_API_KEY removed;
-  /// everything else byte for byte as it was. Empty text (a file not there yet) is taken as {}.
-  public static func setToken(_ token: String, in text: String) throws -> String {
+  public static let baseURLKey = "ANTHROPIC_BASE_URL"
+
+  /// The value of env.<name> the file sets, if any.
+  public static func currentEnv(_ name: String, in text: String) -> String? {
+    guard let obj = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] else { return nil }
+    return (obj["env"] as? [String: Any])?[name] as? String
+  }
+
+  /// `text` with env.ANTHROPIC_AUTH_TOKEN set to `token` (and env.ANTHROPIC_BASE_URL to
+  /// `baseURL`, if given) and env.ANTHROPIC_API_KEY removed; everything else byte for byte as it
+  /// was. Empty text (a file not there yet) is taken as {}.
+  public static func setToken(_ token: String, baseURL: String? = nil, in text: String) throws -> String {
     let empty = text.allSatisfy(\.isWhitespace)
     let original = empty ? "{}" : text
     let old = try parse(original)
     if let env = old["env"], !(env is [String: Any]) { throw SettingsError.envNotObject }
 
     var b = Array(original.utf8)
-    let tok = Array(jsonString(token).utf8)
+    var pairs = [(tokenKey, token)]
+    if let baseURL { pairs.append((baseURLKey, baseURL)) }
 
-    // 1. Set the token: in place where it is, else as a new entry of env, else a new env.
-    let root = try Scanner(b).root()
-    if let env = root.members.last(where: { $0.key == "env" }) {
-      guard b[env.valueStart] == UInt8(ascii: "{") else { throw SettingsError.envNotObject }
-      let obj = try Scanner(b).object(at: env.valueStart, depth: 1)
-      let hits = obj.members.filter { $0.key == tokenKey }
-      if hits.isEmpty {
-        b = insert(member: Array(jsonString(tokenKey).utf8) + Array(": ".utf8) + tok, into: obj, b)
+    // 1. Set each entry: in place where it is, else as a new entry of env, else a new env.
+    for (name, value) in pairs {
+      let v = Array(jsonString(value).utf8)
+      let entry = Array(jsonString(name).utf8) + Array(": ".utf8) + v
+      let root = try Scanner(b).root()
+      if let env = root.members.last(where: { $0.key == "env" }) {
+        guard b[env.valueStart] == UInt8(ascii: "{") else { throw SettingsError.envNotObject }
+        let obj = try Scanner(b).object(at: env.valueStart, depth: 1)
+        let hits = obj.members.filter { $0.key == name }
+        if hits.isEmpty {
+          b = insert(member: entry, into: obj, b)
+        } else {
+          for m in hits.reversed() { b.replaceSubrange(m.valueStart..<m.valueEnd, with: v) }
+        }
       } else {
-        for m in hits.reversed() { b.replaceSubrange(m.valueStart..<m.valueEnd, with: tok) }
+        let multiline = root.members.isEmpty || hasNewline(b, root.open, root.members[0].keyStart)
+        let inner = root.members.isEmpty ? lineIndent(b, root.open) + unit(b, root) : lineIndent(b, root.members.last!.keyStart)
+        let env: [UInt8] = multiline
+          ? Array("\"env\": {\n".utf8) + inner + unit(b, root) + entry + Array("\n".utf8) + inner + Array("}".utf8)
+          : Array("\"env\": {".utf8) + entry + Array("}".utf8)
+        b = insert(member: env, into: root, b)
       }
-    } else {
-      let multiline = root.members.isEmpty || hasNewline(b, root.open, root.members[0].keyStart)
-      let inner = root.members.isEmpty ? lineIndent(b, root.open) + unit(b, root) : lineIndent(b, root.members.last!.keyStart)
-      let entry = Array(jsonString(tokenKey).utf8) + Array(": ".utf8) + tok
-      let env: [UInt8] = multiline
-        ? Array("\"env\": {\n".utf8) + inner + unit(b, root) + entry + Array("\n".utf8) + inner + Array("}".utf8)
-        : Array("\"env\": {".utf8) + entry + Array("}".utf8)
-      b = insert(member: env, into: root, b)
     }
 
     // 2. Remove ANTHROPIC_API_KEY (every time it appears).
@@ -84,7 +97,7 @@ public enum ClaudeSettings {
     // 3. Nothing else may have changed.
     var expected = old
     var env = old["env"] as? [String: Any] ?? [:]
-    env[tokenKey] = token
+    for (name, value) in pairs { env[name] = value }
     env.removeValue(forKey: apiKeyKey)
     expected["env"] = env
     let out = String(decoding: b, as: UTF8.self) + (empty ? "\n" : "")
@@ -97,22 +110,37 @@ public enum ClaudeSettings {
   public enum SwitchResult: Equatable, Sendable {
     /// Written; `backup` holds the file as it was (nil when there was no file).
     case written(backup: URL?)
-    /// The file already had this token and no ANTHROPIC_API_KEY.
+    /// The file already had this token (and address) and no ANTHROPIC_API_KEY.
     case unchanged
+    /// There is no settings file: Claude Code isn't set up here, nothing was written.
+    case noFile
   }
 
-  /// Sets the token in the settings file at `path` (~ allowed). A symlinked file is written
-  /// where it points; the file keeps its permissions (a new file is readable by the owner only,
-  /// as it holds a key); the previous content is kept as <file>.bak.
-  public static func switchToken(_ token: String, path: String) throws -> SwitchResult {
-    let fm = FileManager.default
+  /// The settings file at `path` (~ allowed), where a symlink points; nil when there is none.
+  public static func file(_ path: String) -> URL? {
     let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath).resolvingSymlinksInPath()
-    let exists = fm.fileExists(atPath: url.path)
-    let data = exists ? try Data(contentsOf: url) : Data()
+    return FileManager.default.fileExists(atPath: url.path) ? url : nil
+  }
+
+  /// Sets the token (and the address, if given) in the settings file at `path`, if there is
+  /// one. The file keeps its permissions; the previous content is kept as <file>.bak.
+  public static func switchToken(_ token: String, baseURL: String? = nil, path: String) throws -> SwitchResult {
+    guard let url = file(path) else { return .noFile }
+    let data = try Data(contentsOf: url)
     guard let text = String(data: data, encoding: .utf8) else { throw SettingsError.notUTF8 }
-    let out = try setToken(token, in: text)
+    let out = try setToken(token, baseURL: baseURL, in: text)
     if out == text { return .unchanged }
-    return .written(backup: try replace(url, was: exists ? data : nil, with: out))
+    return .written(backup: try replace(url, was: data, with: out))
+  }
+
+  /// Two API addresses are the same one (spaces and a trailing / aside).
+  public static func sameURL(_ a: String?, _ b: String?) -> Bool {
+    func n(_ s: String?) -> String {
+      var t = (s ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      while t.hasSuffix("/") { t.removeLast() }
+      return t.lowercased()
+    }
+    return !n(a).isEmpty && n(a) == n(b)
   }
 
   /// Writes `text` to `url` (already resolved), keeping what was there as <file>.bak and the

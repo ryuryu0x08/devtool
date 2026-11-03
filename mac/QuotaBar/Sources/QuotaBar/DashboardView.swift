@@ -15,7 +15,7 @@ struct DashboardView: View {
           ContentUnavailableView {
             Label { Text(store.hasURL ? "还没有 key" : "先填写用量接口地址").font(.serif(20, .semibold)) } icon: { Icon(.key, size: 30) }
           } description: {
-            Text("在设置里粘贴 key 即可：是谁的 key 会自动识别。").font(.ui(13))
+            Text("在设置里粘贴 key，自动识别是谁").font(.ui(13))
           } actions: {
             Button { showSettings = true } label: { Text("打开设置").font(.ui(13, .medium)) }.buttonStyle(.borderedProminent)
           }
@@ -161,9 +161,9 @@ struct PersonCard: View {
     case .waiting:
       Text(store.adding ? "正在识别…" : "等待第一次刷新…").font(.ui(12)).foregroundStyle(.secondary)
     case .failing(let f, let last):
-      Trouble(text: p.name == nil && last == nil ? "还没识别出是谁的 key：" + f.friendly : f.friendly, detail: f.detail, age: last?.at)
+      Trouble(text: p.name == nil && last == nil ? "未识别：" + f.friendly : f.friendly, detail: f.detail, age: last?.at)
     case .noKey(let last):
-      Trouble(text: "这个 key 已归到别人名下。粘贴「\(p.label)」的新 key 即可接上。", age: last?.at)
+      Trouble(text: "key 已归他人，粘贴「\(p.label)」的新 key", age: last?.at)
     case .ok:
       EmptyView()
     }
@@ -231,7 +231,7 @@ struct TrendsCard: View {
         .fixedSize()
       }
       if usage.points.isEmpty {
-        Text("这段时间还没有数据：App 运行期间每 5 分钟记一个点，保留 7 天。")
+        Text("暂无数据：运行时每 5 分钟记一点，存 7 天")
           .font(.ui(12.5)).foregroundStyle(.secondary)
           .frame(maxWidth: .infinity, minHeight: 120)
       } else {

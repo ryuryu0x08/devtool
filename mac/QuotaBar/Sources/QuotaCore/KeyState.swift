@@ -41,8 +41,8 @@ public struct KeyState: Equatable, Sendable {
 
   /// How `left` is made up.
   public var parts: String {
-    "今日额度剩 \(Fmt.num(dailyLeft)) + 超额可用 \(Fmt.num(overAvail))"
-      + (poolCaps ? "（受共用池限制，本可用 \(Fmt.num(overRoom))）" : "")
+    "今日剩 \(Fmt.num(dailyLeft)) + 超额 \(Fmt.num(overAvail))"
+      + (poolCaps ? "（池子限制，原 \(Fmt.num(overRoom))）" : "")
   }
 }
 

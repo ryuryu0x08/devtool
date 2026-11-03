@@ -44,7 +44,7 @@ final class KeyStateTests: XCTestCase {
     XCTAssertEqual(s.left, 270)
     XCTAssertEqual(s.chip, "今日额度内")
     XCTAssertFalse(s.poolCaps)
-    XCTAssertEqual(s.parts, "今日额度剩 170 + 超额可用 100")
+    XCTAssertEqual(s.parts, "今日剩 170 + 超额 100")
   }
 
   func testThePoolCapsTheOverflowNotTheDailyQuota() {
@@ -52,7 +52,7 @@ final class KeyStateTests: XCTestCase {
     let s = KeyState(Usage(daily: 30.58, dailyLimit: 200, over: 0, overLimit: 100, overAvail: nil, pool: 960, poolLimit: 1000))
     XCTAssertEqual(s.left, 169.42 + 40, accuracy: 1e-9)
     XCTAssertTrue(s.poolCaps)
-    XCTAssertEqual(s.parts, "今日额度剩 169.42 + 超额可用 40（受共用池限制，本可用 100）")
+    XCTAssertEqual(s.parts, "今日剩 169.42 + 超额 40（池子限制，原 100）")
     // The API's own overflow_available counts too.
     XCTAssertEqual(KeyState(Usage(daily: 0, dailyLimit: 10, over: 0, overLimit: 100, overAvail: 25, pool: 0, poolLimit: 1000)).overAvail, 25)
   }

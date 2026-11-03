@@ -18,10 +18,11 @@ public enum ClaudeDesktop {
     "updateViaUpdatesHost", "releaseChannel", "relaunchEnforcementHours", "configRecheckIntervalMinutes", "egressProxyUrl", "egressProxyPacUrl",
   ]
   static let keyField = "inferenceGatewayApiKey"
+  static let urlField = "inferenceGatewayBaseUrl"
 
   public enum Status: Equatable, Sendable {
-    /// Desktop uses the gateway with this key (nil: sealed, so it can't be read here).
-    case gateway(key: String?)
+    /// Desktop uses the gateway at `baseURL` with `key` (nil: sealed, so it can't be read here).
+    case gateway(key: String?, baseURL: String?)
     /// No local configuration, or not one with a gateway key: nothing to switch.
     case notGateway
     /// Device management decides Desktop's configuration.
@@ -57,17 +58,19 @@ public enum ClaudeDesktop {
     guard let (_, _, obj) = applied(dir), obj["inferenceProvider"] as? String == "gateway",
           ["static", nil].contains(obj["inferenceCredentialKind"] as? String) else { return .notGateway }
     let k = obj[keyField] as? String
-    return .gateway(key: k.flatMap { $0.hasPrefix("__sealed__:") ? nil : $0 })
+    return .gateway(key: k.flatMap { $0.hasPrefix("__sealed__:") ? nil : $0 }, baseURL: obj[urlField] as? String)
   }
 
-  /// Sets Desktop's gateway key to `key`, changing nothing else; the previous file is kept as
-  /// <file>.bak. Desktop has to be relaunched to use it.
-  public static func switchKey(_ key: String, dir: String = defaultDir, managed: [String] = managedFiles) throws -> Result {
+  /// Sets Desktop's gateway key to `key` (and its address to `baseURL`, if given), changing
+  /// nothing else; the previous file is kept as <file>.bak. Desktop has to be relaunched to use it.
+  public static func switchKey(_ key: String, baseURL: String? = nil, dir: String = defaultDir, managed: [String] = managedFiles) throws -> Result {
     let s = status(dir: dir, managed: managed)
-    guard case .gateway(let now) = s else { return .skipped(s) }
-    if now == key { return .unchanged }
-    guard let (url, data, _) = applied(dir), let text = String(data: data, encoding: .utf8) else { throw SettingsError.notUTF8 }
-    _ = try ClaudeSettings.replace(url, was: data, with: try ClaudeSettings.setTopLevel(keyField, to: key, in: text))
+    guard case .gateway(let now, let url) = s else { return .skipped(s) }
+    if now == key && (baseURL == nil || baseURL == url) { return .unchanged }
+    guard let (file, data, _) = applied(dir), let text = String(data: data, encoding: .utf8) else { throw SettingsError.notUTF8 }
+    var out = try ClaudeSettings.setTopLevel(keyField, to: key, in: text)
+    if let baseURL { out = try ClaudeSettings.setTopLevel(urlField, to: baseURL, in: out) }
+    _ = try ClaudeSettings.replace(file, was: data, with: out)
     return .written
   }
 }

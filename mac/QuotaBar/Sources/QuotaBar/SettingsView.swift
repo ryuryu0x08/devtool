@@ -6,7 +6,9 @@ import SwiftUI
 struct SettingsView: View {
   @Environment(Store.self) private var store
   @Environment(\.dismiss) private var dismiss
+  @Bindable private var text = TextSize.shared
   @State private var url = ""
+  @State private var baseURL = ""
   @State private var interval = 60
   @State private var settingsPath = ""
 
@@ -14,16 +16,20 @@ struct SettingsView: View {
     VStack(spacing: 0) {
       Form {
         Section {
-          TextField(text: $url, prompt: Text(Config.defaultURL)) { Text("地址").font(.ui(13)) }
+          TextField(text: $baseURL, prompt: Text(Config.defaultBaseURL)) { label("模型接口") }
+            .font(.mono(12.5))
+          TextField(text: $url, prompt: Text(Config.defaultURL)) { label("用量接口") }
             .font(.mono(12.5))
           Stepper(value: $interval, in: 10...3600, step: 10) {
-            LabeledContent { Text("\(interval) 秒").font(.ui(13)).monospacedDigit() } label: { Text("刷新间隔").font(.ui(13)) }
+            LabeledContent { Text("\(interval) 秒").font(.ui(13)).monospacedDigit() } label: { label("刷新间隔") }
           }
-          if !url.isEmpty && !validURL {
-            Text("地址要以 http:// 或 https:// 开头").foregroundStyle(.orange).font(.ui(11.5))
+          if !url.isEmpty && !valid(url) || !baseURL.isEmpty && !valid(baseURL) {
+            Text("地址需以 http:// 或 https:// 开头").foregroundStyle(.orange).font(.ui(11.5))
           }
         } header: {
-          Text("用量接口").font(.ui(12, .semibold))
+          header("接口")
+        } footer: {
+          footer("切换 key 时，Claude Code 或 Desktop 用的不是「模型接口」会先问你。")
         }
         Section {
           ForEach(store.people) { p in
@@ -31,19 +37,27 @@ struct SettingsView: View {
           }
           AddKeyField()
         } header: {
-          Text("人员").font(.ui(12, .semibold))
+          header("人员")
         } footer: {
-          Text("粘贴 key 后自动识别是谁的；同一个人的新 key 会替换旧的。保存在本机 ~/Library/Application Support/QuotaBar，只有你的账户能读。")
-            .font(.ui(11)).foregroundStyle(.secondary)
+          footer("粘贴 key 自动识别是谁；同一人的新 key 替换旧的。")
         }
         Section {
-          TextField(text: $settingsPath) { Text("settings.json").font(.ui(13)) }
+          TextField(text: $settingsPath) { label("Claude Code 配置") }
             .font(.mono(12.5))
+          Picker(selection: Binding(get: { store.config.desktopRestart }, set: { store.setDesktopRestart($0) })) {
+            ForEach(DesktopRestart.allCases, id: \.self) { Text($0.label).font(.ui(13)) }
+          } label: { label("换 key 后重启 Desktop") }
         } header: {
-          Text("Claude Code 配置文件").font(.ui(12, .semibold))
+          header("切换")
         } footer: {
-          Text("「用于 Claude Code」把这个文件里的 env.ANTHROPIC_AUTH_TOKEN 换成所选的 key，并删除 env.ANTHROPIC_API_KEY；其他内容保持原样。Claude Desktop 用第三方推理时，它配置里的 key 也一起换（Desktop 重启后生效）。修改前的内容都保存为同目录的 .bak 文件。")
-            .font(.ui(11)).foregroundStyle(.secondary)
+          footer("改 Claude Code 的 env.ANTHROPIC_AUTH_TOKEN 和 Desktop 网关的 key，原文件留 .bak。")
+        }
+        Section {
+          Stepper(value: $text.bump, in: TextSize.range, step: 0.5) {
+            LabeledContent { Text(text.label).font(.ui(13)).monospacedDigit() } label: { label("字号") }
+          }
+        } header: {
+          header("显示")
         }
       }
       .formStyle(.grouped)
@@ -59,27 +73,33 @@ struct SettingsView: View {
       .padding(14)
       .animation(.snappy, value: store.notice)
     }
-    .frame(width: 580, height: 580)
+    .frame(width: 600, height: 640)
     .onAppear {
       url = store.config.url
+      baseURL = store.config.baseURL
       interval = store.config.interval
       settingsPath = store.config.settingsPath
     }
     // Saved as typed (once typing pauses): no separate save step.
-    .task(id: "\(url)\n\(interval)\n\(settingsPath)") {
+    .task(id: "\(url)\n\(baseURL)\n\(interval)\n\(settingsPath)") {
       try? await Task.sleep(for: .milliseconds(600))
       if !Task.isCancelled { save() }
     }
     .onDisappear { save() }
   }
 
+  private func label(_ s: String) -> some View { Text(s).font(.ui(13)) }
+  private func header(_ s: String) -> some View { Text(s).font(.ui(12, .semibold)) }
+  private func footer(_ s: String) -> some View { Text(s).font(.ui(11)).foregroundStyle(.secondary) }
+
   private func save() {
-    guard url != store.config.url || interval != store.config.interval || settingsPath != store.config.settingsPath else { return }
-    store.saveSettings(url: url, interval: interval, settingsPath: settingsPath)
+    let c = store.config
+    guard url != c.url || baseURL != c.baseURL || interval != c.interval || settingsPath != c.settingsPath else { return }
+    store.saveSettings(url: url, baseURL: baseURL, interval: interval, settingsPath: settingsPath)
   }
 
-  private var validURL: Bool {
-    guard let u = URL(string: url.trimmingCharacters(in: .whitespaces)) else { return false }
+  private func valid(_ s: String) -> Bool {
+    guard let u = URL(string: s.trimmingCharacters(in: .whitespaces)) else { return false }
     return ["http", "https"].contains(u.scheme?.lowercased() ?? "") && u.host != nil
   }
 }

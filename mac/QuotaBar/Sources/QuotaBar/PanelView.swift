@@ -23,14 +23,14 @@ struct PanelView: View {
         .frame(maxHeight: 460)
         .fixedSize(horizontal: false, vertical: true)
         if store.hasKeyHelper {
-          Trouble(text: "settings.json 里还有 apiKeyHelper，Claude Code 可能优先用它给出的 key。")
+          Trouble(text: "settings.json 有 apiKeyHelper，可能优先于 key")
         }
       }
       Divider().padding(.top, 2)
       footer
     }
     .padding(14)
-    .frame(width: 384)
+    .frame(width: 384 + (TextSize.shared.bump - TextSize.standard) * 16)
     .animation(.snappy, value: store.notice)
     .animation(.snappy, value: store.people.map(\.id))
     .onAppear { store.readSettings() }
@@ -51,7 +51,7 @@ struct PanelView: View {
   private var empty: some View {
     VStack(spacing: 10) {
       Icon(.key, size: 28).foregroundStyle(.secondary)
-      Text("在设置里粘贴 key，就能看到额度").font(.ui(12.5)).foregroundStyle(.secondary)
+      Text("在设置里粘贴 key 即可").font(.ui(12.5)).foregroundStyle(.secondary)
       Button { Windows.showDashboard(store, settings: true) } label: { Text("打开设置").font(.ui(12.5, .medium)) }
         .buttonStyle(.borderedProminent)
     }
@@ -165,9 +165,9 @@ struct PersonRow: View {
     case .waiting:
       Text(store.adding ? "正在识别…" : "等待第一次刷新…").font(.ui(11)).foregroundStyle(.secondary)
     case .failing(let f, let last):
-      Trouble(text: p.name == nil && last == nil ? "还没识别出是谁的 key：" + f.friendly : f.friendly, detail: f.detail, age: last?.at)
+      Trouble(text: p.name == nil && last == nil ? "未识别：" + f.friendly : f.friendly, detail: f.detail, age: last?.at)
     case .noKey(let last):
-      Trouble(text: "这个 key 已归到别人名下。粘贴「\(p.label)」的新 key 即可接上。", age: last?.at)
+      Trouble(text: "key 已归他人，粘贴「\(p.label)」的新 key", age: last?.at)
     case .ok:
       EmptyView()
     }

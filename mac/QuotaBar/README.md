@@ -30,14 +30,13 @@ cd devtool/mac/QuotaBar
 - **查看、复制、删除 key**：在设置的「人员」里，key 完整显示，可以选中，旁边有复制按钮；也可以在卡片上右键删除。
 - **深色 / 浅色**：跟随系统设置，切换时立即生效。
 - **今日还可用** = 今日额度剩余 + 还能用的超额。还能用的超额不超过自己的超额上限，也不超过共用池剩余（接口返回 `overflow_available` 时也以它为上限）；今日额度本身不受共用池影响。
-- **切换 Claude Code 的 key**：点「用于 Claude Code」（面板里是「切换」）。
-  - 把 `~/.claude/settings.json` 里的 `env.ANTHROPIC_AUTH_TOKEN` 换成这个 key，并删除 `env.ANTHROPIC_API_KEY`（两者同时存在会冲突）。`ANTHROPIC_BASE_URL` 等其他内容不动。
-  - 只改这两处文字，文件其余部分逐字节保留；写入前会检查除这两项外内容完全一致，否则不写。
-  - 修改前的文件保存为同目录的 `settings.json.bak`。settings.json 是符号链接时，写入它指向的文件。
-  - 文件不是有效 JSON（例如带注释）时不修改，并说明原因。
-  - 生效范围（据 Claude Code 文档）：终端里的 `claude`、VS Code / JetBrains 插件都读这个文件；Claude Code 会监视它，正在运行的会话在文件保存后就改用新 key，不用重开。
-  - **Claude Desktop**：它不读 settings.json，而是读自己的配置 `~/Library/Application Support/Claude-3p/configLibrary/`（`_meta.json` 里的 `appliedId` 指向生效的 `<id>.json`）。Desktop 用「第三方推理」连网关时（`inferenceProvider` 为 `gateway`），切换会把其中的 `inferenceGatewayApiKey` 一并换成新 key：只改这一个值，先备份为 `.bak`，写入前校验其余内容不变。Desktop 只在启动时读配置，所以切换后有「重启 Desktop」按钮。Desktop 自己保存的 key 是加密的（`__sealed__:` 开头），写入明文 key 它也能读，已实测可用。公司用 MDM 管理 Desktop 配置时不修改。
-  - 项目目录里的 `.claude/settings.json`、`.claude/settings.local.json` 或环境变量可能覆盖这里的设置；settings.json 里有 `apiKeyHelper` 时面板会提示。
+- **切换 key**（卡片上的「用于 Claude」，面板里的「切换」）：同时用于 Claude Code 和 Claude Desktop。
+  - **模型接口**：设置里填一个，默认 `http://api-ai-coding.bilibili.co/api`。Claude Code 的 `ANTHROPIC_BASE_URL` 或 Desktop 网关地址不是它时，先问：「一并换接口」「只换 key」「取消」；一致就直接切换。
+  - **Claude Code**：`~/.claude/settings.json` 存在才改，不存在不创建。改 `env.ANTHROPIC_AUTH_TOKEN`（需要时连同 `env.ANTHROPIC_BASE_URL`），删除 `env.ANTHROPIC_API_KEY`，其余逐字节保留。正在运行的会话保存即生效（据 Claude Code 文档）。
+  - **Claude Desktop**：用「第三方推理」连网关时（`~/Library/Application Support/Claude-3p/configLibrary/` 里生效的配置，`inferenceProvider` 为 `gateway`），改其中的 `inferenceGatewayApiKey`（需要时连同 `inferenceGatewayBaseUrl`）。Desktop 自己存的 key 是加密的（`__sealed__:`），写明文它也能读，已实测。公司 MDM 管理时不改。
+  - **重启 Desktop**：Desktop 只在启动时读配置。key 真的变了且 Desktop 开着时，问「重启」「稍后」，可勾「记住我的选择」；之后在设置「换 key 后重启 Desktop」里改（每次询问 / 自动重启 / 不重启）。
+  - 改动前的文件都留一份同目录的 `.bak`；写入前校验除改动项外内容不变，否则不写。
+- **字号**：设置「显示 → 字号」，所有文字一起加大或减小。
 
 ## 数据保存在哪里
 

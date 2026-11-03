@@ -32,13 +32,18 @@ final class ClaudeDesktopTests: XCTestCase {
   func testReplacesTheSealedKeyWithThePlainOneAndNothingElse() throws {
     let before = config(key: "__sealed__:v1:abc")
     try setUp(before)
-    XCTAssertEqual(ClaudeDesktop.status(dir: dir.path, managed: []), .gateway(key: nil))
+    XCTAssertEqual(ClaudeDesktop.status(dir: dir.path, managed: []), .gateway(key: nil, baseURL: "http://gw.example/"))
     XCTAssertEqual(try ClaudeDesktop.switchKey("sk-new", dir: dir.path, managed: []), .written)
     XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), before.replacingOccurrences(of: "__sealed__:v1:abc", with: "sk-new"))
     XCTAssertEqual(try String(contentsOf: file.appendingPathExtension("bak"), encoding: .utf8), before)
     XCTAssertEqual(try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int, 0o600)
-    XCTAssertEqual(ClaudeDesktop.status(dir: dir.path, managed: []), .gateway(key: "sk-new"))
+    XCTAssertEqual(ClaudeDesktop.status(dir: dir.path, managed: []), .gateway(key: "sk-new", baseURL: "http://gw.example/"))
     XCTAssertEqual(try ClaudeDesktop.switchKey("sk-new", dir: dir.path, managed: []), .unchanged)
+    // And the address, when asked.
+    XCTAssertEqual(try ClaudeDesktop.switchKey("sk-new", baseURL: "http://new/api", dir: dir.path, managed: []), .written)
+    XCTAssertEqual(ClaudeDesktop.status(dir: dir.path, managed: []), .gateway(key: "sk-new", baseURL: "http://new/api"))
+    XCTAssertEqual(try String(contentsOf: file, encoding: .utf8),
+                   before.replacingOccurrences(of: "__sealed__:v1:abc", with: "sk-new").replacingOccurrences(of: "http://gw.example/", with: "http://new/api"))
   }
 
   func testLeavesDesktopAloneWhenItIsNotOnAGatewayOrIsManaged() throws {
@@ -49,7 +54,7 @@ final class ClaudeDesktopTests: XCTestCase {
     let plist = dir.appendingPathComponent("managed.plist")
     // Only app-behaviour keys: the local configuration still applies.
     (["disableAutoUpdates": "true"] as NSDictionary).write(to: plist, atomically: true)
-    XCTAssertEqual(ClaudeDesktop.status(dir: dir.path, managed: [plist.path]), .gateway(key: "sk-0"))
+    XCTAssertEqual(ClaudeDesktop.status(dir: dir.path, managed: [plist.path]), .gateway(key: "sk-0", baseURL: "http://gw.example/"))
     (["inferenceProvider": "gateway"] as NSDictionary).write(to: plist, atomically: true)
     XCTAssertEqual(try ClaudeDesktop.switchKey("sk-1", dir: dir.path, managed: [plist.path]), .skipped(.managed))
     XCTAssertTrue(try String(contentsOf: file, encoding: .utf8).contains("sk-0"))

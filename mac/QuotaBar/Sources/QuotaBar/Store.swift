@@ -7,8 +7,22 @@ import Observation
 import QuotaCore
 import SwiftUI
 
+/// After Claude Desktop got a new key: whether to relaunch it (it reads its key at launch only).
+enum DesktopRestart: String, Codable, CaseIterable {
+  case ask, always, never
+
+  var label: String {
+    switch self {
+    case .ask: return "每次询问"
+    case .always: return "自动重启"
+    case .never: return "不重启"
+    }
+  }
+}
+
 struct Config: Codable, Equatable {
   static let defaultURL = "http://api-ai-coding.bilibili.co/api/v1/billing/usage"
+  static let defaultBaseURL = "http://api-ai-coding.bilibili.co/api"
 
   /// The usage API.
   var url = Config.defaultURL
@@ -18,10 +32,13 @@ struct Config: Codable, Equatable {
   /// Keys that were replaced by a newer one (not added back from Claude Code's settings).
   var retired: [String] = []
   var settingsPath = ClaudeSettings.defaultPath
+  /// The model API Claude Code and Claude Desktop are to use (ANTHROPIC_BASE_URL).
+  var baseURL = Config.defaultBaseURL
+  var desktopRestart = DesktopRestart.ask
 
   init() {}
 
-  private enum CodingKeys: String, CodingKey { case url, interval, people, retired, settingsPath, keys }
+  private enum CodingKeys: String, CodingKey { case url, interval, people, retired, settingsPath, baseURL, desktopRestart, keys }
   private struct OldKey: Decodable { var id: String; var key: String }
 
   init(from d: Decoder) throws {
@@ -31,6 +48,9 @@ struct Config: Codable, Equatable {
     interval = try c.decodeIfPresent(Int.self, forKey: .interval) ?? 60
     retired = try c.decodeIfPresent([String].self, forKey: .retired) ?? []
     settingsPath = try c.decodeIfPresent(String.self, forKey: .settingsPath) ?? ClaudeSettings.defaultPath
+    let b = try c.decodeIfPresent(String.self, forKey: .baseURL) ?? ""
+    baseURL = b.isEmpty ? Config.defaultBaseURL : b
+    desktopRestart = (try? c.decodeIfPresent(DesktopRestart.self, forKey: .desktopRestart)) ?? .ask
     if let ps = try c.decodeIfPresent([Person].self, forKey: .people) {
       people = ps
     } else {
@@ -46,6 +66,8 @@ struct Config: Codable, Equatable {
     try c.encode(people, forKey: .people)
     try c.encode(retired, forKey: .retired)
     try c.encode(settingsPath, forKey: .settingsPath)
+    try c.encode(baseURL, forKey: .baseURL)
+    try c.encode(desktopRestart, forKey: .desktopRestart)
   }
 }
 
@@ -74,9 +96,9 @@ extension Failure {
   /// What it means, in a few words; `detail` has the rest.
   var friendly: String {
     switch kind {
-    case .keyRejected: return "这个 key 不能用了，可能已轮换。添加新 key 后会自动接上。"
-    case .server: return "用量接口暂时出错，稍后自动重试。"
-    case .network: return "连不上用量接口，稍后自动重试。"
+    case .keyRejected: return "key 失效（可能已轮换），粘贴新 key 即可"
+    case .server: return "接口出错，稍后重试"
+    case .network: return "连不上接口，稍后重试"
     }
   }
 }
@@ -148,14 +170,21 @@ final class Store {
 
   // MARK: - Config
 
-  func saveSettings(url: String, interval: Int, settingsPath: String) {
+  func saveSettings(url: String, baseURL: String, interval: Int, settingsPath: String) {
     let url = url.trimmingCharacters(in: .whitespaces)
     config.url = url.isEmpty ? Config.defaultURL : url
+    let b = baseURL.trimmingCharacters(in: .whitespaces)
+    config.baseURL = b.isEmpty ? Config.defaultBaseURL : b
     config.interval = max(10, interval)
     config.settingsPath = settingsPath.trimmingCharacters(in: .whitespaces).isEmpty ? ClaudeSettings.defaultPath : settingsPath
     saveConfig()
     readSettings()
     restart()
+  }
+
+  func setDesktopRestart(_ r: DesktopRestart) {
+    config.desktopRestart = r
+    saveConfig()
   }
 
   func remove(_ p: Person) {
@@ -199,13 +228,13 @@ final class Store {
       return
     case .exists(let id):
       let label = people.first { $0.id == id }?.label ?? ""
-      notice = Notice(text: "这个 key 已经在列表里（\(label)）。")
+      notice = Notice(text: "已在列表：\(label)")
       return
     case .added(let id):
       withAnimation(.snappy) { config.people = ps }
       saveConfig()
       guard let url = usageURL else {
-        notice = Notice(text: "已添加。填写用量接口地址后会识别是谁的 key。")
+        notice = Notice(text: "已添加，填好用量接口后识别")
         return
       }
       adding = true
@@ -217,10 +246,10 @@ final class Store {
       saveConfig()
       writeHistory()
       if case .failed(let f, _) = r {
-        notice = Notice(text: "已添加，但暂时识别不了：" + f.friendly, bad: true)
+        notice = Notice(text: "已添加，未识别：" + f.friendly, bad: true)
       } else if let b, let p = people.first(where: { $0.id == b.id }), notice?.bad != true {
-        let claude = b.replaced != nil && activeToken == key ? "，Claude Code 也已改用新 key。" : "。"
-        notice = Notice(text: b.merged != nil ? "已更新「\(p.label)」的 key" + claude : "已添加「\(p.label)」。")
+        let claude = b.replaced != nil && activeToken == key ? "，Claude Code 已同步" : ""
+        notice = Notice(text: b.merged != nil ? "已更新「\(p.label)」的 key" + claude : "已添加「\(p.label)」")
       }
     }
   }
@@ -305,34 +334,32 @@ final class Store {
     }
   }
 
-  /// A person's key was replaced by a newer one. If Claude Code was using the old one, it gets
-  /// the new one: the old one no longer works.
+  /// A person's key was replaced by a newer one. Claude Code and Claude Desktop, where they used
+  /// the old one (which no longer works), get the new one; their addresses stay as they are.
   private func replaced(_ old: String, by new: String, for id: String) {
     config.retired = Array((config.retired.filter { $0 != old } + [old]).suffix(50))
     let code = activeToken == old
-    let desktop = ClaudeDesktop.status() == .gateway(key: old)
+    var desktop = false
+    if case .gateway(let k, _) = ClaudeDesktop.status(), k == old { desktop = true }
     guard code || desktop else { return }
     let name = people.first { $0.id == id }?.label ?? ""
-    var done: [String] = [], failed: [String] = []
+    var problems: [String] = []
     if code {
-      do {
-        _ = try ClaudeSettings.switchToken(new, path: config.settingsPath)
-        readSettings()
-        done.append("Claude Code")
-      } catch { failed.append("Claude Code：" + error.localizedDescription) }
+      do { _ = try ClaudeSettings.switchToken(new, path: config.settingsPath); readSettings() }
+      catch { problems.append("Claude Code：" + error.localizedDescription) }
     }
+    var desktopChanged = false
     if desktop {
-      do {
-        if try ClaudeDesktop.switchKey(new) == .written { done.append("Claude Desktop") }
-      } catch { failed.append("Claude Desktop：" + error.localizedDescription) }
+      do { desktopChanged = try ClaudeDesktop.switchKey(new) == .written }
+      catch { problems.append("Desktop：" + error.localizedDescription) }
     }
-    if !failed.isEmpty {
-      notice = Notice(text: "「\(name)」换了新 key，但没能更新 " + failed.joined(separator: "；"), bad: true)
-    } else {
-      let restart = done.contains("Claude Desktop")
-      notice = Notice(text: "「\(name)」换了新 key，" + done.joined(separator: " 和 ") + " 也已改用新 key" + (restart ? "（Desktop 重启后生效）。" : "。"),
-                      restartDesktop: restart && desktopRunning)
+    if !problems.isEmpty {
+      notice = Notice(text: "「\(name)」换了新 key，未能同步：" + problems.joined(separator: "；"), bad: true)
+      return
     }
+    notice = Notice(text: "「\(name)」换了新 key，已同步" + (desktopChanged ? "，Desktop 重启后生效" : ""),
+                    restartDesktop: desktopChanged && desktopRunning && config.desktopRestart != .never)
+    if desktopChanged && config.desktopRestart == .always && desktopRunning { restartDesktop() }
   }
 
   // MARK: - Claude Code
@@ -345,34 +372,79 @@ final class Store {
     hasKeyHelper = ClaudeSettings.hasApiKeyHelper(in: text)
   }
 
-  /// Sets Claude Code to use `p`'s key.
+  /// Sets Claude Code (if it has a settings file) and Claude Desktop (if it is on a gateway) to
+  /// use `p`'s key. Where either points at another model API than the one set here, asks first
+  /// whether to change that too.
   func use(_ p: Person) {
     guard !p.key.isEmpty else { return }
-    do {
-      let r = try ClaudeSettings.switchToken(p.key, path: config.settingsPath)
-      withAnimation(.snappy) { readSettings() }
-      var text = r == .unchanged ? "Claude Code 已经在用「\(p.label)」的 key。" : "已切换到「\(p.label)」：Claude Code 立即生效。"
-      var restart = false
-      do {
-        switch try ClaudeDesktop.switchKey(p.key) {
-        case .written:
-          restart = desktopRunning
-          text += restart ? "Claude Desktop 也已换成这个 key，重启后生效。" : "Claude Desktop 也已换成这个 key，下次打开时生效。"
-        case .unchanged:
-          text += "Claude Desktop 也在用这个 key。"
-        case .skipped(.managed):
-          text += "Claude Desktop 的配置由公司统一管理，没有修改。"
-        case .skipped:
-          break
-        }
-      } catch {
-        notice = Notice(text: text + "但 Claude Desktop 的配置没有修改：" + error.localizedDescription, bad: true)
-        return
-      }
-      notice = Notice(text: text, restartDesktop: restart)
-    } catch {
-      notice = Notice(text: error.localizedDescription, bad: true)
+    let base = config.baseURL
+    var cliFile: String?
+    if let f = ClaudeSettings.file(config.settingsPath) { cliFile = (try? String(contentsOf: f, encoding: .utf8)) ?? "" }
+    let desk = ClaudeDesktop.status()
+    var desktopURL: String?
+    var onGateway = false
+    if case .gateway(_, let u) = desk { onGateway = true; desktopURL = u }
+    guard cliFile != nil || onGateway else {
+      notice = Notice(text: "没有可切换的：无 \(config.settingsPath)，Desktop 未用网关", bad: true)
+      return
     }
+
+    // Another model API somewhere: change it too, or only the key?
+    var others: [String] = []
+    if let t = cliFile, !ClaudeSettings.sameURL(ClaudeSettings.currentEnv(ClaudeSettings.baseURLKey, in: t), base) {
+      others.append("Claude Code：" + (ClaudeSettings.currentEnv(ClaudeSettings.baseURLKey, in: t) ?? "未设置（官方接口）"))
+    }
+    if onGateway, !ClaudeSettings.sameURL(desktopURL, base) { others.append("Desktop：" + (desktopURL ?? "未设置")) }
+    var setURL = false
+    if !others.isEmpty {
+      switch Dialogs.otherAPI(current: others, wanted: base) {
+      case .replace: setURL = true
+      case .keyOnly: setURL = false
+      case .cancel: return
+      }
+    }
+
+    var parts: [String] = [], problems: [String] = []
+    if cliFile != nil {
+      do {
+        let urlNow = cliFile.flatMap { ClaudeSettings.currentEnv(ClaudeSettings.baseURLKey, in: $0) }
+        let wantURL = setURL && !ClaudeSettings.sameURL(urlNow, base) ? base : nil
+        _ = try ClaudeSettings.switchToken(p.key, baseURL: wantURL, path: config.settingsPath)
+        withAnimation(.snappy) { readSettings() }
+        parts.append("Claude Code 已生效")
+      } catch { problems.append("Claude Code：" + error.localizedDescription) }
+    }
+    var desktopChanged = false
+    switch desk {
+    case .gateway:
+      do {
+        let wantURL = setURL && !ClaudeSettings.sameURL(desktopURL, base) ? base : nil
+        desktopChanged = try ClaudeDesktop.switchKey(p.key, baseURL: wantURL) == .written
+        parts.append(!desktopChanged ? "Desktop 已在用" : desktopRunning ? "Desktop 重启后生效" : "Desktop 下次打开生效")
+      } catch { problems.append("Desktop：" + error.localizedDescription) }
+    case .managed:
+      parts.append("Desktop 由公司管理，未改")
+    case .notGateway:
+      break
+    }
+    if !problems.isEmpty {
+      notice = Notice(text: "切换到「\(p.label)」未完成：" + problems.joined(separator: "；"), bad: true)
+      return
+    }
+    notice = Notice(text: "已切换到「\(p.label)」：" + parts.joined(separator: "，"))
+    if desktopChanged && desktopRunning { afterDesktopChanged() }
+  }
+
+  /// Desktop got a new key while running: relaunch it, or not, as chosen (or ask).
+  private func afterDesktopChanged() {
+    var choice = config.desktopRestart
+    if choice == .ask {
+      let (now, remember) = Dialogs.restartDesktop()
+      choice = now ? .always : .never
+      if remember { setDesktopRestart(choice) }
+    }
+    if choice == .always { restartDesktop() }
+    else { notice?.restartDesktop = true }
   }
 
   // MARK: - Claude Desktop
@@ -387,21 +459,21 @@ final class Store {
   func restartDesktop() {
     let apps = desktopApps
     let url = apps.first?.bundleURL ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: ClaudeDesktop.bundleID)
-    notice = Notice(text: "正在重启 Claude Desktop…")
+    notice = Notice(text: "正在重启 Desktop…")
     apps.forEach { $0.terminate() }
     Task {
       for _ in 0..<60 where apps.contains(where: { !$0.isTerminated }) {
         try? await Task.sleep(for: .milliseconds(250))
       }
       guard apps.allSatisfy(\.isTerminated) else {
-        notice = Notice(text: "Claude Desktop 没有退出（可能在等你确认）。退出后再打开它即可用新 key。", bad: true)
+        notice = Notice(text: "Desktop 未退出（可能在等确认），手动重开即可", bad: true)
         return
       }
       guard let url else { return }
       let c = NSWorkspace.OpenConfiguration()
       c.activates = false
       _ = try? await NSWorkspace.shared.openApplication(at: url, configuration: c)
-      notice = Notice(text: "Claude Desktop 已重启，正在用新 key。")
+      notice = Notice(text: "Desktop 已重启，新 key 生效")
     }
   }
 }

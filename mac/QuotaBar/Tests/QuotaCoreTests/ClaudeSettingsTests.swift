@@ -117,11 +117,22 @@ final class ClaudeSettingsTests: XCTestCase {
     XCTAssertEqual(try ClaudeSettings.switchToken("sk-b", path: f.path), .unchanged)
   }
 
-  func testCreatesAMissingFileReadableByTheOwnerOnly() throws {
+  func testNoFileIsNotCreated() throws {
     let f = try tempDir().appendingPathComponent(".claude/settings.json")
-    XCTAssertEqual(try ClaudeSettings.switchToken("sk-b", path: f.path), .written(backup: nil))
-    XCTAssertEqual(ClaudeSettings.currentToken(in: try String(contentsOf: f, encoding: .utf8)), "sk-b")
-    XCTAssertEqual(try FileManager.default.attributesOfItem(atPath: f.path)[.posixPermissions] as? Int, 0o600)
+    XCTAssertEqual(try ClaudeSettings.switchToken("sk-b", path: f.path), .noFile)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: f.path))
+  }
+
+  func testSetsTheAddressTooWhenAsked() throws {
+    let text = "{\n  \"env\": {\n    \"ANTHROPIC_BASE_URL\": \"http://old/\",\n    \"ANTHROPIC_AUTH_TOKEN\": \"t\"\n  }\n}\n"
+    XCTAssertEqual(try ClaudeSettings.setToken("sk-new", baseURL: "http://new/api", in: text),
+                   "{\n  \"env\": {\n    \"ANTHROPIC_BASE_URL\": \"http://new/api\",\n    \"ANTHROPIC_AUTH_TOKEN\": \"sk-new\"\n  }\n}\n")
+    XCTAssertEqual(try ClaudeSettings.setToken("sk-new", baseURL: "http://new/api", in: "{\"env\": {}}"),
+                   "{\"env\": {\n  \"ANTHROPIC_AUTH_TOKEN\": \"sk-new\",\n  \"ANTHROPIC_BASE_URL\": \"http://new/api\"\n}}")
+    XCTAssertEqual(ClaudeSettings.currentEnv("ANTHROPIC_BASE_URL", in: text), "http://old/")
+    XCTAssertTrue(ClaudeSettings.sameURL("http://a/api/ ", "HTTP://a/api"))
+    XCTAssertFalse(ClaudeSettings.sameURL("http://a/api", "http://a/api/v1"))
+    XCTAssertFalse(ClaudeSettings.sameURL(nil, ""))
   }
 
   func testASymlinkedFileIsWrittenWhereItPoints() throws {

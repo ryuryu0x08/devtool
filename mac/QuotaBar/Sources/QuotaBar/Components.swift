@@ -121,11 +121,11 @@ struct UseButton: View {
       if store.active?.id == p.id {
         HStack(spacing: 4) {
           Icon(.checkFilled, size: 12)
-          Text(compact ? "使用中" : "Claude Code 使用中")
+          Text("使用中")
         }
         .font(.ui(11.5, .medium))
         .foregroundStyle(.green)
-        .help("Claude Code 的 ANTHROPIC_AUTH_TOKEN 是这个人的 key")
+        .help("Claude Code 正在用这个 key")
         .transition(.opacity.combined(with: .scale(scale: 0.9)))
       } else if !p.key.isEmpty && (p.name != nil || p.lastGood != nil) {
         Button {
@@ -133,7 +133,7 @@ struct UseButton: View {
         } label: {
           HStack(spacing: 4) {
             Icon(.swap, size: 11)
-            Text(compact ? "切换" : "用于 Claude Code")
+            Text(compact ? "切换" : "用于 Claude")
           }
           .font(.ui(11.5, .medium))
         }
@@ -163,7 +163,7 @@ struct AddKeyField: View {
         }
       }
       .frame(width: 16)
-      TextField("", text: $text, prompt: Text("粘贴新 key，回车添加").font(.ui(12.5)))
+      TextField("", text: $text, prompt: Text("粘贴 key，回车添加").font(.ui(12.5)))
         .textFieldStyle(.plain)
         .font(.mono(12.5))
         .focused($focused)
@@ -239,7 +239,7 @@ struct Trouble: View {
       VStack(alignment: .leading, spacing: 1) {
         Text(text)
         if let age {
-          Text("显示的是 \(age.formatted(.relative(presentation: .named))) 的数据").foregroundStyle(.tertiary)
+          Text("\(age.formatted(.relative(presentation: .named)))的数据").foregroundStyle(.tertiary)
         }
       }
     }

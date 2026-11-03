@@ -72,15 +72,12 @@ enum AppFonts {
 }
 
 extension Font {
-  /// How much larger than the sizes written in the views text is drawn.
-  static let bump: CGFloat = 1.5
-
   /// Text: Anthropic Sans.
-  @MainActor static func ui(_ size: CGFloat, _ w: TypeWeight = .regular) -> Font { AppFonts.sansFont(size + bump, w) }
+  @MainActor static func ui(_ size: CGFloat, _ w: TypeWeight = .regular) -> Font { AppFonts.sansFont(size + TextSize.shared.bump, w) }
   /// Names and large numbers: Anthropic Serif.
-  @MainActor static func serif(_ size: CGFloat, _ w: TypeWeight = .regular) -> Font { AppFonts.serifFont(size + bump, w) }
+  @MainActor static func serif(_ size: CGFloat, _ w: TypeWeight = .regular) -> Font { AppFonts.serifFont(size + TextSize.shared.bump, w) }
   /// Keys.
-  static func mono(_ size: CGFloat) -> Font { .system(size: size + bump, design: .monospaced) }
+  @MainActor static func mono(_ size: CGFloat) -> Font { .system(size: size + TextSize.shared.bump, design: .monospaced) }
 }
 
 /// An icon from Anthropicons, or the matching SF Symbol without it.
@@ -142,5 +139,30 @@ struct Icon: View {
     } else {
       Image(systemName: glyph.symbol).font(.system(size: size * 0.85, weight: .medium))
     }
+  }
+}
+
+/// How much larger than the sizes written in the views all text is drawn: set in the settings,
+/// the same step for every kind of text. Views that use the fonts redraw when it changes.
+@MainActor @Observable
+final class TextSize {
+  static let shared = TextSize()
+  static let standard: CGFloat = 1.5
+  static let range: ClosedRange<CGFloat> = -1.5...6
+
+  var bump: CGFloat {
+    didSet { UserDefaults.standard.set(Double(bump), forKey: "textSizeBump") }
+  }
+
+  private init() {
+    bump = (UserDefaults.standard.object(forKey: "textSizeBump") as? Double).map { CGFloat($0) } ?? TextSize.standard
+  }
+
+  /// "标准", "+1", "−0.5"…, relative to the standard size.
+  var label: String {
+    let d = bump - TextSize.standard
+    if abs(d) < 0.01 { return "标准" }
+    let n = d.rounded() == d ? String(Int(abs(d))) : String(format: "%.1f", abs(d))
+    return (d > 0 ? "+" : "−") + n
   }
 }
