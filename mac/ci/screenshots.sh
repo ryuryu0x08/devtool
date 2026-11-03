@@ -61,6 +61,22 @@ dark() {
 shot panel-light --panel-window
 shot dashboard-light --dashboard
 shot settings-light --settings
+# ⌘A ⌘C ⌘V in a text field: the address field of the settings has the focus.
+open build/QuotaBar.app --args --settings
+sleep 6
+osascript -e 'tell application "QuotaBar" to activate' || true
+sleep 1
+printf 'x' | pbcopy
+osascript -e 'tell application "System Events" to keystroke "a" using command down' -e 'tell application "System Events" to keystroke "c" using command down' || true
+sleep 1
+echo "--- copied with ⌘A ⌘C: $(pbpaste)"
+printf 'http://127.0.0.1:9931/pasted' | pbcopy
+osascript -e 'tell application "System Events" to keystroke "a" using command down' -e 'tell application "System Events" to keystroke "v" using command down' || true
+sleep 2
+echo "--- address after ⌘V: $(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["url"])' "$DIR/config.json")"
+screencapture -x "$SHOTS/pasted.png"
+pkill -x QuotaBar || true
+sleep 1
 # Switching the system to dark while the app runs: it follows at once.
 open build/QuotaBar.app --args --dashboard
 sleep 8
