@@ -82,13 +82,13 @@ public final class LocalForwarder: @unchecked Sendable {
   static func free(_ p: UInt16) -> Bool {
     let s = socket(AF_INET, SOCK_STREAM, 0)
     guard s >= 0 else { return false }
-    defer { close(s) }
+    defer { Darwin.close(s) }
     var a = sockaddr_in()
     a.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
     a.sin_family = sa_family_t(AF_INET)
     a.sin_port = p.bigEndian
     a.sin_addr.s_addr = inet_addr("127.0.0.1")
-    let r = withUnsafePointer(to: &a) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(s, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) } }
+    let r = withUnsafePointer(to: &a) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.bind(s, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) } }
     return r == 0
   }
 
