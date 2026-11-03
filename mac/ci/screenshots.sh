@@ -37,6 +37,9 @@ shot() {
   open build/QuotaBar.app --args "$2"
   sleep 8
   screencapture -x "$SHOTS/$1.png"
+  if [[ "$2" == --dashboard ]]; then
+    swift ../ci/scroll.swift && sleep 1 && screencapture -x "$SHOTS/$1-end.png"
+  fi
   pkill -x QuotaBar || true
   sleep 1
 }

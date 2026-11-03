@@ -22,9 +22,7 @@ struct DashboardView: View {
           .frame(maxWidth: .infinity, minHeight: 360)
         } else {
           if let q = store.poolReading { PoolCard(q: q) }
-          LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 14)], spacing: 14) {
-            ForEach(store.keys) { k in KeyCard(k: k) }
-          }
+          KeyGrid()
           TrendsCard()
         }
       }
@@ -47,6 +45,36 @@ struct DashboardView: View {
     }
     .sheet(isPresented: $showSettings) { SettingsView() }
     .onAppear { store.readSettings() }
+  }
+}
+
+/// The key cards, as many to a row as fit (at least 280 wide), the cards of a row as tall as
+/// the tallest.
+struct KeyGrid: View {
+  @Environment(Store.self) private var store
+  @State private var width: CGFloat = 900
+
+  var body: some View {
+    let keys = store.keys
+    let cols = max(1, Int((width + 14) / (280 + 14)))
+    Grid(horizontalSpacing: 14, verticalSpacing: 14) {
+      ForEach(Array(stride(from: 0, to: keys.count, by: cols)), id: \.self) { i in
+        GridRow {
+          ForEach(keys[i..<min(i + cols, keys.count)]) { k in
+            KeyCard(k: k)
+          }
+          ForEach(0..<(cols - min(cols, keys.count - i)), id: \.self) { _ in
+            Color.clear.frame(maxWidth: .infinity, maxHeight: 0)
+          }
+        }
+      }
+    }
+    .frame(maxWidth: .infinity)
+    .background(GeometryReader { g in
+      Color.clear
+        .onAppear { width = g.size.width }
+        .onChange(of: g.size.width) { _, w in width = w }
+    })
   }
 }
 
@@ -101,11 +129,10 @@ struct KeyCard: View {
       }
       switch store.latest[k.id]?.reply {
       case nil:
-        Text("等待第一次刷新…").foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 90, alignment: .leading)
+        Text("等待第一次刷新…").foregroundStyle(.secondary)
       case .failed(let why, _)?:
         Label(why, systemImage: "exclamationmark.triangle.fill")
           .foregroundStyle(.red).font(.callout)
-          .frame(maxWidth: .infinity, minHeight: 90, alignment: .topLeading)
       case .ok(let q, _)?:
         let s = KeyState(q)
         VStack(alignment: .leading, spacing: 2) {
@@ -119,6 +146,7 @@ struct KeyCard: View {
           if (q.overLimit ?? 0) > 0 { legend(color: .orange, "超额", q.over, q.overLimit) }
         }
       }
+      Spacer(minLength: 0)
       Divider()
       HStack {
         if let at = store.latest[k.id]?.at {
@@ -128,6 +156,7 @@ struct KeyCard: View {
         UseButton(k: k)
       }
     }
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .card()
     .overlay(
       RoundedRectangle(cornerRadius: 12, style: .continuous)
