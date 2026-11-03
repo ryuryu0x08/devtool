@@ -110,6 +110,13 @@ final class LocalForwarderTests: XCTestCase {
     XCTAssertTrue(String(decoding: data, as: UTF8.self).contains("连不上 127.0.0.1:9"))
   }
 
+  func testRestartingKeepsThePort() async throws {
+    let f = try LocalForwarder(target: URL(string: "http://127.0.0.1:9/api")!)
+    let p = try await f.start(preferred: 47990)
+    for _ in 0..<3 { XCTAssertEqual(try await f.start(preferred: p), p) }
+    f.stop()
+  }
+
   func testWhenItIsNeeded() {
     XCTAssertTrue(LocalForwarder.needed(for: "http://api-ai-coding.bilibili.co/api"))
     XCTAssertFalse(LocalForwarder.needed(for: "https://api.example.com"))

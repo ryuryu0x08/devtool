@@ -57,6 +57,10 @@ public final class LocalForwarder: @unchecked Sendable {
     stop()
     for i in 0..<tries {
       let p = preferred &+ UInt16(i)
+      // The port it had: a forwarder just stopped may take a moment to let go of it.
+      if i == 0 {
+        for _ in 0..<10 where !Self.free(p) { try? await Task.sleep(for: .milliseconds(100)) }
+      }
       if p == 0 || !Self.free(p) { continue }
       if let l = await listen(on: p) {
         listener = l
