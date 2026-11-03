@@ -72,10 +72,15 @@ enum AppFonts {
 }
 
 extension Font {
+  /// How much larger than the sizes written in the views text is drawn.
+  static let bump: CGFloat = 1.5
+
   /// Text: Anthropic Sans.
-  @MainActor static func ui(_ size: CGFloat, _ w: TypeWeight = .regular) -> Font { AppFonts.sansFont(size, w) }
+  @MainActor static func ui(_ size: CGFloat, _ w: TypeWeight = .regular) -> Font { AppFonts.sansFont(size + bump, w) }
   /// Names and large numbers: Anthropic Serif.
-  @MainActor static func serif(_ size: CGFloat, _ w: TypeWeight = .regular) -> Font { AppFonts.serifFont(size, w) }
+  @MainActor static func serif(_ size: CGFloat, _ w: TypeWeight = .regular) -> Font { AppFonts.serifFont(size + bump, w) }
+  /// Keys.
+  static func mono(_ size: CGFloat) -> Font { .system(size: size + bump, design: .monospaced) }
 }
 
 /// An icon from Anthropicons, or the matching SF Symbol without it.

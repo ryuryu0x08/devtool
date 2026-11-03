@@ -1,39 +1,6 @@
-// The menu bar: the name of the person whose key Claude Code uses and what they can still use
-// today, and the panel that opens from it, one row per person.
+// The panel that opens from the menu bar item: one row per person.
 import QuotaCore
 import SwiftUI
-
-struct MenuLabel: View {
-  @Environment(Store.self) private var store
-
-  var body: some View {
-    HStack(spacing: 4) {
-      Image(systemName: icon)
-      if let p = store.active {
-        Text(text(p)).monospacedDigit()
-      }
-    }
-  }
-
-  private func text(_ p: Person) -> String {
-    guard let g = store.shown(p).reading else { return p.label }
-    return p.label + " " + Fmt.num(KeyState(g.usage).left)
-  }
-
-  private var icon: String {
-    guard let p = store.active else { return "gauge.with.dots.needle.50percent" }
-    switch store.shown(p) {
-    case .failing, .noKey: return "exclamationmark.triangle"
-    case .waiting: return "gauge.with.dots.needle.50percent"
-    case .ok(let g):
-      switch KeyState(g.usage).kind {
-      case .withinDaily: return "gauge.with.dots.needle.33percent"
-      case .onOverflow: return "gauge.with.dots.needle.67percent"
-      case .out: return "gauge.with.dots.needle.100percent"
-      }
-    }
-  }
-}
 
 struct PanelView: View {
   @Environment(Store.self) private var store
@@ -63,7 +30,7 @@ struct PanelView: View {
       footer
     }
     .padding(14)
-    .frame(width: 360)
+    .frame(width: 384)
     .animation(.snappy, value: store.notice)
     .animation(.snappy, value: store.people.map(\.id))
     .onAppear { store.readSettings() }
@@ -106,19 +73,27 @@ struct PanelView: View {
 
 struct RefreshButton: View {
   @Environment(Store.self) private var store
+  /// In a window's toolbar: an SF Symbol, which the toolbar sizes and frames itself.
+  var toolbar = false
 
   var body: some View {
-    Button {
+    let b = Button {
       Task { await store.refresh() }
     } label: {
-      Icon(.refresh, size: 13)
-        .rotationEffect(.degrees(store.refreshing ? 360 : 0))
-        .animation(store.refreshing ? .linear(duration: 0.8).repeatForever(autoreverses: false) : .default, value: store.refreshing)
+      Group {
+        if toolbar {
+          Image(systemName: "arrow.clockwise")
+        } else {
+          Icon(.refresh, size: 13)
+        }
+      }
+      .rotationEffect(.degrees(store.refreshing ? 360 : 0))
+      .animation(store.refreshing ? .linear(duration: 0.8).repeatForever(autoreverses: false) : .default, value: store.refreshing)
     }
-    .buttonStyle(.borderless)
     .disabled(store.refreshing)
     .help("立即刷新")
     .keyboardShortcut("r")
+    if toolbar { b } else { b.buttonStyle(.borderless) }
   }
 }
 
@@ -153,7 +128,7 @@ struct PersonRow: View {
     VStack(alignment: .leading, spacing: 7) {
       HStack(spacing: 6) {
         Text(p.label)
-          .font(p.name == nil ? .system(size: 13, design: .monospaced) : .serif(15, .semibold))
+          .font(p.name == nil ? .mono(13) : .serif(15, .semibold))
           .lineLimit(1)
           .contentTransition(.opacity)
         if let g = shown.reading, !shown.stale {

@@ -35,6 +35,14 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/QuotaBar"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+# The icon, at the sizes macOS asks for.
+ICONSET="$(mktemp -d)/AppIcon.iconset"
+mkdir -p "$ICONSET"
+for s in 16 32 128 256 512; do
+  sips -z $s $s Resources/AppIcon.png --out "$ICONSET/icon_${s}x${s}.png" >/dev/null
+  sips -z $((s * 2)) $((s * 2)) Resources/AppIcon.png --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
+done
+iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 if [[ -d Fonts ]] && ls Fonts/* >/dev/null 2>&1; then
   mkdir -p "$APP/Contents/Resources/Fonts"
   cp Fonts/* "$APP/Contents/Resources/Fonts/"

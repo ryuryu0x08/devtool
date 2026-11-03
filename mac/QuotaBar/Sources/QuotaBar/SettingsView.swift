@@ -15,7 +15,7 @@ struct SettingsView: View {
       Form {
         Section {
           TextField(text: $url, prompt: Text(Config.defaultURL)) { Text("地址").font(.ui(13)) }
-            .font(.system(size: 12.5, design: .monospaced))
+            .font(.mono(12.5))
           Stepper(value: $interval, in: 10...3600, step: 10) {
             LabeledContent { Text("\(interval) 秒").font(.ui(13)).monospacedDigit() } label: { Text("刷新间隔").font(.ui(13)) }
           }
@@ -38,7 +38,7 @@ struct SettingsView: View {
         }
         Section {
           TextField(text: $settingsPath) { Text("settings.json").font(.ui(13)) }
-            .font(.system(size: 12.5, design: .monospaced))
+            .font(.mono(12.5))
         } header: {
           Text("Claude Code 配置文件").font(.ui(12, .semibold))
         } footer: {
@@ -93,7 +93,7 @@ private struct PersonKeyRow: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 4) {
       HStack {
-        Text(p.label).font(p.name == nil ? .system(size: 13, design: .monospaced) : .serif(14, .semibold))
+        Text(p.label).font(p.name == nil ? .mono(13) : .serif(14, .semibold))
         Spacer()
         if !p.key.isEmpty {
           Button {
@@ -115,7 +115,7 @@ private struct PersonKeyRow: View {
           .help("删除")
       }
       Text(p.key.isEmpty ? "等待新 key" : p.key)
-        .font(.system(size: 11.5, design: .monospaced))
+        .font(.mono(11.5))
         .foregroundStyle(.secondary)
         .textSelection(.enabled)
         .lineLimit(2)

@@ -165,7 +165,7 @@ struct AddKeyField: View {
       .frame(width: 16)
       TextField("", text: $text, prompt: Text("粘贴新 key，回车添加").font(.ui(12.5)))
         .textFieldStyle(.plain)
-        .font(.system(size: 12.5, design: .monospaced))
+        .font(.mono(12.5))
         .focused($focused)
         .onSubmit(submit)
         .disabled(store.adding)

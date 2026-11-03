@@ -34,9 +34,9 @@ struct DashboardView: View {
     // Under the window title, drawn by the system: it fits whatever the length.
     .navigationSubtitle(store.lastRefresh.map { "更新于 \($0.formatted(date: .omitted, time: .standard)) · 每 \(store.config.interval) 秒刷新" } ?? "")
     .toolbar {
-      ToolbarItem { RefreshButton() }
+      ToolbarItem { RefreshButton(toolbar: true) }
       ToolbarItem {
-        Button { showSettings = true } label: { Icon(.gear, size: 14) }
+        Button { showSettings = true } label: { Image(systemName: "gearshape") }
           .help("设置")
           .keyboardShortcut(",")
       }
@@ -99,9 +99,7 @@ struct PoolCard: View {
           .animation(.snappy, value: p)
       }
       FillBar(fraction: p / 100, color: color)
-      Text(p >= 100
-           ? "共用额度池已满：今日额度用完后无法再用超额。"
-           : "还剩 \(Fmt.num((q.poolLimit ?? 0) - (q.pool ?? 0)))。今日额度用完后，超额从这里扣，每人最多用到自己的超额上限；池子剩的不够时，超额以池子剩余为准。")
+      Text(p >= 100 ? "已满：超额暂时用不了" : "剩 \(Fmt.num((q.poolLimit ?? 0) - (q.pool ?? 0))) · 超额从这里扣")
         .font(.ui(11.5)).foregroundStyle(.secondary)
     }
     .card()
@@ -117,7 +115,7 @@ struct PersonCard: View {
     VStack(alignment: .leading, spacing: 10) {
       HStack(spacing: 6) {
         Text(p.label)
-          .font(p.name == nil ? .system(size: 14, design: .monospaced) : .serif(18, .semibold))
+          .font(p.name == nil ? .mono(14) : .serif(18, .semibold))
           .lineLimit(1)
           .contentTransition(.opacity)
         Spacer()

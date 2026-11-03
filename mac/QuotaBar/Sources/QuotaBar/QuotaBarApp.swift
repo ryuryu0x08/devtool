@@ -10,13 +10,10 @@ struct QuotaBarApp: App {
 
   init() { AppFonts.load() }
 
+  // The menu bar item is StatusBar's (it decides between the panel and the dashboard); SwiftUI
+  // only needs a scene, and this one shows nothing.
   var body: some Scene {
-    MenuBarExtra {
-      PanelView().environment(store)
-    } label: {
-      MenuLabel().environment(store)
-    }
-    .menuBarExtraStyle(.window)
+    MenuBarExtra("QuotaBar", isInserted: .constant(false)) { EmptyView() }
   }
 }
 
@@ -25,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     MainActor.assumeIsolated {
       editShortcuts()
       let store = Store.shared
+      StatusBar.shared.start(store)
       let args = CommandLine.arguments
       let empty = !store.hasURL || store.people.isEmpty
       if empty || args.contains("--dashboard") || args.contains("--settings") {
@@ -77,8 +75,11 @@ enum Windows {
 
   static func keep(_ w: NSWindow) { others.append(w) }
 
+  static var dashboardOpen: Bool { dashboard?.isVisible == true }
+
   /// Brings the dashboard to the front (opening it if needed), with the settings sheet if asked.
   static func showDashboard(_ store: Store, settings: Bool = false) {
+    StatusBar.shared.closePanel()
     let model = DashboardModel.shared
     if dashboard == nil {
       let host = NSHostingController(rootView: DashboardRoot(model: model).environment(store))
