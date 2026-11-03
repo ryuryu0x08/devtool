@@ -167,7 +167,7 @@ struct PersonRow: View {
       if let g = shown.reading {
         let s = KeyState(g.usage)
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-          RollingNumber(value: s.left, size: 22)
+          RollingNumber(value: s.left, size: 22, stale: shown.stale)
           Text("今日还可用").font(.ui(11)).foregroundStyle(.secondary)
           Spacer()
           Text("今日 \(Fmt.num(g.usage.daily))/\(Fmt.num(g.usage.dailyLimit))").font(.ui(11)).foregroundStyle(.secondary).monospacedDigit()
@@ -179,7 +179,6 @@ struct PersonRow: View {
       }
       trouble(shown)
     }
-    .opacity(shown.stale && shown.reading != nil ? 0.85 : 1)
     .card(padding: 10, highlight: store.active?.id == p.id)
     .contextMenu {
       Button("删除「\(p.label)」", role: .destructive) { withAnimation(.snappy) { store.remove(p) } }

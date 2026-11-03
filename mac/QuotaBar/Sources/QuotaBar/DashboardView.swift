@@ -135,7 +135,7 @@ struct PersonCard: View {
         let s = KeyState(g.usage)
         VStack(alignment: .leading, spacing: 2) {
           Text("今日还可用").font(.ui(11.5)).foregroundStyle(.secondary)
-          RollingNumber(value: s.left, size: 34)
+          RollingNumber(value: s.left, size: 34, stale: shown.stale)
           Text(s.parts).font(.ui(11.5)).foregroundStyle(s.poolCaps && !shown.stale ? .orange : .secondary)
         }
         QuotaMeter(q: g.usage)
@@ -155,7 +155,6 @@ struct PersonCard: View {
         UseButton(p: p)
       }
     }
-    .opacity(shown.stale && shown.reading != nil ? 0.85 : 1)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .card(highlight: store.active?.id == p.id)
     .contextMenu {
@@ -188,7 +187,9 @@ struct PersonCard: View {
   }
 }
 
-/// Each person's use today and the shared pool over time.
+/// Each person's use today and the shared pool over time. The quota comes back now and then
+/// (use drops to a lower number): the line breaks there, with a mark, instead of falling; it also
+/// breaks where nothing was read (the app wasn't running).
 struct TrendsCard: View {
   @Environment(Store.self) private var store
   @AppStorage("range") private var range = 86400
@@ -199,6 +200,14 @@ struct TrendsCard: View {
     var t: Date
     var v: Double
     var series: String
+    var run: Int
+    /// The only point of its run: drawn as a dot, as there is no line.
+    var alone = false
+  }
+
+  private struct Series {
+    var points: [Point]
+    var resets: [Date]
   }
 
   var body: some View {
@@ -206,13 +215,13 @@ struct TrendsCard: View {
     let from = now.addingTimeInterval(-Double(range))
     let shown = store.history.filter { $0.t >= from }
     let names = seriesNames()
-    let usage = shown.compactMap { s -> Point? in
-      guard let v = s.daily, let n = names[s.key] else { return nil }
-      return Point(t: s.t, v: v, series: n)
-    }
-    let pool = Dictionary(shown.compactMap { s in s.pool.map { (s.t, $0) } }, uniquingKeysWith: { a, _ in a })
-      .map { Point(t: $0.key, v: $0.value, series: "共用池") }
-      .sorted { $0.t < $1.t }
+    let gap = max(3 * History.step, 2.5 * Double(store.config.interval))
+    let usage = series(gap: gap, store.people.compactMap { p -> (String, [(t: Date, v: Double)])? in
+      guard let n = names[p.id] else { return nil }
+      return (n, shown.filter { $0.key == p.id }.compactMap { s in s.daily.map { (t: s.t, v: $0) } })
+    })
+    let poolByTime = Dictionary(shown.compactMap { s in s.pool.map { (s.t, $0) } }, uniquingKeysWith: { a, _ in a })
+    let pool = series(gap: gap, [("共用池", poolByTime.map { (t: $0.key, v: $0.value) })])
 
     VStack(alignment: .leading, spacing: 14) {
       HStack {
@@ -228,17 +237,29 @@ struct TrendsCard: View {
         .labelsHidden()
         .fixedSize()
       }
-      if usage.isEmpty {
+      if usage.points.isEmpty {
         Text("这段时间还没有数据：App 运行期间每 5 分钟记一个点，保留 7 天。")
           .font(.ui(12.5)).foregroundStyle(.secondary)
           .frame(maxWidth: .infinity, minHeight: 120)
       } else {
         chart("今日用量（含超额部分）", usage, from: from, to: now)
-        if !pool.isEmpty { chart("共用额度池", pool, from: from, to: now, color: .orange) }
+        if !pool.points.isEmpty { chart("共用额度池", pool, from: from, to: now, color: .orange) }
       }
     }
     .card()
     .animation(.smooth, value: range)
+  }
+
+  /// The points of each named series in runs, and when the quota came back (in any of them).
+  private func series(gap: TimeInterval, _ all: [(String, [(t: Date, v: Double)])]) -> Series {
+    var points: [Point] = [], resets: Set<Date> = []
+    for (name, pts) in all {
+      let r = Trend.runs(pts, gap: gap)
+      let sizes = Dictionary(grouping: r.points, by: \.run).mapValues(\.count)
+      points += r.points.map { Point(t: $0.t, v: $0.v, series: name, run: $0.run, alone: sizes[$0.run] == 1) }
+      resets.formUnion(r.resets)
+    }
+    return Series(points: points, resets: resets.sorted())
   }
 
   /// One name per person; two people shown the same way are told apart by their number.
@@ -252,16 +273,31 @@ struct TrendsCard: View {
   }
 
   @ViewBuilder
-  private func chart(_ title: String, _ points: [Point], from: Date, to: Date, color: Color? = nil) -> some View {
+  private func chart(_ title: String, _ s: Series, from: Date, to: Date, color: Color? = nil) -> some View {
+    let points = s.points
     let at = hover.flatMap { h in points.min { abs($0.t.timeIntervalSince(h)) < abs($1.t.timeIntervalSince(h)) }?.t }
+    let several = points.contains { $0.series != points.first?.series }
     VStack(alignment: .leading, spacing: 6) {
       Text(title).font(.ui(12, .medium)).foregroundStyle(.secondary)
       Chart {
+        ForEach(s.resets, id: \.self) { t in
+          RuleMark(x: .value("时间", t))
+            .foregroundStyle(.secondary.opacity(0.35))
+            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+            .annotation(position: .top, alignment: .leading, spacing: 2) {
+              Text("额度恢复").font(.ui(9.5)).foregroundStyle(.secondary)
+            }
+        }
         ForEach(points) { p in
-          LineMark(x: .value("时间", p.t), y: .value("用量", p.v))
+          LineMark(x: .value("时间", p.t), y: .value("用量", p.v), series: .value("段", p.series + "#" + String(p.run)))
             .foregroundStyle(by: .value("人", p.series))
             .interpolationMethod(.monotone)
-            .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
+            .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+          if p.alone {
+            PointMark(x: .value("时间", p.t), y: .value("用量", p.v))
+              .foregroundStyle(by: .value("人", p.series))
+              .symbolSize(14)
+          }
         }
         if let at {
           RuleMark(x: .value("时间", at))
@@ -279,10 +315,10 @@ struct TrendsCard: View {
       .chartForegroundStyleScale(range: color.map { [$0] } ?? palette)
       .chartXScale(domain: from...to)
       // Use is never below 0: the axis starts there.
-      .chartYScale(domain: 0...max(1, (points.map(\.v).max() ?? 0) * 1.1))
+      .chartYScale(domain: 0...max(1, (points.map(\.v).max() ?? 0) * 1.12))
       .chartXAxis { AxisMarks { _ in AxisGridLine(); AxisValueLabel().font(.ui(10)) } }
       .chartYAxis { AxisMarks { _ in AxisGridLine(); AxisValueLabel().font(.ui(10)) } }
-      .chartLegend(points.contains { $0.series != points.first?.series } ? .visible : .hidden)
+      .chartLegend(several ? .visible : .hidden)
       .chartLegend(position: .bottom, alignment: .leading)
       .chartXSelection(value: $hover)
       .frame(height: 200)

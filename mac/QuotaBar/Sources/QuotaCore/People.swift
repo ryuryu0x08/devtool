@@ -29,7 +29,7 @@ public struct GoodReading: Codable, Equatable, Sendable {
 
 public enum People {
   /// How much of a key is shown before its name is known.
-  public static let shown = 8
+  public static let shown = 10
 
   public static func shortKey(_ key: String) -> String {
     key.count <= shown ? key : String(key.prefix(shown)) + "…"

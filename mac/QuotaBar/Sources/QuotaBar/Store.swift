@@ -227,14 +227,16 @@ final class Store {
 
   // MARK: - Refreshing
 
-  /// Refreshes now and then every `interval` seconds.
+  /// Refreshes now and then every `interval` seconds; after a reading failed for a reason other
+  /// than the key (the network, the API), again after 15 seconds.
   func restart() {
     loop?.cancel()
     loop = Task { [weak self] in
       while !Task.isCancelled {
         guard let self else { return }
         await self.refresh()
-        try? await Task.sleep(for: .seconds(max(10, self.config.interval)))
+        let soon = self.failures.values.contains { $0.kind != .keyRejected }
+        try? await Task.sleep(for: .seconds(soon ? min(15, max(10, self.config.interval)) : max(10, self.config.interval)))
       }
     }
   }

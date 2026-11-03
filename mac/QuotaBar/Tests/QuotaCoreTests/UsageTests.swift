@@ -104,3 +104,28 @@ final class HistoryTests: XCTestCase {
     XCTAssertEqual(History.slot(at(10)).timeIntervalSince1970, 999_999_900)
   }
 }
+
+final class TrendTests: XCTestCase {
+  private func at(_ m: Double) -> Date { Date(timeIntervalSince1970: m * 60) }
+
+  func testTheLineBreaksWhereTheQuotaCameBackAndWhereNothingWasRead() {
+    let pts: [(t: Date, v: Double)] = [
+      (at(0), 10), (at(5), 20), (at(10), 20.05),   // 20.05 vs 20: the same run (no drop)
+      (at(15), 3),                                  // came back
+      (at(20), 8),
+      (at(80), 9),                                  // an hour with nothing read
+      (at(85), 8.999),                              // rounding, not a drop
+    ]
+    let r = Trend.runs(Array(pts.reversed()), gap: 15 * 60)
+    XCTAssertEqual(r.points.map(\.run), [0, 0, 0, 1, 1, 2, 2])
+    XCTAssertEqual(r.points.map(\.v), [10, 20, 20.05, 3, 8, 9, 8.999])
+    XCTAssertEqual(r.resets, [at(15)])
+  }
+
+  func testAFullDropIsAReset() {
+    let r = Trend.runs([(at(0), 300), (at(5), 0)], gap: 900)
+    XCTAssertEqual(r.points.map(\.run), [0, 1])
+    XCTAssertEqual(r.resets, [at(5)])
+    XCTAssertEqual(Trend.runs([], gap: 900).points, [])
+  }
+}

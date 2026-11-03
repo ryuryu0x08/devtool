@@ -7,30 +7,37 @@ mkdir -p "$SHOTS"
 DIR="$HOME/Library/Application Support/QuotaBar"
 mkdir -p "$DIR"
 TMP="$(mktemp -d)"
-printf '{\n  "env": {\n    "ANTHROPIC_AUTH_TOKEN": "sk-demo-yy"\n  }\n}\n' > "$TMP/settings.json"
+# Claude Code still uses ye's old key, which was rotated.
+printf '{\n  "model": "opus",\n  "env": {\n    "ANTHROPIC_AUTH_TOKEN": "sk-demo-ye-old"\n  }\n}\n' > "$TMP/settings.json"
 
 python3 ../ci/fake_usage.py &
 SERVER=$!
+until curl -s -o /dev/null http://127.0.0.1:9931/; do sleep 0.2; done
 trap 'kill $SERVER 2>/dev/null || true; pkill -x QuotaBar || true' EXIT
 
 python3 - "$DIR" "$TMP/settings.json" <<'PY'
 import json, math, sys, time
 d, settings = sys.argv[1], sys.argv[2]
 now = time.time() // 300 * 300
-# ye, yy, 66 read fine; 老王's key was rotated (the API turns it down; the last reading stays);
-# the last key is new and not read successfully yet.
+# ye's key was rotated: the old one is turned down, the new one (just pasted, not yet named)
+# reads as ye. yy and 66 read fine. 老王's key was rotated too, with no new one yet (the last
+# reading stays). The last key is new and turned down.
 old = {"at": now - 3 * 3600, "usage": {"daily": 120, "dailyLimit": 200, "over": 0, "overLimit": 100, "pool": 700, "poolLimit": 1000}}
-people = [{"id": "a", "key": "sk-demo-ye"}, {"id": "b", "name": "yy", "key": "sk-demo-yy"},
+people = [{"id": "a", "name": "ye", "key": "sk-demo-ye-old", "lastGood": old}, {"id": "b", "name": "yy", "key": "sk-demo-yy"},
           {"id": "c", "name": "66", "key": "sk-demo-66"}, {"id": "d", "name": "老王", "key": "sk-demo-gone", "lastGood": old},
-          {"id": "e", "key": "sk-new-0123456789"}]
+          {"id": "e", "key": "sk-new-0123456789"}, {"id": "f", "key": "sk-demo-ye"}]
 json.dump({"url": "http://127.0.0.1:9931/api/v1/billing/usage", "interval": 60, "people": people, "settingsPath": settings},
           open(d + "/config.json", "w"))
+# 24 hours: the quota came back 8 hours ago (use starts again from 0), and the app wasn't
+# running for an hour 14 hours ago.
 h = []
 for i in range(288, 0, -1):
     t = now - i * 300
-    f = (288 - i) / 288
+    if 14 * 12 >= i > 13 * 12:
+        continue
+    f = (96 - i) / 96 if i < 96 else (288 - i) / 192
     for k, top in (("a", 82), ("b", 236), ("c", 300)):
-        h.append({"t": t, "key": k, "daily": round(top * f + 3 * math.sin(i / 7), 2), "over": None, "pool": None})
+        h.append({"t": t, "key": k, "daily": round(max(0, top * f + 2 * math.sin(i / 7)), 2), "over": None, "pool": None})
     h[-1]["pool"] = round(912 * f, 1)
 json.dump(h, open(d + "/history.json", "w"))
 PY
@@ -59,6 +66,10 @@ shot panel-dark --panel-window
 shot dashboard-dark --dashboard
 dark false || true
 ls -la "$SHOTS"
+echo "--- settings.json after the runs:"
+cat "$TMP/settings.json"
+echo "--- people after the runs:"
+python3 -c 'import json,sys; [print(p.get("name"), p["key"]) for p in json.load(open(sys.argv[1]))["people"]]' "$DIR/config.json"
 # Also in the log, smaller, for reading without downloading the artifact.
 for f in "$SHOTS"/*.png; do
   sips -Z 1600 -s format jpeg -s formatOptions 70 "$f" --out "${f%.png}.jpg" >/dev/null

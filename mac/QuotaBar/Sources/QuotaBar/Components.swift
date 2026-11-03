@@ -16,11 +16,14 @@ extension KeyState.Kind {
 struct RollingNumber: View {
   let value: Double?
   var size: CGFloat = 28
+  /// An older reading (the latest failed): shown lighter.
+  var stale = false
 
   var body: some View {
     Text(Fmt.num(value))
       .font(.serif(size, .medium))
       .monospacedDigit()
+      .foregroundStyle(stale ? .secondary : .primary)
       .contentTransition(.numericText(value: value ?? 0))
       .animation(.snappy, value: value)
   }
@@ -124,7 +127,7 @@ struct UseButton: View {
         .foregroundStyle(.green)
         .help("Claude Code 的 ANTHROPIC_AUTH_TOKEN 是这个人的 key")
         .transition(.opacity.combined(with: .scale(scale: 0.9)))
-      } else if !p.key.isEmpty {
+      } else if !p.key.isEmpty && (p.name != nil || p.lastGood != nil) {
         Button {
           store.use(p)
         } label: {

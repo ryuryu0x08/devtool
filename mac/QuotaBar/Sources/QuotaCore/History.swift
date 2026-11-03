@@ -36,3 +36,39 @@ public enum History {
     return by.values.sorted { ($0.t, $0.key) < ($1.t, $1.key) }
   }
 }
+
+/// A series for a chart, in runs: a line is drawn within a run, not across runs.
+public enum Trend {
+  public struct Point: Equatable, Sendable {
+    public var t: Date
+    public var v: Double
+    /// The run the point is in (0, 1, …).
+    public var run: Int
+  }
+
+  /// Splits a series (any order) into runs. A run ends where the value drops (use only grows
+  /// through a day, so a drop is the quota coming back) or where nothing was read for longer than
+  /// `gap` (the app wasn't running). Returns the points with their runs, and the times the quota
+  /// came back (the first reading after each drop).
+  public static func runs(_ pts: [(t: Date, v: Double)], gap: TimeInterval) -> (points: [Point], resets: [Date]) {
+    var out: [Point] = [], resets: [Date] = []
+    var run = 0
+    for p in pts.sorted(by: { $0.t < $1.t }) {
+      if let last = out.last {
+        if dropped(last.v, p.v) {
+          run += 1
+          resets.append(p.t)
+        } else if p.t.timeIntervalSince(last.t) > gap {
+          run += 1
+        }
+      }
+      out.append(Point(t: p.t, v: p.v, run: run))
+    }
+    return (out, resets)
+  }
+
+  /// `b` is below `a` by more than rounding.
+  static func dropped(_ a: Double, _ b: Double) -> Bool {
+    b < a - max(0.01, abs(a) * 0.005)
+  }
+}
