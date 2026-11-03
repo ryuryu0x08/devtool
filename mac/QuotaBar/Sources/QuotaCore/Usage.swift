@@ -24,10 +24,27 @@ public struct Usage: Equatable, Codable, Sendable {
   }
 }
 
+/// Why a reading failed, and the details (HTTP status, the API's message, the system's error).
+public struct Failure: Equatable, Codable, Sendable {
+  public enum Kind: String, Codable, Sendable {
+    /// The API turned the key down: it was rotated, or stopped.
+    case keyRejected
+    /// The API answered, but with an error or something that isn't its usual reply.
+    case server
+    /// The API couldn't be reached.
+    case network
+  }
+
+  public var kind: Kind
+  public var detail: String
+
+  public init(_ kind: Kind, _ detail: String) { self.kind = kind; self.detail = detail }
+}
+
 /// One key's reading: the numbers, or why there are none. `title` is the account's nick_name.
 public enum UsageReply: Equatable, Sendable {
   case ok(Usage, title: String?)
-  case failed(String, title: String?)
+  case failed(Failure, title: String?)
 
   public var title: String? {
     switch self { case .ok(_, let t), .failed(_, let t): return t }
@@ -46,17 +63,18 @@ public enum UsageAPI {
   public static func parse(status: Int, body: Data) -> UsageReply {
     guard let json = try? JSONSerialization.jsonObject(with: body, options: [.fragmentsAllowed]) else {
       let text = String(decoding: body.prefix(120), as: UTF8.self)
-      return .failed("HTTP \(status): " + (text.isEmpty ? "(empty)" : text), title: nil)
+      return .failed(Failure(.server, "HTTP \(status): " + (text.isEmpty ? "(empty)" : text)), title: nil)
     }
     let obj = json as? [String: Any]
     let message = obj?["message"] as? String
     let data = obj?["data"] as? [String: Any]
     let title = data?["nick_name"] as? String
     guard (200..<300).contains(status) else {
-      return .failed("HTTP \(status)" + (message.map { ": " + $0 } ?? ""), title: title)
+      let kind: Failure.Kind = status == 401 || status == 403 ? .keyRejected : .server
+      return .failed(Failure(kind, "HTTP \(status)" + (message.map { ": " + $0 } ?? "")), title: title)
     }
     guard number(obj?["code"]) == 0, let data, isTrue(data["valid"]) else {
-      return .failed(message ?? "返回不是成功", title: title)
+      return .failed(Failure(.keyRejected, message ?? "返回不是成功"), title: title)
     }
     return .ok(pick(data), title: title)
   }

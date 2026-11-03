@@ -1,5 +1,5 @@
-// The menu bar: the icon with what the key Claude Code uses can still use today, and the panel
-// that opens from it, one row per key.
+// The menu bar: the name of the person whose key Claude Code uses and what they can still use
+// today, and the panel that opens from it, one row per person.
 import QuotaCore
 import SwiftUI
 
@@ -9,23 +9,28 @@ struct MenuLabel: View {
   var body: some View {
     HStack(spacing: 4) {
       Image(systemName: icon)
-      if let text { Text(text).monospacedDigit() }
+      if let p = store.active {
+        Text(text(p)).monospacedDigit()
+      }
     }
   }
 
-  /// What the key Claude Code uses can still use today.
-  private var text: String? {
-    guard let k = store.activeKey, let r = store.latest[k.id], case .ok(let q, _) = r.reply else { return nil }
-    return Fmt.num(KeyState(q).left)
+  private func text(_ p: Person) -> String {
+    guard let g = store.shown(p).reading else { return p.label }
+    return p.label + " " + Fmt.num(KeyState(g.usage).left)
   }
 
   private var icon: String {
-    guard let k = store.activeKey, let r = store.latest[k.id] else { return "gauge.with.dots.needle.50percent" }
-    guard case .ok(let q, _) = r.reply else { return "exclamationmark.triangle" }
-    switch KeyState(q).kind {
-    case .withinDaily: return "gauge.with.dots.needle.33percent"
-    case .onOverflow: return "gauge.with.dots.needle.67percent"
-    case .out: return "gauge.with.dots.needle.100percent"
+    guard let p = store.active else { return "gauge.with.dots.needle.50percent" }
+    switch store.shown(p) {
+    case .failing, .noKey: return "exclamationmark.triangle"
+    case .waiting: return "gauge.with.dots.needle.50percent"
+    case .ok(let g):
+      switch KeyState(g.usage).kind {
+      case .withinDaily: return "gauge.with.dots.needle.33percent"
+      case .onOverflow: return "gauge.with.dots.needle.67percent"
+      case .out: return "gauge.with.dots.needle.100percent"
+      }
     }
   }
 }
@@ -34,39 +39,43 @@ struct PanelView: View {
   @Environment(Store.self) private var store
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
+    VStack(alignment: .leading, spacing: 10) {
       header
       NoticeBanner()
-      if !store.configured {
+      if !store.hasURL {
         empty
       } else {
-        if let q = store.poolReading { PoolRow(q: q) }
+        if let q = store.poolReading { PoolRow(q: q).transition(.opacity) }
         ScrollView {
           VStack(spacing: 8) {
-            ForEach(store.keys) { k in KeyRow(k: k) }
+            ForEach(store.people) { p in
+              PersonRow(p: p).transition(.asymmetric(insertion: .scale(scale: 0.97).combined(with: .opacity), removal: .opacity))
+            }
           }
         }
         .frame(maxHeight: 460)
         .fixedSize(horizontal: false, vertical: true)
+        AddKeyField()
         if store.hasKeyHelper {
-          Label("settings.json 里还有 apiKeyHelper，Claude Code 可能优先用它给出的 key。", systemImage: "info.circle")
-            .font(.caption).foregroundStyle(.secondary)
+          Trouble(text: "settings.json 里还有 apiKeyHelper，Claude Code 可能优先用它给出的 key。")
         }
       }
-      Divider()
+      Divider().padding(.top, 2)
       footer
     }
     .padding(14)
     .frame(width: 360)
     .animation(.snappy, value: store.notice)
+    .animation(.snappy, value: store.people.map(\.id))
     .onAppear { store.readSettings() }
   }
 
   private var header: some View {
-    HStack {
-      Text("额度").font(.headline)
+    HStack(alignment: .firstTextBaseline) {
+      Text("额度").font(.serif(17, .semibold))
       if let t = store.lastRefresh {
-        Text("更新于 \(t.formatted(date: .omitted, time: .standard))").font(.caption).foregroundStyle(.secondary)
+        Text("更新于 \(t.formatted(date: .omitted, time: .standard))").font(.ui(11)).foregroundStyle(.secondary)
+          .contentTransition(.numericText())
       }
       Spacer()
       RefreshButton()
@@ -74,10 +83,10 @@ struct PanelView: View {
   }
 
   private var empty: some View {
-    VStack(spacing: 8) {
-      Image(systemName: "key.horizontal").font(.largeTitle).foregroundStyle(.secondary)
-      Text("先填写用量接口地址，再添加 key").foregroundStyle(.secondary)
-      Button("打开设置") { Windows.showDashboard(store, settings: true) }
+    VStack(spacing: 10) {
+      Icon(.key, size: 28).foregroundStyle(.secondary)
+      Text("填写用量接口地址后，粘贴 key 就能看到额度").font(.ui(12.5)).foregroundStyle(.secondary)
+      Button { Windows.showDashboard(store, settings: true) } label: { Text("填写接口地址").font(.ui(12.5, .medium)) }
         .buttonStyle(.borderedProminent)
     }
     .frame(maxWidth: .infinity)
@@ -85,14 +94,14 @@ struct PanelView: View {
   }
 
   private var footer: some View {
-    HStack {
-      Button { Windows.showDashboard(store) } label: { Label("看板", systemImage: "chart.xyaxis.line") }
-      Button { Windows.showDashboard(store, settings: true) } label: { Label("设置", systemImage: "gearshape") }
+    HStack(spacing: 14) {
+      Button { Windows.showDashboard(store) } label: { HStack(spacing: 5) { Icon(.chart, size: 12); Text("看板") } }
+      Button { Windows.showDashboard(store, settings: true) } label: { HStack(spacing: 5) { Icon(.gear, size: 12); Text("设置") } }
       Spacer()
       Button("退出") { NSApp.terminate(nil) }
     }
     .buttonStyle(.borderless)
-    .font(.callout)
+    .font(.ui(12))
   }
 }
 
@@ -103,7 +112,7 @@ struct RefreshButton: View {
     Button {
       Task { await store.refresh() }
     } label: {
-      Image(systemName: "arrow.clockwise")
+      Icon(.refresh, size: 13)
         .rotationEffect(.degrees(store.refreshing ? 360 : 0))
         .animation(store.refreshing ? .linear(duration: 0.8).repeatForever(autoreverses: false) : .default, value: store.refreshing)
     }
@@ -114,7 +123,7 @@ struct RefreshButton: View {
   }
 }
 
-/// The shared pool, once for all keys.
+/// The shared pool, once for everyone.
 struct PoolRow: View {
   let q: Usage
 
@@ -122,58 +131,72 @@ struct PoolRow: View {
     let p = Fmt.pct(q.pool, q.poolLimit)
     let color: Color = p >= 100 ? .red : p >= 80 ? .orange : .accentColor
     VStack(alignment: .leading, spacing: 6) {
-      HStack(alignment: .firstTextBaseline) {
-        Text("共用额度池").font(.subheadline.weight(.medium))
+      HStack(alignment: .firstTextBaseline, spacing: 4) {
+        Text("共用额度池").font(.ui(12, .medium))
         Spacer()
-        RollingNumber(value: q.pool, font: .callout.weight(.semibold))
-        Text("/ \(Fmt.num(q.poolLimit))").font(.callout).foregroundStyle(.secondary).monospacedDigit()
-        Text(String(format: "%.1f%%", p)).font(.caption.weight(.semibold)).foregroundStyle(color).monospacedDigit()
+        RollingNumber(value: q.pool, size: 14)
+        Text("/ \(Fmt.num(q.poolLimit))").font(.ui(12)).foregroundStyle(.secondary).monospacedDigit()
+        Text(String(format: "%.1f%%", p)).font(.ui(11, .semibold)).foregroundStyle(color).monospacedDigit()
+          .padding(.leading, 4)
       }
-      FillBar(fraction: p / 100, color: color, height: 6)
+      FillBar(fraction: p / 100, color: color, height: 5)
     }
     .card(padding: 10)
   }
 }
 
-struct KeyRow: View {
+struct PersonRow: View {
   @Environment(Store.self) private var store
-  let k: KeyEntry
+  let p: Person
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
+    let shown = store.shown(p)
+    VStack(alignment: .leading, spacing: 7) {
       HStack(spacing: 6) {
-        Text(store.title(k)).font(.subheadline.weight(.semibold)).lineLimit(1)
-        if let r = store.latest[k.id], case .ok(let q, _) = r.reply {
-          let s = KeyState(q)
+        Text(p.label)
+          .font(p.name == nil ? .system(size: 13, design: .monospaced) : .serif(15, .semibold))
+          .lineLimit(1)
+          .contentTransition(.opacity)
+        if let g = shown.reading, !shown.stale {
+          let s = KeyState(g.usage)
           Chip(text: s.chip, color: s.kind.color)
         }
         Spacer()
-        UseButton(k: k, compact: true)
+        UseButton(p: p, compact: true)
       }
-      switch store.latest[k.id]?.reply {
-      case nil:
-        Text("等待第一次刷新…").font(.caption).foregroundStyle(.secondary)
-      case .failed(let why, _)?:
-        Text(why).font(.caption).foregroundStyle(.red).lineLimit(3)
-      case .ok(let q, _)?:
-        let s = KeyState(q)
+      if let g = shown.reading {
+        let s = KeyState(g.usage)
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-          RollingNumber(value: s.left, font: .system(size: 22, weight: .semibold, design: .rounded))
-          Text("今日还可用").font(.caption).foregroundStyle(.secondary)
+          RollingNumber(value: s.left, size: 22)
+          Text("今日还可用").font(.ui(11)).foregroundStyle(.secondary)
           Spacer()
-          Text("今日 \(Fmt.num(q.daily))/\(Fmt.num(q.dailyLimit))").font(.caption).foregroundStyle(.secondary).monospacedDigit()
+          Text("今日 \(Fmt.num(g.usage.daily))/\(Fmt.num(g.usage.dailyLimit))").font(.ui(11)).foregroundStyle(.secondary).monospacedDigit()
         }
-        QuotaMeter(q: q, state: s, height: 6)
-        if s.poolCaps {
-          Text(s.parts).font(.caption2).foregroundStyle(.orange)
+        QuotaMeter(q: g.usage, height: 5)
+        if s.poolCaps && !shown.stale {
+          Text(s.parts).font(.ui(10.5)).foregroundStyle(.orange)
         }
       }
+      trouble(shown)
     }
-    .card(padding: 10)
-    .overlay(
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .strokeBorder(Color.green.opacity(store.activeToken == k.key ? 0.7 : 0), lineWidth: 1.5)
-    )
-    .animation(.snappy, value: store.activeToken)
+    .opacity(shown.stale && shown.reading != nil ? 0.85 : 1)
+    .card(padding: 10, highlight: store.active?.id == p.id)
+    .contextMenu {
+      Button("删除「\(p.label)」", role: .destructive) { withAnimation(.snappy) { store.remove(p) } }
+    }
+  }
+
+  @ViewBuilder
+  private func trouble(_ s: Shown) -> some View {
+    switch s {
+    case .waiting:
+      Text(store.adding ? "正在识别…" : "等待第一次刷新…").font(.ui(11)).foregroundStyle(.secondary)
+    case .failing(let f, let last):
+      Trouble(text: p.name == nil && last == nil ? "还没识别出是谁的 key：" + f.friendly : f.friendly, detail: f.detail, age: last?.at)
+    case .noKey(let last):
+      Trouble(text: "这个 key 已归到别人名下。粘贴「\(p.label)」的新 key 即可接上。", age: last?.at)
+    case .ok:
+      EmptyView()
+    }
   }
 }

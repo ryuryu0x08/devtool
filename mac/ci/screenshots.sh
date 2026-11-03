@@ -16,11 +16,15 @@ trap 'kill $SERVER 2>/dev/null || true; pkill -x QuotaBar || true' EXIT
 python3 - "$DIR" "$TMP/settings.json" <<'PY'
 import json, math, sys, time
 d, settings = sys.argv[1], sys.argv[2]
-keys = [{"id": "a", "name": "野", "key": "sk-demo-ye"}, {"id": "b", "name": "", "key": "sk-demo-yy"},
-        {"id": "c", "name": "66", "key": "sk-demo-66"}, {"id": "d", "name": "旧 key", "key": "sk-demo-gone"}]
-json.dump({"url": "http://127.0.0.1:9931/api/v1/billing/usage", "interval": 60, "keys": keys, "settingsPath": settings},
-          open(d + "/config.json", "w"))
 now = time.time() // 300 * 300
+# ye, yy, 66 read fine; 老王's key was rotated (the API turns it down; the last reading stays);
+# the last key is new and not read successfully yet.
+old = {"at": now - 3 * 3600, "usage": {"daily": 120, "dailyLimit": 200, "over": 0, "overLimit": 100, "pool": 700, "poolLimit": 1000}}
+people = [{"id": "a", "key": "sk-demo-ye"}, {"id": "b", "name": "yy", "key": "sk-demo-yy"},
+          {"id": "c", "name": "66", "key": "sk-demo-66"}, {"id": "d", "name": "老王", "key": "sk-demo-gone", "lastGood": old},
+          {"id": "e", "key": "sk-new-0123456789"}]
+json.dump({"url": "http://127.0.0.1:9931/api/v1/billing/usage", "interval": 60, "people": people, "settingsPath": settings},
+          open(d + "/config.json", "w"))
 h = []
 for i in range(288, 0, -1):
     t = now - i * 300

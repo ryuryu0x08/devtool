@@ -19,13 +19,15 @@ final class UsageTests: XCTestCase {
   }
 
   func testSaysWhyAReplyIsNotUsable() {
-    XCTAssertEqual(parse("<html>", status: 502), .failed("HTTP 502: <html>", title: nil))
-    XCTAssertEqual(parse("", status: 200), .failed("HTTP 200: (empty)", title: nil))
-    XCTAssertEqual(parse(#"{"message":"bad key"}"#, status: 401), .failed("HTTP 401: bad key", title: nil))
-    XCTAssertEqual(parse(#"{"code":1,"message":"key 已停用"}"#), .failed("key 已停用", title: nil))
-    XCTAssertEqual(parse(#"{"code":0,"data":{"valid":false,"nick_name":"a"}}"#), .failed("返回不是成功", title: "a"))
+    XCTAssertEqual(parse("<html>", status: 502), .failed(Failure(.server, "HTTP 502: <html>"), title: nil))
+    XCTAssertEqual(parse("", status: 200), .failed(Failure(.server, "HTTP 200: (empty)"), title: nil))
+    XCTAssertEqual(parse(#"{"message":"boom"}"#, status: 500), .failed(Failure(.server, "HTTP 500: boom"), title: nil))
+    XCTAssertEqual(parse(#"{"message":"bad key"}"#, status: 401), .failed(Failure(.keyRejected, "HTTP 401: bad key"), title: nil))
+    XCTAssertEqual(parse("{}", status: 403), .failed(Failure(.keyRejected, "HTTP 403"), title: nil))
+    XCTAssertEqual(parse(#"{"code":1,"message":"key 已停用"}"#), .failed(Failure(.keyRejected, "key 已停用"), title: nil))
+    XCTAssertEqual(parse(#"{"code":0,"data":{"valid":false,"nick_name":"a"}}"#), .failed(Failure(.keyRejected, "返回不是成功"), title: "a"))
     // valid must be true itself, not 1.
-    XCTAssertEqual(parse(#"{"code":0,"data":{"valid":1}}"#), .failed("返回不是成功", title: nil))
+    XCTAssertEqual(parse(#"{"code":0,"data":{"valid":1}}"#), .failed(Failure(.keyRejected, "返回不是成功"), title: nil))
   }
 
   func testTheRequestCarriesTheKey() {

@@ -1,96 +1,95 @@
-// Settings: the usage API, how often to refresh, the keys, and where Claude Code's settings are.
+// Settings: the usage API, how often to refresh, the people (keys are added by pasting; names
+// come by themselves), and where Claude Code's settings are.
 import QuotaCore
 import SwiftUI
 
 struct SettingsView: View {
   @Environment(Store.self) private var store
   @Environment(\.dismiss) private var dismiss
-  @State private var draft = Config()
-  @State private var shown: Set<String> = []
+  @State private var url = ""
+  @State private var interval = 60
+  @State private var settingsPath = ""
 
   var body: some View {
     VStack(spacing: 0) {
       Form {
-        Section("用量接口") {
-          TextField("地址", text: $draft.url, prompt: Text("http://…/api/v1/billing/usage"))
-            .textContentType(.URL)
-          Stepper(value: $draft.interval, in: 10...3600, step: 10) {
-            LabeledContent("刷新间隔", value: "\(draft.interval) 秒")
+        Section {
+          TextField(text: $url, prompt: Text("http://…/api/v1/billing/usage")) { Text("地址").font(.ui(13)) }
+            .font(.system(size: 12.5, design: .monospaced))
+          Stepper(value: $interval, in: 10...3600, step: 10) {
+            LabeledContent { Text("\(interval) 秒").font(.ui(13)).monospacedDigit() } label: { Text("刷新间隔").font(.ui(13)) }
           }
-          if !draft.url.isEmpty && !validURL {
-            Label("地址要以 http:// 或 https:// 开头", systemImage: "exclamationmark.triangle").foregroundStyle(.orange).font(.caption)
+          if !url.isEmpty && !validURL {
+            Text("地址要以 http:// 或 https:// 开头").foregroundStyle(.orange).font(.ui(11.5))
           }
+        } header: {
+          Text("用量接口").font(.ui(12, .semibold))
         }
         Section {
-          ForEach($draft.keys) { $k in
-            HStack(spacing: 8) {
-              TextField("名称", text: $k.name, prompt: Text("名称（可留空）"))
-                .frame(width: 140)
-              Group {
-                if shown.contains(k.id) {
-                  TextField("key", text: $k.key, prompt: Text("sk-…"))
-                } else {
-                  SecureField("key", text: $k.key, prompt: Text("sk-…"))
-                }
-              }
-              .font(.system(.body, design: .monospaced))
-              Button {
-                if shown.contains(k.id) { shown.remove(k.id) } else { shown.insert(k.id) }
-              } label: { Image(systemName: shown.contains(k.id) ? "eye.slash" : "eye") }
-                .buttonStyle(.borderless)
-                .help(shown.contains(k.id) ? "隐藏" : "显示")
-              Button(role: .destructive) {
-                withAnimation { draft.keys.removeAll { $0.id == k.id } }
-              } label: { Image(systemName: "minus.circle.fill") }
+          ForEach(store.people) { p in
+            HStack(spacing: 10) {
+              Text(p.label).font(p.name == nil ? .system(size: 13, design: .monospaced) : .serif(14, .semibold))
+              Spacer()
+              Text(p.key.isEmpty ? "等待新 key" : People.shortKey(p.key)).font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
+              Button(role: .destructive) { withAnimation(.snappy) { store.remove(p) } } label: { Icon(.trash, size: 13) }
                 .buttonStyle(.borderless)
                 .foregroundStyle(.red)
                 .help("删除")
             }
-            .labelsHidden()
+            .transition(.opacity)
           }
-          .onMove { draft.keys.move(fromOffsets: $0, toOffset: $1) }
-          Button {
-            withAnimation { draft.keys.append(KeyEntry()) }
-          } label: { Label("添加 key", systemImage: "plus.circle.fill") }
-            .buttonStyle(.borderless)
+          AddKeyField()
         } header: {
-          Text("Key")
+          Text("人员").font(.ui(12, .semibold))
         } footer: {
-          Text("保存在本机 ~/Library/Application Support/QuotaBar/config.json，只有你的账户能读。").font(.caption).foregroundStyle(.secondary)
+          Text("粘贴 key 后自动识别是谁的；同一个人的新 key 会替换旧的。保存在本机 ~/Library/Application Support/QuotaBar，只有你的账户能读。")
+            .font(.ui(11)).foregroundStyle(.secondary)
         }
         Section {
-          TextField("settings.json", text: $draft.settingsPath)
-            .font(.system(.body, design: .monospaced))
+          TextField(text: $settingsPath) { Text("settings.json").font(.ui(13)) }
+            .font(.system(size: 12.5, design: .monospaced))
         } header: {
-          Text("Claude Code 配置文件")
+          Text("Claude Code 配置文件").font(.ui(12, .semibold))
         } footer: {
           Text("「用于 Claude Code」把这个文件里的 env.ANTHROPIC_AUTH_TOKEN 换成所选的 key，并删除 env.ANTHROPIC_API_KEY；其他内容保持原样。修改前的内容保存在同目录的 .bak 文件。")
-            .font(.caption).foregroundStyle(.secondary)
+            .font(.ui(11)).foregroundStyle(.secondary)
         }
       }
       .formStyle(.grouped)
+      .animation(.snappy, value: store.people.map(\.id))
       Divider()
       HStack {
+        NoticeBanner()
         Spacer()
-        Button("取消") { dismiss() }.keyboardShortcut(.cancelAction)
-        Button("保存") {
-          store.save(draft)
-          dismiss()
-        }
-        .keyboardShortcut(.defaultAction)
-        .buttonStyle(.borderedProminent)
+        Button { dismiss() } label: { Text("完成").font(.ui(13, .medium)).padding(.horizontal, 6) }
+          .keyboardShortcut(.defaultAction)
+          .buttonStyle(.borderedProminent)
       }
       .padding(14)
+      .animation(.snappy, value: store.notice)
     }
-    .frame(width: 600, height: 560)
+    .frame(width: 580, height: 580)
     .onAppear {
-      draft = store.config
-      if draft.keys.isEmpty { draft.keys.append(KeyEntry()) }
+      url = store.config.url
+      interval = store.config.interval
+      settingsPath = store.config.settingsPath
     }
+    // Saved as typed (once typing pauses): no separate save step.
+    .task(id: "\(url)\n\(interval)\n\(settingsPath)") {
+      try? await Task.sleep(for: .milliseconds(600))
+      if !Task.isCancelled { save() }
+    }
+    .onDisappear { save() }
+  }
+
+  private func save() {
+    guard !url.isEmpty || !store.config.url.isEmpty else { return }
+    guard url != store.config.url || interval != store.config.interval || settingsPath != store.config.settingsPath else { return }
+    store.saveSettings(url: url, interval: interval, settingsPath: settingsPath)
   }
 
   private var validURL: Bool {
-    guard let u = URL(string: draft.url.trimmingCharacters(in: .whitespaces)) else { return false }
+    guard let u = URL(string: url.trimmingCharacters(in: .whitespaces)) else { return false }
     return ["http", "https"].contains(u.scheme?.lowercased() ?? "") && u.host != nil
   }
 }

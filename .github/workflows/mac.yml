@@ -15,6 +15,10 @@ jobs:
       - run: swift --version
       - run: swift test
       - run: ./build.sh
+      - name: Can Core Text read .woff2?
+        run: |
+          curl -sSL https://registry.npmjs.org/@fontsource-variable/inter/-/inter-5.1.0.tgz | tar xz -C "$RUNNER_TEMP"
+          swift ../ci/fontcheck.swift "$RUNNER_TEMP"/package/files/inter-latin-wght-normal.woff2 "$RUNNER_TEMP"/package/files/inter-latin-wght-normal.woff2
       # A look at the app against a stand-in usage API: the dashboard, light and dark.
       - name: Screenshots
         run: ../ci/screenshots.sh
