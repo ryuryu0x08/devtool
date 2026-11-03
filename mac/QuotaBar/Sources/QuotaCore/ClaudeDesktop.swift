@@ -63,12 +63,14 @@ public enum ClaudeDesktop {
 
   /// Sets Desktop's gateway key to `key` (and its address to `baseURL`, if given), changing
   /// nothing else; the previous file is kept as <file>.bak. Desktop has to be relaunched to use it.
-  public static func switchKey(_ key: String, baseURL: String? = nil, dir: String = defaultDir, managed: [String] = managedFiles) throws -> Result {
+  /// `key` nil: only the address.
+  public static func switchKey(_ key: String?, baseURL: String? = nil, dir: String = defaultDir, managed: [String] = managedFiles) throws -> Result {
     let s = status(dir: dir, managed: managed)
     guard case .gateway(let now, let url) = s else { return .skipped(s) }
-    if now == key && (baseURL == nil || baseURL == url) { return .unchanged }
+    if (key == nil || now == key) && (baseURL == nil || baseURL == url) { return .unchanged }
     guard let (file, data, _) = applied(dir), let text = String(data: data, encoding: .utf8) else { throw SettingsError.notUTF8 }
-    var out = try ClaudeSettings.setTopLevel(keyField, to: key, in: text)
+    var out = text
+    if let key { out = try ClaudeSettings.setTopLevel(keyField, to: key, in: out) }
     if let baseURL { out = try ClaudeSettings.setTopLevel(urlField, to: baseURL, in: out) }
     _ = try ClaudeSettings.replace(file, was: data, with: out)
     return .written
