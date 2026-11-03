@@ -52,12 +52,18 @@ launch() { build/QuotaBar.app/Contents/MacOS/QuotaBar >>"$TMP/app.log" 2>&1 & }
 launch
 check 47831
 echo "OK: forwarder on 47831, Desktop moved to it without asking, requests pass"
-pkill -x QuotaBar
-while pgrep -x QuotaBar >/dev/null; do sleep 0.2; done
-while nc -z 127.0.0.1 47831 2>/dev/null; do sleep 0.2; done
+quit() { pkill -x QuotaBar; while pgrep -x QuotaBar >/dev/null; do sleep 0.2; done; }
+
+# Restarted right after requests passed (their connections linger in TIME_WAIT): the same port.
+quit
+launch
+sleep 3
+check 47831
+echo "OK: restarted, still on 47831"
+quit
 
 # 47831 is taken now: the next port, and Desktop follows (it was on an address of ours).
-python3 -c 'import socket,time; s=socket.socket(); s.bind(("127.0.0.1",47831)); s.listen(); time.sleep(120)' &
+python3 -c 'import socket,time; s=socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(("127.0.0.1",47831)); s.listen(); print("47831 taken by another program", flush=True); time.sleep(120)' &
 BUSY=$!
 sleep 1
 launch
