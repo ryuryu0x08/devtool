@@ -92,17 +92,18 @@ final class LocalForwarderTests: XCTestCase {
     XCTAssertEqual(p2, p1 + 1)
     // Held by another program (a plain socket): skipped too.
     let s = socket(AF_INET, SOCK_STREAM, 0)
-    defer { close(s) }
+    defer { Darwin.close(s) }
     var a = sockaddr_in()
     a.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
     a.sin_family = sa_family_t(AF_INET)
     a.sin_port = UInt16(47970).bigEndian
     a.sin_addr.s_addr = inet_addr("127.0.0.1")
-    _ = withUnsafePointer(to: &a) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(s, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) } }
-    listen(s, 1)
+    _ = withUnsafePointer(to: &a) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.bind(s, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) } }
+    Darwin.listen(s, 1)
     XCTAssertFalse(LocalForwarder.free(47970))
     let f3 = try LocalForwarder(target: URL(string: "http://127.0.0.1:9/api")!)
-    XCTAssertEqual(try await f3.start(preferred: 47970), 47971)
+    let p3 = try await f3.start(preferred: 47970)
+    XCTAssertEqual(p3, 47971)
     f3.stop()
 
     let (data, resp) = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:\(p1)/v1/models")!)
@@ -113,7 +114,10 @@ final class LocalForwarderTests: XCTestCase {
   func testRestartingKeepsThePort() async throws {
     let f = try LocalForwarder(target: URL(string: "http://127.0.0.1:9/api")!)
     let p = try await f.start(preferred: 47990)
-    for _ in 0..<3 { XCTAssertEqual(try await f.start(preferred: p), p) }
+    for _ in 0..<3 {
+      let again = try await f.start(preferred: p)
+      XCTAssertEqual(again, p)
+    }
     f.stop()
   }
 
