@@ -42,7 +42,9 @@ check() {
 open build/QuotaBar.app
 check 47831
 echo "OK: forwarder on 47831, Desktop moved to it without asking, requests pass"
-pkill -x QuotaBar; sleep 1
+pkill -x QuotaBar
+while pgrep -x QuotaBar >/dev/null; do sleep 0.2; done
+while nc -z 127.0.0.1 47831 2>/dev/null; do sleep 0.2; done
 
 # 47831 is taken now: the next port, and Desktop follows (it was on an address of ours).
 python3 -c 'import socket,time; s=socket.socket(); s.bind(("127.0.0.1",47831)); s.listen(); time.sleep(120)' &
