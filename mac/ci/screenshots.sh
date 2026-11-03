@@ -43,3 +43,11 @@ defaults write -g AppleInterfaceStyle Dark
 shot dark
 defaults delete -g AppleInterfaceStyle || true
 ls -la "$SHOTS"
+# Also in the log, smaller, for reading without downloading the artifact.
+for f in "$SHOTS"/*.png; do
+  sips -Z 1600 -s format jpeg -s formatOptions 70 "$f" --out "${f%.png}.jpg" >/dev/null
+  echo "BEGIN-SHOT $(basename "$f")"
+  base64 -i "${f%.png}.jpg"
+  echo
+  echo "END-SHOT"
+done
