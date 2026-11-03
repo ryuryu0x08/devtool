@@ -6,7 +6,7 @@ import AppKit
 import CoreText
 import SwiftUI
 
-enum Weight: Double {
+enum TypeWeight: Double {
   case light = 300, regular = 400, medium = 500, semibold = 600, bold = 700
 
   var system: Font.Weight {
@@ -50,7 +50,7 @@ enum AppFonts {
 
   static var hasIcons: Bool { icons != nil }
 
-  static func font(_ d: CTFontDescriptor?, _ name: String, _ size: CGFloat, _ w: Weight) -> Font {
+  static func font(_ d: CTFontDescriptor?, _ name: String, _ size: CGFloat, _ w: TypeWeight) -> Font {
     guard let d else { return .system(size: size, weight: w.system) }
     let key = "\(name)-\(size)-\(w.rawValue)"
     if let f = cache[key] { return f }
@@ -62,8 +62,8 @@ enum AppFonts {
     return f
   }
 
-  static func sansFont(_ size: CGFloat, _ w: Weight) -> Font { font(sans, "sans", size, w) }
-  static func serifFont(_ size: CGFloat, _ w: Weight) -> Font { font(serif, "serif", size, w) }
+  static func sansFont(_ size: CGFloat, _ w: TypeWeight) -> Font { font(sans, "sans", size, w) }
+  static func serifFont(_ size: CGFloat, _ w: TypeWeight) -> Font { font(serif, "serif", size, w) }
   static func iconFont(_ size: CGFloat) -> Font? { icons.map { Font(CTFontCreateWithFontDescriptor($0, size, nil)) } }
 
   private static func tag(_ s: String) -> NSNumber {
@@ -73,9 +73,9 @@ enum AppFonts {
 
 extension Font {
   /// Text: Anthropic Sans.
-  @MainActor static func ui(_ size: CGFloat, _ w: Weight = .regular) -> Font { AppFonts.sansFont(size, w) }
+  @MainActor static func ui(_ size: CGFloat, _ w: TypeWeight = .regular) -> Font { AppFonts.sansFont(size, w) }
   /// Names and large numbers: Anthropic Serif.
-  @MainActor static func serif(_ size: CGFloat, _ w: Weight = .regular) -> Font { AppFonts.serifFont(size, w) }
+  @MainActor static func serif(_ size: CGFloat, _ w: TypeWeight = .regular) -> Font { AppFonts.serifFont(size, w) }
 }
 
 /// An icon from Anthropicons, or the matching SF Symbol without it.
