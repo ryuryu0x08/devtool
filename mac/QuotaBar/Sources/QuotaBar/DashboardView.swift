@@ -282,10 +282,10 @@ struct TrendsCard: View {
       Chart {
         ForEach(s.resets, id: \.self) { t in
           RuleMark(x: .value("时间", t))
-            .foregroundStyle(.secondary.opacity(0.35))
+            .foregroundStyle(.secondary.opacity(0.55))
             .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-            .annotation(position: .top, alignment: .leading, spacing: 2) {
-              Text("额度恢复").font(.ui(9.5)).foregroundStyle(.secondary)
+            .annotation(position: .overlay, alignment: .topLeading) {
+              Text("额度恢复").font(.ui(10, .medium)).foregroundStyle(.secondary).fixedSize().offset(x: 5)
             }
         }
         ForEach(points) { p in
