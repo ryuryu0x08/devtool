@@ -11,6 +11,8 @@ private final class Upstream: @unchecked Sendable {
   var port: UInt16 = 0
   var heads: [String] = []
   var bodies: [String] = []
+  /// Send the whole reply and the end at once, with no pause.
+  var together = false
 
   func start() async throws {
     let params = NWParameters.tcp
@@ -45,6 +47,10 @@ private final class Upstream: @unchecked Sendable {
 
   private func reply(_ c: NWConnection) {
     let head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n"
+    if together {
+      c.send(content: Data((head + "data: one\n\ndata: two\n\n").utf8), contentContext: .finalMessage, isComplete: true, completion: .contentProcessed { _ in c.cancel() })
+      return
+    }
     c.send(content: Data((head + "data: one\n\n").utf8), completion: .contentProcessed { _ in
       self.queue.asyncAfter(deadline: .now() + 0.3) {
         c.send(content: Data("data: two\n\n".utf8), contentContext: .finalMessage, isComplete: true, completion: .contentProcessed { _ in c.cancel() })
@@ -81,6 +87,24 @@ final class LocalForwarderTests: XCTestCase {
     XCTAssertTrue(head.contains("Authorization: Bearer sk-x"))
     XCTAssertTrue(head.contains("Connection: close"))
     XCTAssertEqual(up.bodies[0], #"{"model":"m","stream":true}"#)
+  }
+
+  func testManyRequestsInARowAllGetTheirWholeReply() async throws {
+    // The API's last data and its closing arrive together here, as from many servers.
+    let up = Upstream()
+    up.together = true
+    try await up.start()
+    let f = try LocalForwarder(target: URL(string: "http://127.0.0.1:\(up.port)/api")!)
+    let port = try await f.start(preferred: 48030)
+    defer { f.stop() }
+    let session = URLSession(configuration: .ephemeral)
+    for i in 0..<30 {
+      var req = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/v1/billing/usage")!, timeoutInterval: 5)
+      req.setValue("Bearer sk-\(i)", forHTTPHeaderField: "Authorization")
+      let (data, resp) = try await session.data(for: req)
+      XCTAssertEqual((resp as? HTTPURLResponse)?.statusCode, 200, "request \(i)")
+      XCTAssertEqual(String(decoding: data, as: UTF8.self), "data: one\n\ndata: two\n\n", "request \(i)")
+    }
   }
 
   func testATakenPortMovesToTheNextAndAnUnreachableAPIAnswers502() async throws {

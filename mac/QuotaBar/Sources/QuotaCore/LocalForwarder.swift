@@ -206,17 +206,29 @@ public final class LocalForwarder: @unchecked Sendable {
     from.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, complete, error in
       guard let self else { return }
       let finish = complete || error != nil
-      let content = (data?.isEmpty ?? true) ? nil : data
       if last || error != nil {
-        self.log?("\(last ? "reply" : "request") \(content?.count ?? 0) bytes" + (complete ? ", end" : "") + (error.map { ", \($0)" } ?? ""))
+        self.log?("\(last ? "reply" : "request") \(data?.count ?? 0) bytes" + (complete ? ", end" : "") + (error.map { ", \($0)" } ?? ""))
       }
-      if content == nil && !finish { return self.pipe(from, to: to, last: last) }
-      to.send(content: content, contentContext: finish ? .finalMessage : .defaultMessage, isComplete: finish, completion: .contentProcessed { e in
-        if let e, e != .posix(.ECANCELED) { self.log?("passing on failed: \(e)") }
-        if e != nil { return self.close(from, to) }
-        if !finish { self.pipe(from, to: to, last: last) } else if last { self.close(from, to) }
-      })
+      // The data first, the end on its own after it: an end sent along with the last data,
+      // with the connection closed right after, can lose that data.
+      self.send(data, to: to) { ok in
+        guard ok else { return self.close(from, to) }
+        if !finish { return self.pipe(from, to: to, last: last) }
+        to.send(content: nil, contentContext: .finalMessage, isComplete: true, completion: .contentProcessed { _ in
+          guard last else { return }
+          // The reply is out: let the client close first, then make sure both are closed.
+          self.queue.asyncAfter(deadline: .now() + 2) { self.close(from, to) }
+        })
+      }
     }
+  }
+
+  private func send(_ data: Data?, to: NWConnection, then: @escaping (Bool) -> Void) {
+    guard let data, !data.isEmpty else { return then(true) }
+    to.send(content: data, completion: .contentProcessed { [weak self] e in
+      if let e, e != .posix(.ECANCELED) { self?.log?("passing on failed: \(e)") }
+      then(e == nil)
+    })
   }
 
   private func close(_ a: NWConnection, _ b: NWConnection) {
