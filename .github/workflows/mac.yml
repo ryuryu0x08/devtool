@@ -21,6 +21,9 @@ jobs:
           curl -sSL https://registry.npmjs.org/@fontsource-variable/inter/-/inter-5.1.0.tgz | tar xz -C "$RUNNER_TEMP"
           swift ../ci/fontcheck.swift "$RUNNER_TEMP"/package/files/inter-latin-wght-normal.woff2 "$RUNNER_TEMP"/package/files/inter-latin-wght-normal.woff2
       # A look at the app against a stand-in usage API: the dashboard, light and dark.
+      - name: Local forwarder, end to end
+        timeout-minutes: 5
+        run: ../ci/forward_e2e.sh
       - name: Screenshots
         timeout-minutes: 8
         run: ../ci/screenshots.sh

@@ -29,4 +29,5 @@ class H(http.server.BaseHTTPRequestHandler):
         pass
 
 
-http.server.ThreadingHTTPServer(("127.0.0.1", 9931), H).serve_forever()
+import sys
+http.server.ThreadingHTTPServer((sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1", 9931), H).serve_forever()
