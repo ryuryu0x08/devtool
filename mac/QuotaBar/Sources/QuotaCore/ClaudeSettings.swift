@@ -112,20 +112,49 @@ public enum ClaudeSettings {
     guard let text = String(data: data, encoding: .utf8) else { throw SettingsError.notUTF8 }
     let out = try setToken(token, in: text)
     if out == text { return .unchanged }
+    return .written(backup: try replace(url, was: exists ? data : nil, with: out))
+  }
+
+  /// Writes `text` to `url` (already resolved), keeping what was there as <file>.bak and the
+  /// file's permissions (a new file is readable by the owner only). Returns the backup.
+  static func replace(_ url: URL, was old: Data?, with text: String) throws -> URL? {
+    let fm = FileManager.default
     var backup: URL?
     var perms: Any? = 0o600
-    if exists {
+    if let old {
       let bak = url.appendingPathExtension("bak")
-      try data.write(to: bak, options: .atomic)
+      try old.write(to: bak, options: .atomic)
       try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: bak.path)
       backup = bak
       perms = try fm.attributesOfItem(atPath: url.path)[.posixPermissions]
     } else {
       try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     }
-    try Data(out.utf8).write(to: url, options: .atomic)
+    try Data(text.utf8).write(to: url, options: .atomic)
     if let perms { try? fm.setAttributes([.posixPermissions: perms], ofItemAtPath: url.path) }
-    return .written(backup: backup)
+    return backup
+  }
+
+  /// `text` (a JSON object) with its top-level string `key` set to `value`, in place where it is
+  /// (or added at the end); everything else byte for byte as it was, checked like setToken.
+  static func setTopLevel(_ key: String, to value: String, in text: String) throws -> String {
+    let old = try parse(text)
+    var b = Array(text.utf8)
+    let v = Array(jsonString(value).utf8)
+    let root = try Scanner(b).root()
+    let hits = root.members.filter { $0.key == key }
+    if hits.isEmpty {
+      b = insert(member: Array(jsonString(key).utf8) + Array(": ".utf8) + v, into: root, b)
+    } else {
+      for m in hits.reversed() { b.replaceSubrange(m.valueStart..<m.valueEnd, with: v) }
+    }
+    var expected = old
+    expected[key] = value
+    let out = String(decoding: b, as: UTF8.self)
+    guard let now = try? parse(out), NSDictionary(dictionary: now).isEqual(to: expected) else {
+      throw SettingsError.verifyFailed
+    }
+    return out
   }
 
   // MARK: - Text editing

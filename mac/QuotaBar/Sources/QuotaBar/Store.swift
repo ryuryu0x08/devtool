@@ -53,6 +53,8 @@ struct Config: Codable, Equatable {
 struct Notice: Equatable {
   var text: String
   var bad = false
+  /// Offer to relaunch Claude Desktop, which reads its key at launch only.
+  var restartDesktop = false
   var id = UUID()
 }
 
@@ -307,14 +309,29 @@ final class Store {
   /// the new one: the old one no longer works.
   private func replaced(_ old: String, by new: String, for id: String) {
     config.retired = Array((config.retired.filter { $0 != old } + [old]).suffix(50))
-    guard activeToken == old else { return }
+    let code = activeToken == old
+    let desktop = ClaudeDesktop.status() == .gateway(key: old)
+    guard code || desktop else { return }
     let name = people.first { $0.id == id }?.label ?? ""
-    do {
-      _ = try ClaudeSettings.switchToken(new, path: config.settingsPath)
-      readSettings()
-      notice = Notice(text: "「\(name)」换了新 key，Claude Code 也已改用新 key。")
-    } catch {
-      notice = Notice(text: "「\(name)」换了新 key，但无法更新 Claude Code 的配置：" + error.localizedDescription, bad: true)
+    var done: [String] = [], failed: [String] = []
+    if code {
+      do {
+        _ = try ClaudeSettings.switchToken(new, path: config.settingsPath)
+        readSettings()
+        done.append("Claude Code")
+      } catch { failed.append("Claude Code：" + error.localizedDescription) }
+    }
+    if desktop {
+      do {
+        if try ClaudeDesktop.switchKey(new) == .written { done.append("Claude Desktop") }
+      } catch { failed.append("Claude Desktop：" + error.localizedDescription) }
+    }
+    if !failed.isEmpty {
+      notice = Notice(text: "「\(name)」换了新 key，但没能更新 " + failed.joined(separator: "；"), bad: true)
+    } else {
+      let restart = done.contains("Claude Desktop")
+      notice = Notice(text: "「\(name)」换了新 key，" + done.joined(separator: " 和 ") + " 也已改用新 key" + (restart ? "（Desktop 重启后生效）。" : "。"),
+                      restartDesktop: restart && desktopRunning)
     }
   }
 
@@ -334,12 +351,57 @@ final class Store {
     do {
       let r = try ClaudeSettings.switchToken(p.key, path: config.settingsPath)
       withAnimation(.snappy) { readSettings() }
-      switch r {
-      case .unchanged: notice = Notice(text: "Claude Code 已经在用「\(p.label)」的 key。")
-      case .written: notice = Notice(text: "已切换到「\(p.label)」。新开的 Claude Code 会话使用这个 key；已经打开的可能要重开。")
+      var text = r == .unchanged ? "Claude Code 已经在用「\(p.label)」的 key。" : "已切换到「\(p.label)」：Claude Code 立即生效。"
+      var restart = false
+      do {
+        switch try ClaudeDesktop.switchKey(p.key) {
+        case .written:
+          restart = desktopRunning
+          text += restart ? "Claude Desktop 也已换成这个 key，重启后生效。" : "Claude Desktop 也已换成这个 key，下次打开时生效。"
+        case .unchanged:
+          text += "Claude Desktop 也在用这个 key。"
+        case .skipped(.managed):
+          text += "Claude Desktop 的配置由公司统一管理，没有修改。"
+        case .skipped:
+          break
+        }
+      } catch {
+        notice = Notice(text: text + "但 Claude Desktop 的配置没有修改：" + error.localizedDescription, bad: true)
+        return
       }
+      notice = Notice(text: text, restartDesktop: restart)
     } catch {
       notice = Notice(text: error.localizedDescription, bad: true)
+    }
+  }
+
+  // MARK: - Claude Desktop
+
+  private var desktopApps: [NSRunningApplication] {
+    NSRunningApplication.runningApplications(withBundleIdentifier: ClaudeDesktop.bundleID)
+  }
+
+  var desktopRunning: Bool { !desktopApps.isEmpty }
+
+  /// Quits Claude Desktop and opens it again, so that it reads its new key.
+  func restartDesktop() {
+    let apps = desktopApps
+    let url = apps.first?.bundleURL ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: ClaudeDesktop.bundleID)
+    notice = Notice(text: "正在重启 Claude Desktop…")
+    apps.forEach { $0.terminate() }
+    Task {
+      for _ in 0..<60 where apps.contains(where: { !$0.isTerminated }) {
+        try? await Task.sleep(for: .milliseconds(250))
+      }
+      guard apps.allSatisfy(\.isTerminated) else {
+        notice = Notice(text: "Claude Desktop 没有退出（可能在等你确认）。退出后再打开它即可用新 key。", bad: true)
+        return
+      }
+      guard let url else { return }
+      let c = NSWorkspace.OpenConfiguration()
+      c.activates = false
+      _ = try? await NSWorkspace.shared.openApplication(at: url, configuration: c)
+      notice = Notice(text: "Claude Desktop 已重启，正在用新 key。")
     }
   }
 }

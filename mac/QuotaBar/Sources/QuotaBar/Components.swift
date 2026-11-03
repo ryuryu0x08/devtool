@@ -139,7 +139,7 @@ struct UseButton: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
-        .help("把 Claude Code 的 ANTHROPIC_AUTH_TOKEN 换成这个人的 key")
+        .help("Claude Code 和 Claude Desktop（第三方推理）都改用这个人的 key")
         .transition(.opacity.combined(with: .scale(scale: 0.9)))
       }
     }
@@ -206,6 +206,11 @@ struct NoticeBanner: View {
           .foregroundStyle(n.bad ? .orange : .green)
         Text(n.text).font(.ui(12)).fixedSize(horizontal: false, vertical: true)
         Spacer(minLength: 0)
+        if n.restartDesktop {
+          Button { store.restartDesktop() } label: { Text("重启 Desktop").font(.ui(11.5, .medium)) }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+        }
         Button { withAnimation(.snappy) { store.notice = nil } } label: { Icon(.close, size: 10) }
           .buttonStyle(.plain)
           .foregroundStyle(.secondary)
@@ -215,7 +220,7 @@ struct NoticeBanner: View {
       .background((n.bad ? Color.orange : Color.green).opacity(0.1), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
       .transition(.move(edge: .top).combined(with: .opacity))
       .task(id: n.id) {
-        try? await Task.sleep(for: .seconds(n.bad ? 10 : 5))
+        try? await Task.sleep(for: .seconds(n.bad || n.restartDesktop ? 15 : 5))
         withAnimation(.snappy) { if store.notice?.id == n.id { store.notice = nil } }
       }
     }

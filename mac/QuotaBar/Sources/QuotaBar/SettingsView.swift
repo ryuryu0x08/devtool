@@ -42,7 +42,7 @@ struct SettingsView: View {
         } header: {
           Text("Claude Code 配置文件").font(.ui(12, .semibold))
         } footer: {
-          Text("「用于 Claude Code」把这个文件里的 env.ANTHROPIC_AUTH_TOKEN 换成所选的 key，并删除 env.ANTHROPIC_API_KEY；其他内容保持原样。修改前的内容保存在同目录的 .bak 文件。")
+          Text("「用于 Claude Code」把这个文件里的 env.ANTHROPIC_AUTH_TOKEN 换成所选的 key，并删除 env.ANTHROPIC_API_KEY；其他内容保持原样。Claude Desktop 用第三方推理时，它配置里的 key 也一起换（Desktop 重启后生效）。修改前的内容都保存为同目录的 .bak 文件。")
             .font(.ui(11)).foregroundStyle(.secondary)
         }
       }

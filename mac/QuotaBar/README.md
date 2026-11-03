@@ -36,7 +36,7 @@ cd devtool/mac/QuotaBar
   - 修改前的文件保存为同目录的 `settings.json.bak`。settings.json 是符号链接时，写入它指向的文件。
   - 文件不是有效 JSON（例如带注释）时不修改，并说明原因。
   - 生效范围（据 Claude Code 文档）：终端里的 `claude`、VS Code / JetBrains 插件都读这个文件；Claude Code 会监视它，正在运行的会话在文件保存后就改用新 key，不用重开。
-  - **Claude Desktop 不受影响**：它不读 settings.json 里的 `ANTHROPIC_AUTH_TOKEN`，用的是 claude.ai 登录，或它自己的「第三方推理」配置（Developer → Configure Third-Party Inference）。
+  - **Claude Desktop**：它不读 settings.json，而是读自己的配置 `~/Library/Application Support/Claude-3p/configLibrary/`（`_meta.json` 里的 `appliedId` 指向生效的 `<id>.json`）。Desktop 用「第三方推理」连网关时（`inferenceProvider` 为 `gateway`），切换会把其中的 `inferenceGatewayApiKey` 一并换成新 key：只改这一个值，先备份为 `.bak`，写入前校验其余内容不变。Desktop 只在启动时读配置，所以切换后有「重启 Desktop」按钮。Desktop 自己保存的 key 是加密的（`__sealed__:` 开头），写入明文 key 它也能读，已实测可用。公司用 MDM 管理 Desktop 配置时不修改。
   - 项目目录里的 `.claude/settings.json`、`.claude/settings.local.json` 或环境变量可能覆盖这里的设置；settings.json 里有 `apiKeyHelper` 时面板会提示。
 
 ## 数据保存在哪里
