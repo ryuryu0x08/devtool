@@ -1,0 +1,30 @@
+# Builds and tests the macOS app (mac/QuotaBar) on a Mac. The built app is attached to the run.
+name: mac
+on:
+  push:
+    paths: ['mac/**', '.github/workflows/mac.yml']
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: mac/QuotaBar
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift --version
+      - run: swift test
+      - run: ./build.sh
+      # A look at the app against a stand-in usage API: the dashboard, light and dark.
+      - name: Screenshots
+        run: ../ci/screenshots.sh
+      - run: ditto -c -k --keepParent build/QuotaBar.app build/QuotaBar.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: QuotaBar
+          path: mac/QuotaBar/build/QuotaBar.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: mac/QuotaBar/build/shots
