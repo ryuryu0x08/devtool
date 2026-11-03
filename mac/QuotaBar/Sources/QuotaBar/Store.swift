@@ -31,14 +31,33 @@ struct Config: Codable, Equatable {
   var people: [Person] = []
   /// Keys that were replaced by a newer one (not added back from Claude Code's settings).
   var retired: [String] = []
-  var settingsPath = ClaudeSettings.defaultPath
+  /// Claude Code's folder (its settings.json is in it); empty: found by itself.
+  var claudeDir = ""
+  /// Claude Desktop's third-party folder (configLibrary is in it); empty: found by itself.
+  var desktopDir = ""
   /// The model API Claude Code and Claude Desktop are to use (ANTHROPIC_BASE_URL).
   var baseURL = Config.defaultBaseURL
   var desktopRestart = DesktopRestart.ask
+  /// Forward Desktop to an http model API through 127.0.0.1 (Desktop takes http only there).
+  var forward = false
+  /// The forwarder's port, kept so that Desktop's address stays the same.
+  var forwardPort = Int(LocalForwarder.defaultPort)
+  /// Addresses this app gave Desktop (its forwarders, its model APIs): replaced without asking.
+  var ours: [String] = []
+
+  static var detectedClaudeDir: String {
+    ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"].flatMap { $0.isEmpty ? nil : $0 } ?? "~/.claude"
+  }
+  static let detectedDesktopDir = "~/Library/Application Support/Claude-3p"
+
+  var settingsPath: String { ((claudeDir.isEmpty ? Config.detectedClaudeDir : claudeDir) as NSString).appendingPathComponent("settings.json") }
+  var desktopLibrary: String { ((desktopDir.isEmpty ? Config.detectedDesktopDir : desktopDir) as NSString).appendingPathComponent("configLibrary") }
 
   init() {}
 
-  private enum CodingKeys: String, CodingKey { case url, interval, people, retired, settingsPath, baseURL, desktopRestart, keys }
+  private enum CodingKeys: String, CodingKey {
+    case url, interval, people, retired, settingsPath, claudeDir, desktopDir, baseURL, desktopRestart, forward, forwardPort, ours, keys
+  }
   private struct OldKey: Decodable { var id: String; var key: String }
 
   init(from d: Decoder) throws {
@@ -47,7 +66,16 @@ struct Config: Codable, Equatable {
     url = u.isEmpty ? Config.defaultURL : u
     interval = try c.decodeIfPresent(Int.self, forKey: .interval) ?? 60
     retired = try c.decodeIfPresent([String].self, forKey: .retired) ?? []
-    settingsPath = try c.decodeIfPresent(String.self, forKey: .settingsPath) ?? ClaudeSettings.defaultPath
+    if let d = try c.decodeIfPresent(String.self, forKey: .claudeDir) {
+      claudeDir = d
+    } else if let old = try c.decodeIfPresent(String.self, forKey: .settingsPath), old != ClaudeSettings.defaultPath {
+      // Earlier versions kept the settings file's path.
+      claudeDir = (old as NSString).deletingLastPathComponent
+    }
+    desktopDir = try c.decodeIfPresent(String.self, forKey: .desktopDir) ?? ""
+    forward = try c.decodeIfPresent(Bool.self, forKey: .forward) ?? false
+    forwardPort = try c.decodeIfPresent(Int.self, forKey: .forwardPort) ?? Int(LocalForwarder.defaultPort)
+    ours = try c.decodeIfPresent([String].self, forKey: .ours) ?? []
     let b = try c.decodeIfPresent(String.self, forKey: .baseURL) ?? ""
     baseURL = b.isEmpty ? Config.defaultBaseURL : b
     desktopRestart = (try? c.decodeIfPresent(DesktopRestart.self, forKey: .desktopRestart)) ?? .ask
@@ -65,7 +93,11 @@ struct Config: Codable, Equatable {
     try c.encode(interval, forKey: .interval)
     try c.encode(people, forKey: .people)
     try c.encode(retired, forKey: .retired)
-    try c.encode(settingsPath, forKey: .settingsPath)
+    try c.encode(claudeDir, forKey: .claudeDir)
+    try c.encode(desktopDir, forKey: .desktopDir)
+    try c.encode(forward, forKey: .forward)
+    try c.encode(forwardPort, forKey: .forwardPort)
+    try c.encode(ours, forKey: .ours)
     try c.encode(baseURL, forKey: .baseURL)
     try c.encode(desktopRestart, forKey: .desktopRestart)
   }
@@ -119,6 +151,11 @@ final class Store {
   private(set) var hasKeyHelper = false
   var notice: Notice?
 
+  /// The local forwarder for Desktop: off, starting, on (its address), or why it couldn't start.
+  enum ForwardState: Equatable { case off, starting, on(String), failed(String) }
+  private(set) var forwardState = ForwardState.off
+  @ObservationIgnored private var forwarder: LocalForwarder?
+
   @ObservationIgnored private var loop: Task<Void, Never>?
   @ObservationIgnored private let session: URLSession = {
     let c = URLSessionConfiguration.ephemeral
@@ -139,6 +176,7 @@ final class Store {
     readSettings()
     adoptClaudeKey()
     restart()
+    Task { await startForwarder() }
     NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
       Task { @MainActor in self?.restart() }
     }
@@ -170,16 +208,85 @@ final class Store {
 
   // MARK: - Config
 
-  func saveSettings(url: String, baseURL: String, interval: Int, settingsPath: String) {
+  func saveSettings(url: String, baseURL: String, interval: Int, claudeDir: String, desktopDir: String) {
     let url = url.trimmingCharacters(in: .whitespaces)
     config.url = url.isEmpty ? Config.defaultURL : url
     let b = baseURL.trimmingCharacters(in: .whitespaces)
-    config.baseURL = b.isEmpty ? Config.defaultBaseURL : b
+    let newBase = b.isEmpty ? Config.defaultBaseURL : b
+    let baseChanged = newBase != config.baseURL
+    config.baseURL = newBase
     config.interval = max(10, interval)
-    config.settingsPath = settingsPath.trimmingCharacters(in: .whitespaces).isEmpty ? ClaudeSettings.defaultPath : settingsPath
+    config.claudeDir = claudeDir.trimmingCharacters(in: .whitespaces)
+    config.desktopDir = desktopDir.trimmingCharacters(in: .whitespaces)
     saveConfig()
     readSettings()
     restart()
+    if baseChanged { Task { await startForwarder() } }
+  }
+
+  // MARK: - Local forwarder
+
+  /// The model API is http and not this machine: Desktop needs the forwarder for it.
+  var forwardNeeded: Bool { LocalForwarder.needed(for: config.baseURL) }
+
+  /// The address Desktop is to use: the forwarder's while it runs, else the model API.
+  var desktopWant: String {
+    if case .on(let u) = forwardState { return u }
+    return config.baseURL
+  }
+
+  func setForward(_ on: Bool) {
+    config.forward = on
+    saveConfig()
+    Task { await startForwarder() }
+  }
+
+  /// (Re)starts the forwarder as the config says, on the port it had (or the next free one).
+  func startForwarder() async {
+    forwarder?.stop()
+    forwarder = nil
+    guard config.forward, forwardNeeded, let target = URL(string: config.baseURL.trimmingCharacters(in: .whitespaces)) else {
+      forwardState = .off
+      syncDesktopAddress()
+      return
+    }
+    forwardState = .starting
+    do {
+      let f = try LocalForwarder(target: target)
+      let p = try await f.start(preferred: UInt16(clamping: config.forwardPort))
+      forwarder = f
+      config.forwardPort = Int(p)
+      remember(LocalForwarder.url(port: p))
+      saveConfig()
+      withAnimation(.snappy) { forwardState = .on(LocalForwarder.url(port: p)) }
+      syncDesktopAddress()
+    } catch {
+      config.forward = false
+      saveConfig()
+      withAnimation(.snappy) { forwardState = .failed(error.localizedDescription) }
+    }
+  }
+
+  private func remember(_ url: String) {
+    guard !config.ours.contains(where: { ClaudeSettings.sameURL($0, url) }) else { return }
+    config.ours = Array((config.ours + [url]).suffix(20))
+  }
+
+  /// Desktop is on one of our addresses, not the one it is to use (the forwarder moved, was
+  /// turned on or off): put it right without asking.
+  private func syncDesktopAddress() {
+    guard case .gateway(_, let current) = ClaudeDesktop.status(dir: config.desktopLibrary) else { return }
+    let want = desktopWant
+    guard DesktopURL.change(current: current, want: want, ours: config.ours + [config.baseURL]) == .replace else { return }
+    do {
+      guard try ClaudeDesktop.switchKey(nil, baseURL: want, dir: config.desktopLibrary) == .written else { return }
+      remember(want)
+      saveConfig()
+      notice = Notice(text: "Desktop 已改用 \(want)" + (desktopRunning ? "，重启后生效" : ""))
+      if desktopRunning { afterDesktopChanged() }
+    } catch {
+      notice = Notice(text: "Desktop 地址未改：" + error.localizedDescription, bad: true)
+    }
   }
 
   func setDesktopRestart(_ r: DesktopRestart) {
@@ -340,7 +447,7 @@ final class Store {
     config.retired = Array((config.retired.filter { $0 != old } + [old]).suffix(50))
     let code = activeToken == old
     var desktop = false
-    if case .gateway(let k, _) = ClaudeDesktop.status(), k == old { desktop = true }
+    if case .gateway(let k, _) = ClaudeDesktop.status(dir: config.desktopLibrary), k == old { desktop = true }
     guard code || desktop else { return }
     let name = people.first { $0.id == id }?.label ?? ""
     var problems: [String] = []
@@ -350,7 +457,7 @@ final class Store {
     }
     var desktopChanged = false
     if desktop {
-      do { desktopChanged = try ClaudeDesktop.switchKey(new) == .written }
+      do { desktopChanged = try ClaudeDesktop.switchKey(new, dir: config.desktopLibrary) == .written }
       catch { problems.append("Desktop：" + error.localizedDescription) }
     }
     if !problems.isEmpty {
@@ -380,7 +487,7 @@ final class Store {
     let base = config.baseURL
     var cliFile: String?
     if let f = ClaudeSettings.file(config.settingsPath) { cliFile = (try? String(contentsOf: f, encoding: .utf8)) ?? "" }
-    let desk = ClaudeDesktop.status()
+    let desk = ClaudeDesktop.status(dir: config.desktopLibrary)
     var desktopURL: String?
     var onGateway = false
     if case .gateway(_, let u) = desk { onGateway = true; desktopURL = u }
@@ -394,10 +501,14 @@ final class Store {
     if let t = cliFile, !ClaudeSettings.sameURL(ClaudeSettings.currentEnv(ClaudeSettings.baseURLKey, in: t), base) {
       others.append("Claude Code：" + (ClaudeSettings.currentEnv(ClaudeSettings.baseURLKey, in: t) ?? "未设置（官方接口）"))
     }
-    if onGateway, !ClaudeSettings.sameURL(desktopURL, base) { others.append("Desktop：" + (desktopURL ?? "未设置")) }
+    // Desktop is to use the forwarder while it runs; an address of ours is put right silently.
+    let desktopWant = self.desktopWant
+    let desktopChange = onGateway ? DesktopURL.change(current: desktopURL, want: desktopWant, ours: config.ours + [base]) : .same
+    if desktopChange == .ask { others.append("Desktop：" + (desktopURL ?? "未设置")) }
     var setURL = false
     if !others.isEmpty {
-      switch Dialogs.otherAPI(current: others, wanted: base) {
+      let wanted = desktopWant == base ? base : base + "\nDesktop 经本地转发：" + desktopWant
+      switch Dialogs.otherAPI(current: others, wanted: wanted) {
       case .replace: setURL = true
       case .keyOnly: setURL = false
       case .cancel: return
@@ -418,9 +529,11 @@ final class Store {
     switch desk {
     case .gateway:
       do {
-        let wantURL = setURL && !ClaudeSettings.sameURL(desktopURL, base) ? base : nil
-        desktopChanged = try ClaudeDesktop.switchKey(p.key, baseURL: wantURL) == .written
+        let wantURL = desktopChange == .replace || desktopChange == .ask && setURL ? desktopWant : nil
+        desktopChanged = try ClaudeDesktop.switchKey(p.key, baseURL: wantURL, dir: config.desktopLibrary) == .written
+        if let wantURL { remember(wantURL); saveConfig() }
         parts.append(!desktopChanged ? "Desktop 已在用" : desktopRunning ? "Desktop 重启后生效" : "Desktop 下次打开生效")
+        if LocalForwarder.needed(for: wantURL ?? desktopURL ?? "") { parts.append("Desktop 需开本地转发（设置 → 接口）") }
       } catch { problems.append("Desktop：" + error.localizedDescription) }
     case .managed:
       parts.append("Desktop 由公司管理，未改")

@@ -1,6 +1,7 @@
 // Settings: the usage API, how often to refresh, the people (keys are added by pasting; names
 // come by themselves), and where Claude Code's settings are.
 import QuotaCore
+import ServiceManagement
 import SwiftUI
 
 struct SettingsView: View {
@@ -10,7 +11,8 @@ struct SettingsView: View {
   @State private var url = ""
   @State private var baseURL = ""
   @State private var interval = 60
-  @State private var settingsPath = ""
+  @State private var claudeDir = ""
+  @State private var desktopDir = ""
 
   var body: some View {
     VStack(spacing: 0) {
@@ -18,6 +20,9 @@ struct SettingsView: View {
         Section {
           TextField(text: $baseURL, prompt: Text(Config.defaultBaseURL)) { label("模型接口") }
             .font(.mono(12.5))
+          if LocalForwarder.needed(for: baseURL.isEmpty ? Config.defaultBaseURL : baseURL) {
+            ForwardRow()
+          }
           TextField(text: $url, prompt: Text(Config.defaultURL)) { label("用量接口") }
             .font(.mono(12.5))
           Stepper(value: $interval, in: 10...3600, step: 10) {
@@ -42,8 +47,6 @@ struct SettingsView: View {
           footer("粘贴 key 自动识别是谁；同一人的新 key 替换旧的。")
         }
         Section {
-          TextField(text: $settingsPath) { label("Claude Code 配置") }
-            .font(.mono(12.5))
           Picker(selection: Binding(get: { store.config.desktopRestart }, set: { store.setDesktopRestart($0) })) {
             ForEach(DesktopRestart.allCases, id: \.self) { Text($0.label).font(.ui(13)) }
           } label: { label("换 key 后重启 Desktop") }
@@ -53,11 +56,26 @@ struct SettingsView: View {
           footer("改 Claude Code 的 env.ANTHROPIC_AUTH_TOKEN 和 Desktop 网关的 key，原文件留 .bak。")
         }
         Section {
+          LoginItemRow()
+        } header: {
+          header("通用")
+        }
+        Section {
           Stepper(value: $text.bump, in: TextSize.range, step: 0.5) {
             LabeledContent { Text(text.label).font(.ui(13)).monospacedDigit() } label: { label("字号") }
           }
         } header: {
           header("显示")
+        }
+        Section {
+          TextField(text: $claudeDir, prompt: Text(Config.detectedClaudeDir)) { label("Claude Code") }
+            .font(.mono(12.5))
+          TextField(text: $desktopDir, prompt: Text(Config.detectedDesktopDir)) { label("Desktop") }
+            .font(.mono(12.5))
+        } header: {
+          header("目录")
+        } footer: {
+          footer("留空即自动识别。Claude Code 读其中的 settings.json，Desktop 读 configLibrary。")
         }
       }
       .formStyle(.grouped)
@@ -78,10 +96,11 @@ struct SettingsView: View {
       url = store.config.url
       baseURL = store.config.baseURL
       interval = store.config.interval
-      settingsPath = store.config.settingsPath
+      claudeDir = store.config.claudeDir
+      desktopDir = store.config.desktopDir
     }
     // Saved as typed (once typing pauses): no separate save step.
-    .task(id: "\(url)\n\(baseURL)\n\(interval)\n\(settingsPath)") {
+    .task(id: "\(url)\n\(baseURL)\n\(interval)\n\(claudeDir)\n\(desktopDir)") {
       try? await Task.sleep(for: .milliseconds(600))
       if !Task.isCancelled { save() }
     }
@@ -94,8 +113,8 @@ struct SettingsView: View {
 
   private func save() {
     let c = store.config
-    guard url != c.url || baseURL != c.baseURL || interval != c.interval || settingsPath != c.settingsPath else { return }
-    store.saveSettings(url: url, baseURL: baseURL, interval: interval, settingsPath: settingsPath)
+    guard url != c.url || baseURL != c.baseURL || interval != c.interval || claudeDir != c.claudeDir || desktopDir != c.desktopDir else { return }
+    store.saveSettings(url: url, baseURL: baseURL, interval: interval, claudeDir: claudeDir, desktopDir: desktopDir)
   }
 
   private func valid(_ s: String) -> Bool {
@@ -142,5 +161,67 @@ private struct PersonKeyRow: View {
         .truncationMode(.middle)
     }
     .padding(.vertical, 2)
+  }
+}
+
+/// Under an http model API: the local forwarder Desktop needs, shown on only once it runs.
+private struct ForwardRow: View {
+  @Environment(Store.self) private var store
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 5) {
+      Toggle(isOn: Binding(get: { on }, set: { store.setForward($0) })) {
+        HStack(spacing: 6) {
+          Text("本地转发").font(.ui(13))
+          if store.forwardState == .starting { ProgressView().controlSize(.mini) }
+        }
+      }
+      .disabled(store.forwardState == .starting)
+      Group {
+        switch store.forwardState {
+        case .on(let u):
+          Label { Text("已启用：Desktop 经 \(u) 访问，QuotaBar 需保持运行") } icon: { Icon(.checkFilled, size: 11) }
+            .foregroundStyle(.green)
+        case .failed(let why):
+          Label { Text("启动失败：" + why) } icon: { Icon(.warning, size: 11) }
+            .foregroundStyle(.orange)
+        case .starting:
+          Text("启动中…").foregroundStyle(.secondary)
+        case .off:
+          Text("Desktop 只认 HTTPS 或本机 HTTP，不开可能用不了").foregroundStyle(.secondary)
+        }
+      }
+      .font(.ui(11))
+      .textSelection(.enabled)
+    }
+    .animation(.snappy, value: store.forwardState)
+  }
+
+  private var on: Bool {
+    if case .on = store.forwardState { return true }
+    return false
+  }
+}
+
+/// Open QuotaBar when you log in (the forwarder only works while it runs).
+private struct LoginItemRow: View {
+  @State private var on = SMAppService.mainApp.status == .enabled
+  @State private var error: String?
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      Toggle(isOn: Binding(get: { on }, set: { set($0) })) { Text("登录时打开").font(.ui(13)) }
+      if let error { Text(error).font(.ui(11)).foregroundStyle(.orange) }
+    }
+  }
+
+  private func set(_ v: Bool) {
+    do {
+      if v { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+      error = nil
+    } catch {
+      self.error = "未能更改：" + error.localizedDescription
+    }
+    on = SMAppService.mainApp.status == .enabled
   }
 }

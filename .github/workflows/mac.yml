@@ -7,6 +7,7 @@ on:
 jobs:
   build:
     runs-on: macos-15
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: mac/QuotaBar
@@ -21,6 +22,7 @@ jobs:
           swift ../ci/fontcheck.swift "$RUNNER_TEMP"/package/files/inter-latin-wght-normal.woff2 "$RUNNER_TEMP"/package/files/inter-latin-wght-normal.woff2
       # A look at the app against a stand-in usage API: the dashboard, light and dark.
       - name: Screenshots
+        timeout-minutes: 8
         run: ../ci/screenshots.sh
       - run: ditto -c -k --keepParent build/QuotaBar.app build/QuotaBar.zip
       - uses: actions/upload-artifact@v4

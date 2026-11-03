@@ -44,6 +44,8 @@ PY
 
 # The dashboard window as large as the screen allows, so the trends show too.
 defaults write local.quotabar "NSWindow Frame dashboard" "20 20 1400 1150 0 0 1600 1200"
+# osascript with a time limit: it can wait on a permission prompt forever.
+osa() { perl -e 'alarm 20; exec @ARGV' osascript "$@"; }
 shot() {
   open build/QuotaBar.app --args "$2"
   sleep 8
@@ -55,7 +57,7 @@ shot() {
   sleep 1
 }
 dark() {
-  osascript -e "tell application \"System Events\" to tell appearance preferences to set dark mode to $1" \
+  osa -e "tell application \"System Events\" to tell appearance preferences to set dark mode to $1" \
     || defaults write -g AppleInterfaceStyle Dark
 }
 shot panel-light --panel-window
@@ -64,14 +66,14 @@ shot settings-light --settings
 # ⌘A ⌘C ⌘V in a text field: the address field of the settings has the focus.
 open build/QuotaBar.app --args --settings
 sleep 6
-osascript -e 'tell application "QuotaBar" to activate' || true
+osa -e 'tell application "QuotaBar" to activate' || true
 sleep 1
 printf 'x' | pbcopy
-osascript -e 'tell application "System Events" to keystroke "a" using command down' -e 'tell application "System Events" to keystroke "c" using command down' || true
+osa -e 'tell application "System Events" to keystroke "a" using command down' -e 'tell application "System Events" to keystroke "c" using command down' || true
 sleep 1
 echo "--- copied with ⌘A ⌘C: $(pbpaste)"
 printf 'http://127.0.0.1:9931/pasted' | pbcopy
-osascript -e 'tell application "System Events" to keystroke "a" using command down' -e 'tell application "System Events" to keystroke "v" using command down' || true
+osa -e 'tell application "System Events" to keystroke "a" using command down' -e 'tell application "System Events" to keystroke "v" using command down' || true
 sleep 2
 echo "--- address after ⌘V: $(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["url"])' "$DIR/config.json")"
 screencapture -x "$SHOTS/pasted.png"
@@ -80,11 +82,11 @@ sleep 1
 # Switching the system to dark while the app runs: it follows at once.
 open build/QuotaBar.app --args --dashboard
 sleep 8
-osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to true' || true
+osa -e 'tell application "System Events" to tell appearance preferences to set dark mode to true' || true
 sleep 2
 screencapture -x "$SHOTS/live-dark.png"
 pkill -x QuotaBar || true
-osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to false' || true
+osa -e 'tell application "System Events" to tell appearance preferences to set dark mode to false' || true
 sleep 1
 dark true
 shot panel-dark --panel-window
