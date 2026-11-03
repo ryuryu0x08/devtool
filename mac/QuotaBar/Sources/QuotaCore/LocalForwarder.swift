@@ -181,12 +181,12 @@ public final class LocalForwarder: @unchecked Sendable {
           self.pipe(up, to: c, last: true)
         })
       case .failed(let e), .waiting(let e):
+        // Once connected, the API closing (or failing) is seen by the pipes, which pass on
+        // all of the reply first; closing the client here would drop what is still to be sent.
         if started.first() {
           up.cancel()
           self.log?("can't reach \(self.host):\(self.targetPort): \(e)")
           self.reply(c, 502, "QuotaBar 本地转发连不上 \(self.host):\(self.targetPort)（\(e)）")
-        } else if case .failed = s {
-          self.close(c, up)
         }
       default: break
       }
@@ -212,7 +212,7 @@ public final class LocalForwarder: @unchecked Sendable {
       }
       if content == nil && !finish { return self.pipe(from, to: to, last: last) }
       to.send(content: content, contentContext: finish ? .finalMessage : .defaultMessage, isComplete: finish, completion: .contentProcessed { e in
-        if let e { self.log?("passing on failed: \(e)") }
+        if let e, e != .posix(.ECANCELED) { self.log?("passing on failed: \(e)") }
         if e != nil { return self.close(from, to) }
         if !finish { self.pipe(from, to: to, last: last) } else if last { self.close(from, to) }
       })

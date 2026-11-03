@@ -36,9 +36,13 @@ wait_for() { for _ in $(seq 40); do [[ "$(desktop_url)" == "$1" ]] && return 0; 
 check() {
   local port=$1
   wait_for "http://127.0.0.1:$port"
-  out="$(curl -sS -m 10 -H 'Authorization: Bearer sk-demo-ye' "http://127.0.0.1:$port/v1/billing/usage" 2>&1 || true)"
-  echo "through 127.0.0.1:$port: $out"
-  if [[ "$out" != *'"nick_name": "ye"'* ]]; then
+  local out ok=0
+  for i in $(seq 20); do
+    out="$(curl -sS -m 10 -H 'Authorization: Bearer sk-demo-ye' "http://127.0.0.1:$port/v1/billing/usage" 2>&1 || true)"
+    [[ "$out" == *'"nick_name": "ye"'* ]] && ok=$((ok + 1)) || break
+  done
+  echo "through 127.0.0.1:$port: $ok/20 answered, last: $out"
+  if [[ $ok != 20 ]]; then
     echo "the forwarder did not pass the request on"
     pgrep -lx QuotaBar || echo "QuotaBar is not running"
     lsof -nP -iTCP -sTCP:LISTEN | grep -E "4783[0-9]" || true
