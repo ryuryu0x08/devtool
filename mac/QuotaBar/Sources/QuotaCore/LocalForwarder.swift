@@ -57,7 +57,7 @@ public final class LocalForwarder: @unchecked Sendable {
     stop()
     for i in 0..<tries {
       let p = preferred &+ UInt16(i)
-      if p == 0 { continue }
+      if p == 0 || !Self.free(p) { continue }
       if let l = await listen(on: p) {
         listener = l
         port = p
@@ -71,6 +71,21 @@ public final class LocalForwarder: @unchecked Sendable {
     listener?.cancel()
     listener = nil
     port = nil
+  }
+
+  /// Nothing else listens on 127.0.0.1:`p`. (A listener of Network.framework can share a port
+  /// another program holds, so this asks the system with a plain socket first.)
+  static func free(_ p: UInt16) -> Bool {
+    let s = socket(AF_INET, SOCK_STREAM, 0)
+    guard s >= 0 else { return false }
+    defer { close(s) }
+    var a = sockaddr_in()
+    a.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+    a.sin_family = sa_family_t(AF_INET)
+    a.sin_port = p.bigEndian
+    a.sin_addr.s_addr = inet_addr("127.0.0.1")
+    let r = withUnsafePointer(to: &a) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(s, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) } }
+    return r == 0
   }
 
   private func listen(on p: UInt16) async -> NWListener? {

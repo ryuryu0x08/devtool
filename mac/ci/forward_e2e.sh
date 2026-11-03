@@ -51,6 +51,7 @@ python3 -c 'import socket,time; s=socket.socket(); s.bind(("127.0.0.1",47831)); 
 BUSY=$!
 sleep 1
 open build/QuotaBar.app
+grep -o '"forwardPort" : [0-9]*' "$DIR/config.json" || true
 check 47832
 echo "OK: 47831 taken, forwarder on 47832, Desktop followed without asking"
 grep -o '"forwardPort" : [0-9]*' "$DIR/config.json"
