@@ -35,7 +35,8 @@ cd devtool/mac/QuotaBar
   - 只改这两处文字，文件其余部分逐字节保留；写入前会检查除这两项外内容完全一致，否则不写。
   - 修改前的文件保存为同目录的 `settings.json.bak`。settings.json 是符号链接时，写入它指向的文件。
   - 文件不是有效 JSON（例如带注释）时不修改，并说明原因。
-  - 新开的 Claude Code 会话使用新 key；已经打开的会话可能需要重开。
+  - 生效范围（据 Claude Code 文档）：终端里的 `claude`、VS Code / JetBrains 插件都读这个文件；Claude Code 会监视它，正在运行的会话在文件保存后就改用新 key，不用重开。
+  - **Claude Desktop 不受影响**：它不读 settings.json 里的 `ANTHROPIC_AUTH_TOKEN`，用的是 claude.ai 登录，或它自己的「第三方推理」配置（Developer → Configure Third-Party Inference）。
   - 项目目录里的 `.claude/settings.json`、`.claude/settings.local.json` 或环境变量可能覆盖这里的设置；settings.json 里有 `apiKeyHelper` 时面板会提示。
 
 ## 数据保存在哪里
@@ -56,4 +57,5 @@ swift run       # 直接运行（不经过 .app，访问 http 地址可能被系
 
 - `Sources/QuotaCore`：不涉及界面的逻辑，全部有测试。
 - `Sources/QuotaBar`：界面。
+- `Resources/AppIcon.png`：App 图标（哔哩哔哩蓝 #00AEEC、粉 #FB7299），由 `Resources/icon/make_icon.py` 画出。
 - `../ci/`：持续集成里截图用的模拟接口和脚本。
