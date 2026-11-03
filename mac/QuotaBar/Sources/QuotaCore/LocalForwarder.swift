@@ -24,6 +24,10 @@ public final class LocalForwarder: @unchecked Sendable {
 
   public let target: URL
   public private(set) var port: UInt16?
+  /// How long to wait for the model API to accept a connection before answering 502.
+  public var connectTimeout: TimeInterval = 15
+  /// Told what happens to each request (for the app's log).
+  public var log: (@Sendable (String) -> Void)?
   private let host: String
   private let targetPort: UInt16
   private let prefix: String
