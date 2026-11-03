@@ -49,6 +49,7 @@ dark() {
 }
 shot panel-light --panel-window
 shot dashboard-light --dashboard
+shot settings-light --settings
 dark true
 shot panel-dark --panel-window
 shot dashboard-dark --dashboard

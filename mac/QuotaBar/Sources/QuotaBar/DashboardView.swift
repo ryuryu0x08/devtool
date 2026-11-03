@@ -267,6 +267,8 @@ struct TrendsCard: View {
       }
       .chartForegroundStyleScale(range: color.map { [$0] } ?? palette)
       .chartXScale(domain: from...to)
+      // Use is never below 0: the axis starts there.
+      .chartYScale(domain: 0...max(1, (points.map(\.v).max() ?? 0) * 1.1))
       .chartXSelection(value: $hover)
       .chartLegend(points.contains { $0.series != points.first?.series } ? .visible : .hidden)
       .frame(height: 200)

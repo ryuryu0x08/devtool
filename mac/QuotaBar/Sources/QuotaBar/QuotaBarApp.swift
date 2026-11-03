@@ -23,8 +23,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     MainActor.assumeIsolated {
       NSApp.mainMenu = editMenu()
       let store = Store.shared
-      if !store.configured || CommandLine.arguments.contains("--dashboard") {
-        Windows.showDashboard(store, settings: !store.configured)
+      let args = CommandLine.arguments
+      if !store.configured || args.contains("--dashboard") || args.contains("--settings") {
+        Windows.showDashboard(store, settings: !store.configured || args.contains("--settings"))
       }
       // The panel in a window of its own, to look at it without clicking the menu bar.
       if CommandLine.arguments.contains("--panel-window") {
