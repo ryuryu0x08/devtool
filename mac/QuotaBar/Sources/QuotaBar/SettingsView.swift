@@ -14,7 +14,7 @@ struct SettingsView: View {
     VStack(spacing: 0) {
       Form {
         Section {
-          TextField(text: $url, prompt: Text("http://…/api/v1/billing/usage")) { Text("地址").font(.ui(13)) }
+          TextField(text: $url, prompt: Text(Config.defaultURL)) { Text("地址").font(.ui(13)) }
             .font(.system(size: 12.5, design: .monospaced))
           Stepper(value: $interval, in: 10...3600, step: 10) {
             LabeledContent { Text("\(interval) 秒").font(.ui(13)).monospacedDigit() } label: { Text("刷新间隔").font(.ui(13)) }
@@ -27,16 +27,7 @@ struct SettingsView: View {
         }
         Section {
           ForEach(store.people) { p in
-            HStack(spacing: 10) {
-              Text(p.label).font(p.name == nil ? .system(size: 13, design: .monospaced) : .serif(14, .semibold))
-              Spacer()
-              Text(p.key.isEmpty ? "等待新 key" : People.shortKey(p.key)).font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
-              Button(role: .destructive) { withAnimation(.snappy) { store.remove(p) } } label: { Icon(.trash, size: 13) }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.red)
-                .help("删除")
-            }
-            .transition(.opacity)
+            PersonKeyRow(p: p).transition(.opacity)
           }
           AddKeyField()
         } header: {
@@ -83,7 +74,6 @@ struct SettingsView: View {
   }
 
   private func save() {
-    guard !url.isEmpty || !store.config.url.isEmpty else { return }
     guard url != store.config.url || interval != store.config.interval || settingsPath != store.config.settingsPath else { return }
     store.saveSettings(url: url, interval: interval, settingsPath: settingsPath)
   }
@@ -91,5 +81,46 @@ struct SettingsView: View {
   private var validURL: Bool {
     guard let u = URL(string: url.trimmingCharacters(in: .whitespaces)) else { return false }
     return ["http", "https"].contains(u.scheme?.lowercased() ?? "") && u.host != nil
+  }
+}
+
+/// A person in the settings: the name, and the whole key, to read, select or copy.
+private struct PersonKeyRow: View {
+  @Environment(Store.self) private var store
+  let p: Person
+  @State private var copied = false
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      HStack {
+        Text(p.label).font(p.name == nil ? .system(size: 13, design: .monospaced) : .serif(14, .semibold))
+        Spacer()
+        if !p.key.isEmpty {
+          Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(p.key, forType: .string)
+            withAnimation(.snappy) { copied = true }
+          } label: { Icon(copied ? .check : .copy, size: 12) }
+            .buttonStyle(.borderless)
+            .help("复制 key")
+            .task(id: copied) {
+              guard copied else { return }
+              try? await Task.sleep(for: .seconds(1.5))
+              withAnimation(.snappy) { copied = false }
+            }
+        }
+        Button(role: .destructive) { withAnimation(.snappy) { store.remove(p) } } label: { Icon(.trash, size: 12) }
+          .buttonStyle(.borderless)
+          .foregroundStyle(.red)
+          .help("删除")
+      }
+      Text(p.key.isEmpty ? "等待新 key" : p.key)
+        .font(.system(size: 11.5, design: .monospaced))
+        .foregroundStyle(.secondary)
+        .textSelection(.enabled)
+        .lineLimit(2)
+        .truncationMode(.middle)
+    }
+    .padding(.vertical, 2)
   }
 }

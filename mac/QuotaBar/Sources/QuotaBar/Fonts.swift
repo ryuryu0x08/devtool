@@ -80,7 +80,7 @@ extension Font {
 
 /// An icon from Anthropicons, or the matching SF Symbol without it.
 enum Glyph {
-  case refresh, gear, plus, check, checkFilled, warning, close, chart, swap, key, trash, eye, eyeOff, info, gauge
+  case refresh, gear, plus, check, checkFilled, warning, close, chart, swap, key, trash, eye, eyeOff, info, gauge, copy
 
   var code: UInt32 {
     switch self {
@@ -99,6 +99,7 @@ enum Glyph {
     case .eyeOff: return 0xE06A
     case .info: return 0xE08F
     case .gauge: return 0xE12F
+    case .copy: return 0xE017
     }
   }
 
@@ -119,6 +120,7 @@ enum Glyph {
     case .eyeOff: return "eye.slash"
     case .info: return "info.circle"
     case .gauge: return "gauge.with.dots.needle.50percent"
+    case .copy: return "doc.on.doc"
     }
   }
 }

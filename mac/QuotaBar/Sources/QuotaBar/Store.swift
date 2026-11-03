@@ -8,8 +8,10 @@ import QuotaCore
 import SwiftUI
 
 struct Config: Codable, Equatable {
-  /// The usage API, e.g. http://host/api/v1/billing/usage.
-  var url = ""
+  static let defaultURL = "http://api-ai-coding.bilibili.co/api/v1/billing/usage"
+
+  /// The usage API.
+  var url = Config.defaultURL
   /// Seconds between refreshes.
   var interval = 60
   var people: [Person] = []
@@ -24,7 +26,8 @@ struct Config: Codable, Equatable {
 
   init(from d: Decoder) throws {
     let c = try d.container(keyedBy: CodingKeys.self)
-    url = try c.decodeIfPresent(String.self, forKey: .url) ?? ""
+    let u = try c.decodeIfPresent(String.self, forKey: .url) ?? ""
+    url = u.isEmpty ? Config.defaultURL : u
     interval = try c.decodeIfPresent(Int.self, forKey: .interval) ?? 60
     retired = try c.decodeIfPresent([String].self, forKey: .retired) ?? []
     settingsPath = try c.decodeIfPresent(String.self, forKey: .settingsPath) ?? ClaudeSettings.defaultPath
@@ -144,7 +147,8 @@ final class Store {
   // MARK: - Config
 
   func saveSettings(url: String, interval: Int, settingsPath: String) {
-    config.url = url.trimmingCharacters(in: .whitespaces)
+    let url = url.trimmingCharacters(in: .whitespaces)
+    config.url = url.isEmpty ? Config.defaultURL : url
     config.interval = max(10, interval)
     config.settingsPath = settingsPath.trimmingCharacters(in: .whitespaces).isEmpty ? ClaudeSettings.defaultPath : settingsPath
     saveConfig()

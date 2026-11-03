@@ -42,7 +42,7 @@ struct PanelView: View {
     VStack(alignment: .leading, spacing: 10) {
       header
       NoticeBanner()
-      if !store.hasURL {
+      if !store.hasURL || store.people.isEmpty {
         empty
       } else {
         if let q = store.poolReading { PoolRow(q: q).transition(.opacity) }
@@ -55,7 +55,6 @@ struct PanelView: View {
         }
         .frame(maxHeight: 460)
         .fixedSize(horizontal: false, vertical: true)
-        AddKeyField()
         if store.hasKeyHelper {
           Trouble(text: "settings.json 里还有 apiKeyHelper，Claude Code 可能优先用它给出的 key。")
         }
@@ -85,8 +84,8 @@ struct PanelView: View {
   private var empty: some View {
     VStack(spacing: 10) {
       Icon(.key, size: 28).foregroundStyle(.secondary)
-      Text("填写用量接口地址后，粘贴 key 就能看到额度").font(.ui(12.5)).foregroundStyle(.secondary)
-      Button { Windows.showDashboard(store, settings: true) } label: { Text("填写接口地址").font(.ui(12.5, .medium)) }
+      Text("在设置里粘贴 key，就能看到额度").font(.ui(12.5)).foregroundStyle(.secondary)
+      Button { Windows.showDashboard(store, settings: true) } label: { Text("打开设置").font(.ui(12.5, .medium)) }
         .buttonStyle(.borderedProminent)
     }
     .frame(maxWidth: .infinity)

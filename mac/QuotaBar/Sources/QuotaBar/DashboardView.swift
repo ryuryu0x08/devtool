@@ -11,19 +11,18 @@ struct DashboardView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 16) {
         NoticeBanner()
-        if !store.hasURL {
+        if !store.hasURL || store.people.isEmpty {
           ContentUnavailableView {
-            Label { Text("先填写用量接口地址").font(.serif(20, .semibold)) } icon: { Icon(.key, size: 30) }
+            Label { Text(store.hasURL ? "还没有 key" : "先填写用量接口地址").font(.serif(20, .semibold)) } icon: { Icon(.key, size: 30) }
           } description: {
-            Text("之后粘贴 key 即可：是谁的 key 会自动识别。").font(.ui(13))
+            Text("在设置里粘贴 key 即可：是谁的 key 会自动识别。").font(.ui(13))
           } actions: {
-            Button { showSettings = true } label: { Text("填写接口地址").font(.ui(13, .medium)) }.buttonStyle(.borderedProminent)
+            Button { showSettings = true } label: { Text("打开设置").font(.ui(13, .medium)) }.buttonStyle(.borderedProminent)
           }
           .frame(maxWidth: .infinity, minHeight: 360)
         } else {
           if let q = store.poolReading { PoolCard(q: q).transition(.opacity) }
           PersonGrid()
-          AddKeyField().frame(maxWidth: 420)
           if !store.history.isEmpty { TrendsCard() }
         }
       }
@@ -32,13 +31,9 @@ struct DashboardView: View {
       .animation(.snappy, value: store.people.map(\.id))
     }
     .frame(minWidth: 640, minHeight: 480)
+    // Under the window title, drawn by the system: it fits whatever the length.
+    .navigationSubtitle(store.lastRefresh.map { "更新于 \($0.formatted(date: .omitted, time: .standard)) · 每 \(store.config.interval) 秒刷新" } ?? "")
     .toolbar {
-      ToolbarItem(placement: .status) {
-        if let t = store.lastRefresh {
-          Text("每 \(store.config.interval) 秒刷新 · 更新于 \(t.formatted(date: .omitted, time: .standard))")
-            .font(.ui(11)).foregroundStyle(.secondary)
-        }
-      }
       ToolbarItem { RefreshButton() }
       ToolbarItem {
         Button { showSettings = true } label: { Icon(.gear, size: 14) }

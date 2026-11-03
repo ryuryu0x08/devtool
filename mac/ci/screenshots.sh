@@ -61,6 +61,15 @@ dark() {
 shot panel-light --panel-window
 shot dashboard-light --dashboard
 shot settings-light --settings
+# Switching the system to dark while the app runs: it follows at once.
+open build/QuotaBar.app --args --dashboard
+sleep 8
+osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to true' || true
+sleep 2
+screencapture -x "$SHOTS/live-dark.png"
+pkill -x QuotaBar || true
+osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to false' || true
+sleep 1
 dark true
 shot panel-dark --panel-window
 shot dashboard-dark --dashboard

@@ -23,11 +23,12 @@ struct QuotaBarApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
   func applicationDidFinishLaunching(_ n: Notification) {
     MainActor.assumeIsolated {
-      NSApp.mainMenu = editMenu()
+      editShortcuts()
       let store = Store.shared
       let args = CommandLine.arguments
-      if !store.hasURL || args.contains("--dashboard") || args.contains("--settings") {
-        Windows.showDashboard(store, settings: !store.hasURL || args.contains("--settings"))
+      let empty = !store.hasURL || store.people.isEmpty
+      if empty || args.contains("--dashboard") || args.contains("--settings") {
+        Windows.showDashboard(store, settings: empty || args.contains("--settings"))
       }
       // The panel in a window of its own, to look at it without clicking the menu bar.
       if CommandLine.arguments.contains("--panel-window") {
@@ -42,27 +43,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 }
 
-/// A menu-bar-only app has no menu bar of its own, and so no ⌘C / ⌘V / ⌘A / ⌘Z in its text
-/// fields unless a menu carries them: this one isn't shown, it only provides those shortcuts.
+/// A menu-bar-only app has no menu bar of its own, so ⌘X / ⌘C / ⌘V / ⌘A / ⌘Z don't reach its
+/// text fields by themselves: they are sent on here to whatever has the focus.
 @MainActor
-private func editMenu() -> NSMenu {
-  let edit = NSMenu(title: "Edit")
-  edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
-  edit.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
-  edit.addItem(.separator())
-  edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-  edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-  edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-  edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
-  let window = NSMenu(title: "Window")
-  window.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
-  let main = NSMenu()
-  for m in [NSMenu(title: "QuotaBar"), edit, window] {
-    let item = NSMenuItem()
-    item.submenu = m
-    main.addItem(item)
+private func editShortcuts() {
+  NSEvent.addLocalMonitorForEvents(matching: .keyDown) { e in
+    let mods = e.modifierFlags.intersection(.deviceIndependentFlagsMask)
+    guard mods == .command || mods == [.command, .shift], let key = e.charactersIgnoringModifiers?.lowercased() else { return e }
+    let action: Selector?
+    switch (key, mods == .shift.union(.command)) {
+    case ("x", false): action = #selector(NSText.cut(_:))
+    case ("c", false): action = #selector(NSText.copy(_:))
+    case ("v", false): action = #selector(NSText.paste(_:))
+    case ("a", false): action = #selector(NSText.selectAll(_:))
+    case ("z", false): action = Selector(("undo:"))
+    case ("z", true): action = Selector(("redo:"))
+    case ("w", false): action = #selector(NSWindow.performClose(_:))
+    default: action = nil
+    }
+    guard let action, NSApp.sendAction(action, to: nil, from: nil) else { return e }
+    return nil
   }
-  return main
 }
 
 extension Store {
