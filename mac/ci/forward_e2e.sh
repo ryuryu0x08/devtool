@@ -8,6 +8,8 @@ DIR="$HOME/Library/Application Support/QuotaBar"
 mkdir -p "$DIR"
 IP=model-api.quotabar.test
 grep -q "$IP" /etc/hosts || echo "127.0.0.1 $IP" | sudo tee -a /etc/hosts >/dev/null
+sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder || true
+sleep 1
 TMP="$(mktemp -d)"
 mkdir -p "$TMP/claude" "$TMP/desktop/configLibrary"
 printf '{\n  "env": {\n    "ANTHROPIC_AUTH_TOKEN": "sk-demo-yy"\n  }\n}\n' > "$TMP/claude/settings.json"

@@ -253,6 +253,7 @@ final class Store {
     forwardState = .starting
     do {
       let f = try LocalForwarder(target: target)
+      f.log = { FileHandle.standardError.write(Data(("QuotaBar forwarder: " + $0 + "\n").utf8)) }
       let p = try await f.start(preferred: UInt16(clamping: config.forwardPort))
       forwarder = f
       config.forwardPort = Int(p)

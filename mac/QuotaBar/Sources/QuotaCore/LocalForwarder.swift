@@ -170,6 +170,8 @@ public final class LocalForwarder: @unchecked Sendable {
       switch s {
       case .ready:
         guard started.first() else { return }
+        let line = String(decoding: first.prefix(while: { $0 != 13 }), as: UTF8.self)
+        self.log?("\(line) → \(self.host):\(self.targetPort)")
         up.send(content: first, completion: .contentProcessed { e in
           if e != nil { return self.close(c, up) }
           self.pipe(c, to: up, last: false)
@@ -178,6 +180,7 @@ public final class LocalForwarder: @unchecked Sendable {
       case .failed(let e), .waiting(let e):
         if started.first() {
           up.cancel()
+          self.log?("can't reach \(self.host):\(self.targetPort): \(e)")
           self.reply(c, 502, "QuotaBar 本地转发连不上 \(self.host):\(self.targetPort)（\(e)）")
         } else if case .failed = s {
           self.close(c, up)
@@ -186,6 +189,13 @@ public final class LocalForwarder: @unchecked Sendable {
       }
     }
     up.start(queue: queue)
+    // Nothing within the time limit (no answer, a name that never resolves): say so.
+    queue.asyncAfter(deadline: .now() + connectTimeout) { [weak self] in
+      guard let self, started.first() else { return }
+      up.cancel()
+      self.log?("no connection to \(self.host):\(self.targetPort) within \(Int(self.connectTimeout)) s")
+      self.reply(c, 502, "QuotaBar 本地转发在 \(Int(self.connectTimeout)) 秒内没连上 \(self.host):\(self.targetPort)")
+    }
   }
 
   /// Passes what `from` sends on to `to`. `last`: when `from` is done, so is the exchange.

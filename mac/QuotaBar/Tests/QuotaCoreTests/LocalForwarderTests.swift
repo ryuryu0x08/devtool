@@ -111,6 +111,18 @@ final class LocalForwarderTests: XCTestCase {
     XCTAssertTrue(String(decoding: data, as: UTF8.self).contains("连不上 127.0.0.1:9"))
   }
 
+  func testAnAPIThatNeverAnswersGets502InTime() async throws {
+    // 10.255.255.1 is not routed: the connection neither succeeds nor fails by itself.
+    let f = try LocalForwarder(target: URL(string: "http://10.255.255.1:9/api")!)
+    f.connectTimeout = 1
+    let p = try await f.start(preferred: 48010)
+    defer { f.stop() }
+    let started = Date()
+    let (_, resp) = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:\(p)/v1/models")!)
+    XCTAssertEqual((resp as? HTTPURLResponse)?.statusCode, 502)
+    XCTAssertLessThan(Date().timeIntervalSince(started), 5)
+  }
+
   func testRestartingKeepsThePort() async throws {
     let f = try LocalForwarder(target: URL(string: "http://127.0.0.1:9/api")!)
     let p = try await f.start(preferred: 47990)
