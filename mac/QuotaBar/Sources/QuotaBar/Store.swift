@@ -1012,12 +1012,21 @@ struct LogFile: Sendable {
   let url: URL
   private static let queue = DispatchQueue(label: "QuotaBar.Log")
 
+  /// "2026-11-04 20:15:03.123 +0800": this Mac's clock and time zone (not UTC).
+  static func stamp(_ d: Date) -> String {
+    let f = DateFormatter()
+    f.locale = Locale(identifier: "en_US_POSIX")
+    f.timeZone = .current
+    f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS Z"
+    return f.string(from: d)
+  }
+
   init(_ name: String) {
     url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/QuotaBar/" + name)
   }
 
   func write(_ line: String) {
-    let text = Date().formatted(.iso8601) + " " + line + "\n"
+    let text = Self.stamp(Date()) + " " + line + "\n"
     let url = self.url
     Self.queue.async {
       let fm = FileManager.default
