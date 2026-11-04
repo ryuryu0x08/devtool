@@ -102,3 +102,51 @@ public enum UsageAPI {
     CFGetTypeID(n) == CFBooleanGetTypeID()
   }
 }
+
+/// The usage portal's proxy-usage endpoint, reached with the browser's own cookies: it answers
+/// with the signed-in person's current token, which rotates. Same number fields as UsageAPI,
+/// plus "nickname" and "token".
+public struct ProxyUsage: Equatable, Sendable {
+  public var nickname: String?
+  public var token: String?
+  public var usage: Usage
+  public init(nickname: String?, token: String?, usage: Usage) {
+    self.nickname = nickname; self.token = token; self.usage = usage
+  }
+}
+
+public enum ProxyUsageAPI {
+  public static let defaultURL = "https://ai-coding.bilibili.co/ai-coding/user/proxy-usage"
+
+  public static func request(url: URL, cookie: String) -> URLRequest {
+    var r = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+    r.setValue(cookie, forHTTPHeaderField: "Cookie")
+    r.setValue("application/json", forHTTPHeaderField: "Accept")
+    r.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+    if let base = url.host.map({ (url.scheme ?? "https") + "://" + $0 }) {
+      r.setValue(base + "/coding", forHTTPHeaderField: "Referer")
+    }
+    return r
+  }
+
+  public static func parse(status: Int, body: Data) -> Result<ProxyUsage, Failure> {
+    guard let json = try? JSONSerialization.jsonObject(with: body, options: [.fragmentsAllowed]) else {
+      let text = String(decoding: body.prefix(120), as: UTF8.self)
+      return .failure(Failure(.server, "HTTP \(status): " + (text.isEmpty ? "(empty)" : text)))
+    }
+    let obj = json as? [String: Any]
+    let message = obj?["message"] as? String
+    let data = obj?["data"] as? [String: Any]
+    guard (200..<300).contains(status) else {
+      // The portal answers 200 with a redirect page when the cookie is stale; a 401/403 too.
+      let kind: Failure.Kind = status == 401 || status == 403 ? .keyRejected : .server
+      return .failure(Failure(kind, "HTTP \(status)" + (message.map { ": " + $0 } ?? "")))
+    }
+    guard UsageAPI.number(obj?["code"]) == 0, let data, UsageAPI.isTrue(data["success"]) else {
+      return .failure(Failure(.keyRejected, message?.isEmpty == false ? message! : "未登录或 cookie 失效"))
+    }
+    let nick = (data["nickname"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+    let token = (data["token"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+    return .success(ProxyUsage(nickname: nick, token: token, usage: UsageAPI.pick(data)))
+  }
+}

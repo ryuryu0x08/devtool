@@ -47,6 +47,12 @@ struct Config: Codable, Equatable {
   /// Desktop's configuration that was applied before the sign-in was chosen: applied again on
   /// the way back to the gateway.
   var desktopPrevious: String?
+  /// Read the rotating key from the browser's cookies (the portal's proxy-usage endpoint).
+  var cookieSync = false
+  /// Which browser to read the cookies from (a ChromeCookies.Browser name).
+  var cookieBrowser = ChromeCookies.chrome.name
+  /// The portal endpoint reached with the cookies.
+  var cookieURL = ProxyUsageAPI.defaultURL
 
   static var detectedClaudeDir: String {
     ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"].flatMap { $0.isEmpty ? nil : $0 } ?? "~/.claude"
@@ -60,7 +66,7 @@ struct Config: Codable, Equatable {
   init() {}
 
   private enum CodingKeys: String, CodingKey {
-    case url, interval, people, retired, settingsPath, claudeDir, desktopDir, baseURL, desktopRestart, forward, forwardPort, ours, desktopPrevious, keys
+    case url, interval, people, retired, settingsPath, claudeDir, desktopDir, baseURL, desktopRestart, forward, forwardPort, ours, desktopPrevious, cookieSync, cookieBrowser, cookieURL, keys
   }
   private struct OldKey: Decodable { var id: String; var key: String }
 
@@ -81,6 +87,10 @@ struct Config: Codable, Equatable {
     forwardPort = try c.decodeIfPresent(Int.self, forKey: .forwardPort) ?? Int(LocalForwarder.defaultPort)
     ours = try c.decodeIfPresent([String].self, forKey: .ours) ?? []
     desktopPrevious = try c.decodeIfPresent(String.self, forKey: .desktopPrevious)
+    cookieSync = try c.decodeIfPresent(Bool.self, forKey: .cookieSync) ?? false
+    cookieBrowser = try c.decodeIfPresent(String.self, forKey: .cookieBrowser) ?? ChromeCookies.chrome.name
+    let cu = try c.decodeIfPresent(String.self, forKey: .cookieURL) ?? ""
+    cookieURL = cu.isEmpty ? ProxyUsageAPI.defaultURL : cu
     let b = try c.decodeIfPresent(String.self, forKey: .baseURL) ?? ""
     baseURL = b.isEmpty ? Config.defaultBaseURL : b
     desktopRestart = (try? c.decodeIfPresent(DesktopRestart.self, forKey: .desktopRestart)) ?? .ask
@@ -104,6 +114,9 @@ struct Config: Codable, Equatable {
     try c.encode(forwardPort, forKey: .forwardPort)
     try c.encode(ours, forKey: .ours)
     try c.encodeIfPresent(desktopPrevious, forKey: .desktopPrevious)
+    try c.encode(cookieSync, forKey: .cookieSync)
+    try c.encode(cookieBrowser, forKey: .cookieBrowser)
+    try c.encode(cookieURL, forKey: .cookieURL)
     try c.encode(baseURL, forKey: .baseURL)
     try c.encode(desktopRestart, forKey: .desktopRestart)
   }
@@ -163,6 +176,11 @@ final class Store {
   @ObservationIgnored private var forwarder: LocalForwarder?
 
   @ObservationIgnored private var loop: Task<Void, Never>?
+  @ObservationIgnored private var cookieLoop: Task<Void, Never>?
+  /// A cookie sync is running (the button shows it).
+  private(set) var cookieSyncing = false
+  /// How often the cookie sync runs by itself, once on; the key rotates at no set time.
+  static let cookieInterval: TimeInterval = 10 * 60
   @ObservationIgnored private let session: URLSession = {
     let c = URLSessionConfiguration.ephemeral
     c.requestCachePolicy = .reloadIgnoringLocalCacheData
@@ -182,6 +200,7 @@ final class Store {
     readSettings()
     adoptClaudeKey()
     restart()
+    startCookieLoop()
     Task { await startForwarder() }
     NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
       Task { @MainActor in self?.restart() }
@@ -514,6 +533,85 @@ final class Store {
     notice = Notice(text: "「\(name)」换了新 key，已同步" + (desktopChanged ? "，Desktop 重启后生效" : ""),
                     restartDesktop: desktopChanged && desktopRunning && config.desktopRestart != .never)
     if desktopChanged && config.desktopRestart == .always && desktopRunning { restartDesktop() }
+  }
+
+  // MARK: - Cookie sync
+
+  /// The browser the cookies come from, by the saved name.
+  var cookieBrowser: ChromeCookies.Browser {
+    ChromeCookies.all.first { $0.name == config.cookieBrowser } ?? ChromeCookies.chrome
+  }
+
+  func setCookieSync(_ on: Bool) {
+    config.cookieSync = on
+    saveConfig()
+    startCookieLoop()
+    if on { Task { await syncFromCookies(interactive: true) } }
+  }
+
+  func setCookieBrowser(_ name: String) {
+    config.cookieBrowser = name
+    saveConfig()
+    if config.cookieSync { Task { await syncFromCookies(interactive: true) } }
+  }
+
+  /// Runs the cookie sync now and then every `cookieInterval`, while it is on.
+  private func startCookieLoop() {
+    cookieLoop?.cancel()
+    guard config.cookieSync else { return }
+    cookieLoop = Task { [weak self] in
+      // A moment after launch, so the first reading and the keychain prompt don't collide.
+      try? await Task.sleep(for: .seconds(3))
+      while !Task.isCancelled {
+        guard let self else { return }
+        await self.syncFromCookies(interactive: false)
+        try? await Task.sleep(for: .seconds(Self.cookieInterval))
+      }
+    }
+  }
+
+  /// Reads the browser's cookies, asks the portal for the current token, and upserts the person
+  /// by nickname. A rotated token that Claude Code or Desktop still uses is synced too (as a
+  /// pasted new key is). `interactive`: show why it failed; the periodic run stays quiet.
+  func syncFromCookies(interactive: Bool) async {
+    guard !cookieSyncing, let url = URL(string: config.cookieURL.trimmingCharacters(in: .whitespaces)) else { return }
+    cookieSyncing = true
+    defer { cookieSyncing = false }
+    let browser = cookieBrowser
+    let result: Result<ProxyUsage, Failure> = await Task.detached {
+      do {
+        let cookie = try ChromeCookies.header(domain: url.host ?? "ai-coding.bilibili.co", browser: browser)
+        let (data, resp) = try await URLSession(configuration: .ephemeral).data(for: ProxyUsageAPI.request(url: url, cookie: cookie))
+        return ProxyUsageAPI.parse(status: (resp as? HTTPURLResponse)?.statusCode ?? 0, body: data)
+      } catch let e as ChromeCookies.CookieError {
+        return .failure(Failure(.network, e.errorDescription ?? "读取 cookie 失败"))
+      } catch {
+        return .failure(Failure(.network, error.localizedDescription))
+      }
+    }.value
+
+    switch result {
+    case .failure(let f):
+      if interactive { notice = Notice(text: "Cookie 同步失败：" + f.detail, bad: true) }
+    case .success(let u):
+      guard let name = u.nickname, let token = u.token else {
+        if interactive { notice = Notice(text: "Cookie 同步：没拿到 token（可能未登录）", bad: true) }
+        return
+      }
+      let reading = GoodReading(at: Date(), usage: u.usage)
+      let before = config.people.first { $0.name == name }?.key
+      guard let b = withAnimation(.snappy, { People.upsert(name: name, key: token, reading: reading, in: &config.people) }) else { return }
+      if let old = b.replaced {
+        // replaced() syncs Claude Code / Desktop and sets its own, fuller notice.
+        replaced(old, by: token, for: b.id)
+      }
+      saveConfig()
+      writeHistory()
+      if b.replaced == nil && notice?.bad != true {
+        if before == token { if interactive { notice = Notice(text: "「\(name)」的 key 已是最新") } }
+        else { notice = Notice(text: "Cookie 同步：已添加「\(name)」") }
+      }
+    }
   }
 
   // MARK: - Claude Code

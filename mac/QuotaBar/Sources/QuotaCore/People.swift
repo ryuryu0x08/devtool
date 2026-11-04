@@ -61,6 +61,31 @@ public enum People {
     public var merged: String?
   }
 
+  /// Makes sure the person named `name` has key `key` (from the cookie sync, where the portal
+  /// gives both). A name new here is added; a known name whose key differs is rotated (the old
+  /// key reported as `replaced`, so the callers can follow it in Claude Code and Desktop). An
+  /// unnamed entry that already holds this key takes the name instead of a second entry appearing.
+  @discardableResult
+  public static func upsert(name: String, key: String, reading: GoodReading?, in people: inout [Person]) -> Bound? {
+    let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    let key = key.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !name.isEmpty, !key.isEmpty else { return nil }
+    if let i = people.firstIndex(where: { $0.name == name }) {
+      let old = people[i].key
+      people[i].key = key
+      if let reading { people[i].lastGood = reading }
+      return Bound(id: people[i].id, replaced: old.isEmpty || old == key ? nil : old, merged: nil)
+    }
+    if let i = people.firstIndex(where: { $0.key == key && $0.name == nil }) {
+      people[i].name = name
+      if let reading { people[i].lastGood = reading }
+      return Bound(id: people[i].id, replaced: nil, merged: nil)
+    }
+    let p = Person(name: name, key: key, lastGood: reading)
+    people.append(p)
+    return Bound(id: p.id, replaced: nil, merged: nil)
+  }
+
   /// The key of person `id` read successfully as `name`: the key is that name's, whoever had it.
   /// - The person was not yet named: they get the name, unless someone already has it; then that
   ///   person gets the key (in place of theirs) and this entry goes.

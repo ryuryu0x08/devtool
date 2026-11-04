@@ -52,6 +52,13 @@ struct SettingsView: View {
           footer("粘贴 key 自动识别是谁；同一人的新 key 替换旧的。")
         }
         Section {
+          CookieSyncRows()
+        } header: {
+          header("自动获取 key")
+        } footer: {
+          footer("从浏览器 cookie 调用门户的 proxy-usage，按昵称更新这个人的 key，省去 key 轮换后手动替换。首次读取钥匙串，macOS 会问一次，点「始终允许」。")
+        }
+        Section {
           DesktopRows()
           Picker(selection: Binding(get: { store.config.desktopRestart }, set: { store.setDesktopRestart($0) })) {
             ForEach(DesktopRestart.allCases, id: \.self) { Text($0.label).font(.ui(13)) }
@@ -240,6 +247,39 @@ private struct LoginItemRow: View {
       self.error = "未能更改：" + error.localizedDescription
     }
     on = SMAppService.mainApp.status == .enabled
+  }
+}
+
+/// Reading the rotating key from the browser's cookies: on/off, which browser, and a sync now.
+private struct CookieSyncRows: View {
+  @Environment(Store.self) private var store
+
+  var body: some View {
+    Toggle(isOn: Binding(get: { store.config.cookieSync }, set: { store.setCookieSync($0) })) {
+      Text("从浏览器 cookie 自动更新").font(.ui(13))
+    }
+    if store.config.cookieSync {
+      HStack {
+        Text("浏览器").font(.ui(13))
+        Spacer()
+        Picker("浏览器", selection: Binding(get: { store.config.cookieBrowser }, set: { store.setCookieBrowser($0) })) {
+          ForEach(ChromeCookies.all, id: \.name) { Text($0.name).font(.ui(13)).tag($0.name) }
+        }
+        .labelsHidden()
+        .fixedSize()
+      }
+      HStack {
+        if store.cookieSyncing {
+          ProgressView().controlSize(.small)
+          Text("正在读取…").font(.ui(11)).foregroundStyle(.secondary)
+        } else {
+          Text("每 10 分钟自动同步一次").font(.ui(11)).foregroundStyle(.secondary)
+        }
+        Spacer()
+        Button { Task { await store.syncFromCookies(interactive: true) } } label: { Text("立即同步").font(.ui(12)) }
+          .disabled(store.cookieSyncing)
+      }
+    }
   }
 }
 
