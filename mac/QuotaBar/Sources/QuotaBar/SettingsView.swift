@@ -1,5 +1,6 @@
 // Settings: the usage API, how often to refresh, the people (keys are added by pasting; names
 // come by themselves), and where Claude Code's settings are.
+import AppKit
 import QuotaCore
 import ServiceManagement
 import SwiftUI
@@ -180,8 +181,13 @@ private struct ForwardRow: View {
       Group {
         switch store.forwardState {
         case .on(let u):
-          Label { Text("已启用：Desktop 经 \(u) 访问，QuotaBar 需保持运行") } icon: { Icon(.checkFilled, size: 11) }
-            .foregroundStyle(.green)
+          HStack(spacing: 8) {
+            Label { Text("已启用：Desktop 经 \(u) 访问，QuotaBar 需保持运行") } icon: { Icon(.checkFilled, size: 11) }
+              .foregroundStyle(.green)
+            Button("日志") { NSWorkspace.shared.open(ForwardLog.url) }
+              .buttonStyle(.link)
+              .help(ForwardLog.url.path)
+          }
         case .failed(let why):
           Label { Text("启动失败：" + why) } icon: { Icon(.warning, size: 11) }
             .foregroundStyle(.orange)

@@ -253,7 +253,7 @@ final class Store {
     forwardState = .starting
     do {
       let f = try LocalForwarder(target: target)
-      f.log = { FileHandle.standardError.write(Data(("QuotaBar forwarder: " + $0 + "\n").utf8)) }
+      f.log = { ForwardLog.write($0) }
       let p = try await f.start(preferred: UInt16(clamping: config.forwardPort))
       forwarder = f
       config.forwardPort = Int(p)
@@ -588,6 +588,28 @@ final class Store {
       c.activates = false
       _ = try? await NSWorkspace.shared.openApplication(at: url, configuration: c)
       notice = Notice(text: "Desktop 已重启，新 key 生效")
+    }
+  }
+}
+
+/// The forwarder's log: ~/Library/Logs/QuotaBar/forwarder.log (request lines, the names of the
+/// headers left out, reply statuses; no header values, so no keys). Kept under 1 MB.
+enum ForwardLog {
+  static let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/QuotaBar/forwarder.log")
+  private static let queue = DispatchQueue(label: "QuotaBar.ForwardLog")
+
+  static func write(_ line: String) {
+    let text = Date().formatted(.iso8601) + " " + line + "\n"
+    FileHandle.standardError.write(Data(("QuotaBar forwarder: " + line + "\n").utf8))
+    queue.async {
+      let fm = FileManager.default
+      try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+      if let size = try? fm.attributesOfItem(atPath: url.path)[.size] as? Int, size > 1_000_000 { try? fm.removeItem(at: url) }
+      if !fm.fileExists(atPath: url.path) { fm.createFile(atPath: url.path, contents: nil) }
+      guard let h = try? FileHandle(forWritingTo: url) else { return }
+      defer { try? h.close() }
+      _ = try? h.seekToEnd()
+      try? h.write(contentsOf: Data(text.utf8))
     }
   }
 }

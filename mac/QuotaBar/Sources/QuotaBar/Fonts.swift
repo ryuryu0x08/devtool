@@ -147,15 +147,21 @@ struct Icon: View {
 @MainActor @Observable
 final class TextSize {
   static let shared = TextSize()
-  static let standard: CGFloat = 1.5
-  static let range: ClosedRange<CGFloat> = -1.5...6
+  static let standard: CGFloat = 0.5
+  static let range: ClosedRange<CGFloat> = -2.5...5
 
   var bump: CGFloat {
     didSet { UserDefaults.standard.set(Double(bump), forKey: "textSizeBump") }
   }
 
   private init() {
-    bump = (UserDefaults.standard.object(forKey: "textSizeBump") as? Double).map { CGFloat($0) } ?? TextSize.standard
+    let d = UserDefaults.standard
+    // Sizes saved before the standard became 1 smaller: 1 smaller too, once.
+    if !d.bool(forKey: "textSizeV2"), let old = d.object(forKey: "textSizeBump") as? Double {
+      d.set(old - 1, forKey: "textSizeBump")
+    }
+    d.set(true, forKey: "textSizeV2")
+    bump = (d.object(forKey: "textSizeBump") as? Double).map { CGFloat($0) } ?? TextSize.standard
   }
 
   /// "标准", "+1", "−0.5"…, relative to the standard size.

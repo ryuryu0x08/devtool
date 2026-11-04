@@ -56,6 +56,9 @@ launch() { build/QuotaBar.app/Contents/MacOS/QuotaBar >>"$TMP/app.log" 2>&1 & }
 launch
 check 47831
 echo "OK: forwarder on 47831, Desktop moved to it without asking, requests pass"
+# As Claude Desktop does: Node's fetch, connections kept and reused, a stream among them.
+node ../ci/desktop_like.mjs http://127.0.0.1:47831
+echo "OK: a Desktop-like client works through the forwarder"
 quit() { pkill -x QuotaBar; while pgrep -x QuotaBar >/dev/null; do sleep 0.2; done; }
 
 # Restarted right after requests passed (their connections linger in TIME_WAIT): the same port.

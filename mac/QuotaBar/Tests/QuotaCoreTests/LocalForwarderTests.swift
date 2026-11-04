@@ -13,6 +13,8 @@ private final class Upstream: @unchecked Sendable {
   var bodies: [String] = []
   /// Send the whole reply and the end at once, with no pause.
   var together = false
+  /// Like a gateway: keep the connection for more requests unless asked to close it.
+  var keepAlive = false
 
   func start() async throws {
     let params = NWParameters.tcp
@@ -41,6 +43,15 @@ private final class Upstream: @unchecked Sendable {
       guard buf.count - r.upperBound >= length else { return self.read(c, buf) }
       self.heads.append(head)
       self.bodies.append(String(decoding: buf[r.upperBound..<(r.upperBound + length)], as: UTF8.self))
+      if self.keepAlive {
+        let body = "{\"ok\":true}"
+        let close = head.lowercased().contains("\r\nconnection: close")
+        let reply = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: \(body.utf8.count)\r\nConnection: keep-alive\r\n\r\n" + body
+        c.send(content: Data(reply.utf8), completion: .contentProcessed { _ in
+          if close { c.cancel() } else { self.read(c, Data(buf[(r.upperBound + length)...])) }
+        })
+        return
+      }
       self.reply(c)
     }
   }
@@ -107,6 +118,73 @@ final class LocalForwarderTests: XCTestCase {
     }
   }
 
+  /// What a client that keeps connections open (Claude Desktop's) does: a second request right
+  /// after the first, on the same connection. It must not reach the API unrewritten.
+  func testASecondRequestOnTheSameConnectionIsNotPassedOnRaw() async throws {
+    let up = Upstream()
+    up.keepAlive = true
+    try await up.start()
+    let f = try LocalForwarder(target: URL(string: "http://127.0.0.1:\(up.port)/api")!)
+    let port = try await f.start(preferred: 48050)
+    defer { f.stop() }
+    let two = "POST /v1/messages HTTP/1.1\r\nHost: 127.0.0.1:\(port)\r\nConnection: keep-alive\r\nContent-Length: 2\r\n\r\n{}"
+      + "GET /v1/models HTTP/1.1\r\nHost: 127.0.0.1:\(port)\r\nConnection: keep-alive\r\n\r\n"
+    let reply = try await rawExchange(port: port, send: two)
+    XCTAssertTrue(reply.hasPrefix("HTTP/1.1 200 OK\r\n"), reply)
+    XCTAssertTrue(reply.contains("\r\nConnection: close\r\n"), reply)
+    XCTAssertEqual(reply.components(separatedBy: "HTTP/1.1 ").count - 1, 1, "one reply on this connection")
+    try await Task.sleep(for: .milliseconds(300))
+    XCTAssertEqual(up.heads.map { $0.components(separatedBy: "\r\n")[0] }, ["POST /api/v1/messages HTTP/1.1"])
+    XCTAssertEqual(up.bodies, ["{}"])
+  }
+
+  func testAChunkedBodyIsPassedOnWhole() async throws {
+    let up = Upstream()
+    up.together = true
+    try await up.start()
+    let f = try LocalForwarder(target: URL(string: "http://127.0.0.1:\(up.port)/api")!)
+    let port = try await f.start(preferred: 48070)
+    defer { f.stop() }
+    let req = "POST /v1/messages HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n4\r\n{\"a\"\r\n4;ext=1\r\n:1}\n\r\n0\r\n\r\n"
+    let reply = try await rawExchange(port: port, send: req)
+    XCTAssertTrue(reply.hasPrefix("HTTP/1.1 200 OK"), reply)
+    let head = up.heads[0].lowercased()
+    XCTAssertTrue(head.contains("transfer-encoding: chunked"))
+  }
+
+  func testWhereABodyEnds() {
+    XCTAssertEqual(LocalForwarder.framing("POST / HTTP/1.1\r\nContent-Length: 12"), .length(12))
+    XCTAssertEqual(LocalForwarder.framing("POST / HTTP/1.1\r\ntransfer-encoding: gzip, chunked\r\nContent-Length: 3"), .chunked)
+    XCTAssertEqual(LocalForwarder.framing("GET / HTTP/1.1\r\nHost: x"), LocalForwarder.Framing.none)
+    XCTAssertNil(LocalForwarder.framing("POST / HTTP/1.1\r\nContent-Length: -1"))
+    XCTAssertEqual(LocalForwarder.bodyEnd(.length(3), Data("abcdef".utf8)), 3)
+    XCTAssertNil(LocalForwarder.bodyEnd(.length(3), Data("ab".utf8)))
+    let chunked = Data("3\r\nabc\r\n0\r\nX-T: 1\r\n\r\nNEXT".utf8)
+    XCTAssertEqual(LocalForwarder.bodyEnd(.chunked, chunked), chunked.count - 4)
+    XCTAssertNil(LocalForwarder.bodyEnd(.chunked, Data("3\r\nab".utf8)))
+    XCTAssertNil(LocalForwarder.bodyEnd(.chunked, Data("3\r\nabc\r\n0\r\n".utf8)))
+    XCTAssertEqual(LocalForwarder.bodyEnd(.chunked, Data("zz\r\n".utf8)), -1)
+    XCTAssertEqual(LocalForwarder.rewriteReply("HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2"),
+                   "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n")
+  }
+
+  /// Sends `send` on one TCP connection and returns everything that comes back until it closes.
+  private func rawExchange(port: UInt16, send: String) async throws -> String {
+    let c = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!, using: .tcp)
+    let q = DispatchQueue(label: "raw")
+    return await withCheckedContinuation { (k: CheckedContinuation<String, Never>) in
+      var got = Data()
+      func read() {
+        c.receive(minimumIncompleteLength: 1, maximumLength: 65536) { d, _, done, e in
+          if let d { got.append(d) }
+          if done || e != nil { c.cancel(); k.resume(returning: String(decoding: got, as: UTF8.self)) } else { read() }
+        }
+      }
+      c.stateUpdateHandler = { if case .ready = $0 { c.send(content: Data(send.utf8), completion: .contentProcessed { _ in read() }) } }
+      c.start(queue: q)
+    }
+  }
+
   func testATakenPortMovesToTheNextAndAnUnreachableAPIAnswers502() async throws {
     let f1 = try LocalForwarder(target: URL(string: "http://127.0.0.1:9/api")!)
     let f2 = try LocalForwarder(target: URL(string: "http://127.0.0.1:9/api")!)
@@ -168,7 +246,10 @@ final class LocalForwarderTests: XCTestCase {
   func testTheHeadIsRewritten() throws {
     let f = try LocalForwarder(target: URL(string: "http://api.example/api")!)
     XCTAssertEqual(f.rewrite("GET /v1/models HTTP/1.1\r\nHost: 127.0.0.1:47831\r\nConnection: keep-alive\r\nX-Api-Key: k"),
-                   "GET /api/v1/models HTTP/1.1\r\nX-Api-Key: k\r\nHost: api.example\r\nConnection: close\r\n\r\n")
+                   "GET /api/v1/models HTTP/1.1\r\nHost: api.example\r\nUser-Agent: QuotaBar\r\nConnection: close\r\n\r\n")
+    // Only the headers the Python forwarder passes on, and the body's framing.
+    XCTAssertEqual(f.rewrite("POST /v1/messages HTTP/1.1\r\nAuthorization: Bearer k\r\nContent-Type: application/json\r\nanthropic-beta: x\r\nUser-Agent: Claude/1\r\nAccept-Encoding: br\r\nContent-Length: 2"),
+                   "POST /api/v1/messages HTTP/1.1\r\nAuthorization: Bearer k\r\nContent-Type: application/json\r\nContent-Length: 2\r\nHost: api.example\r\nUser-Agent: QuotaBar\r\nConnection: close\r\n\r\n")
     XCTAssertNil(f.rewrite("GET http://elsewhere/ HTTP/1.1"))
   }
 

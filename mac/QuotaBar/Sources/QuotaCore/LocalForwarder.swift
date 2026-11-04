@@ -1,8 +1,9 @@
 // A forwarder on 127.0.0.1 to a plain-http model API: Claude Desktop accepts http only for this
 // machine, so it is pointed here and the forwarder passes each request on. One request per
-// connection (Connection: close): the request's head is rewritten (the API's path in front of the
-// path asked for, the API's Host), then both directions are passed through as they come, so
-// streamed replies arrive as they are sent.
+// connection, read whole (head and body); its head is rewritten (the API's path in front of the
+// path asked for, the API's Host, Connection: close), and so is the reply's (Connection: close, so
+// that a client keeping connections open doesn't send its next request down this one). The reply's
+// body is passed on as it comes, so streamed replies arrive as they are sent.
 import Foundation
 import Network
 
@@ -125,7 +126,12 @@ public final class LocalForwarder: @unchecked Sendable {
     readHead(c, Data())
   }
 
-  /// Reads up to the end of the request's head ("\r\n\r\n"), then forwards.
+  /// The largest request body passed on (Desktop sends JSON, with images at most a few MB).
+  static let maxBody = 64 * 1024 * 1024
+
+  /// Reads one whole request (its head, then its body by Content-Length or chunked framing),
+  /// then forwards it. Only that one: the reply tells the client to close, so a client that
+  /// keeps connections open sends its next request on a new one, which is rewritten too.
   private func readHead(_ c: NWConnection, _ got: Data) {
     c.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, complete, error in
       guard let self else { return }
@@ -133,9 +139,8 @@ public final class LocalForwarder: @unchecked Sendable {
       if let data { buf.append(data) }
       if let r = buf.range(of: Data("\r\n\r\n".utf8)) {
         let head = String(decoding: buf[..<r.lowerBound], as: UTF8.self)
-        let rest = buf[r.upperBound...]
-        guard let req = self.rewrite(head) else { return self.reply(c, 400, "bad request") }
-        self.forward(c, Data(req.utf8) + rest)
+        guard let req = self.rewrite(head), let framing = Self.framing(head) else { return self.reply(c, 400, "bad request") }
+        self.readBody(c, head: Data(req.utf8), framing: framing, got: Data(buf[r.upperBound...]), ended: complete || error != nil)
       } else if complete || error != nil {
         c.cancel()
       } else if buf.count > 64 * 1024 {
@@ -146,25 +151,118 @@ public final class LocalForwarder: @unchecked Sendable {
     }
   }
 
-  /// The head as the API should get it: its path in front, its Host, and Connection: close.
+  private func readBody(_ c: NWConnection, head: Data, framing: Framing, got: Data, ended: Bool) {
+    switch Self.bodyEnd(framing, got) {
+    case .some(-1):
+      return reply(c, 400, "bad chunked body")
+    case .some(let end):
+      return forward(c, head + got.prefix(end))
+    case nil where ended:
+      return c.cancel()
+    case nil where got.count > Self.maxBody:
+      return reply(c, 413, "request too large")
+    case nil:
+      c.receive(minimumIncompleteLength: 1, maximumLength: 1 << 20) { [weak self] data, _, complete, error in
+        self?.readBody(c, head: head, framing: framing, got: got + (data ?? Data()), ended: complete || error != nil)
+      }
+    }
+  }
+
+  enum Framing: Equatable { case none, length(Int), chunked }
+
+  /// How the request's body is delimited; nil when the head says something unusable.
+  static func framing(_ head: String) -> Framing? {
+    var length: Int?, chunked = false
+    for l in head.components(separatedBy: "\r\n").dropFirst() {
+      let kv = l.split(separator: ":", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+      guard kv.count == 2 else { continue }
+      switch kv[0].lowercased() {
+      case "transfer-encoding": chunked = kv[1].lowercased().contains("chunked")
+      case "content-length":
+        guard let n = Int(kv[1]), n >= 0 else { return nil }
+        length = n
+      default: break
+      }
+    }
+    if chunked { return .chunked }
+    return length.map { $0 > 0 ? .length($0) : .none } ?? Framing.none
+  }
+
+  /// Where the body ends in `d` (the bytes after the head): nil while incomplete, -1 when the
+  /// chunked framing is broken.
+  static func bodyEnd(_ f: Framing, _ d: Data) -> Int? {
+    switch f {
+    case .none: return 0
+    case .length(let n): return d.count >= n ? n : nil
+    case .chunked:
+      let b = [UInt8](d)
+      var i = 0
+      func line() -> String? {
+        var j = i
+        while j + 1 < b.count { if b[j] == 13 && b[j + 1] == 10 { break }; j += 1 }
+        guard j + 1 < b.count else { return nil }
+        defer { i = j + 2 }
+        return String(decoding: b[i..<j], as: UTF8.self)
+      }
+      while true {
+        guard let sizeLine = line() else { return nil }
+        let hex = sizeLine.split(separator: ";", maxSplits: 1).first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+        guard let size = Int(hex, radix: 16), size >= 0 else { return -1 }
+        if size == 0 {
+          // Trailers, up to an empty line.
+          while true {
+            guard let t = line() else { return nil }
+            if t.isEmpty { return i }
+          }
+        }
+        guard i + size + 2 <= b.count else { return nil }
+        guard b[i + size] == 13, b[i + size + 1] == 10 else { return -1 }
+        i += size + 2
+      }
+    }
+  }
+
+  /// The request headers passed on, as the Python forwarder that works with these gateways does
+  /// (some turn down Desktop's other headers, with an empty 400), and the body's framing.
+  static let passed: Set<String> = ["authorization", "content-type", "accept", "content-length", "transfer-encoding"]
+
+  /// The head as the API should get it: its path in front, the headers above, its Host, and
+  /// Connection: close. The names of the headers left out go to the log (not their values).
   func rewrite(_ head: String) -> String? {
-    var lines = head.components(separatedBy: "\r\n")
+    let lines = head.components(separatedBy: "\r\n")
     guard !lines.isEmpty else { return nil }
     let parts = lines[0].split(separator: " ", omittingEmptySubsequences: true)
     guard parts.count == 3, parts[1].hasPrefix("/") else { return nil }
-    lines[0] = "\(parts[0]) \(prefix)\(parts[1]) \(parts[2])"
-    let drop: Set<String> = ["host", "connection", "proxy-connection", "keep-alive"]
-    var out = [lines[0]]
-    for l in lines.dropFirst() {
-      let name = l.split(separator: ":", maxSplits: 1).first.map { $0.trimmingCharacters(in: .whitespaces).lowercased() } ?? ""
-      if !drop.contains(name) && !l.isEmpty { out.append(l) }
+    var out = ["\(parts[0]) \(prefix)\(parts[1]) \(parts[2])"]
+    var left: [String] = []
+    for l in lines.dropFirst() where !l.isEmpty {
+      let name = l.split(separator: ":", maxSplits: 1).first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+      if Self.passed.contains(name.lowercased()) { out.append(l) } else { left.append(name) }
     }
     out.append("Host: " + (targetPort == 80 ? host : "\(host):\(targetPort)"))
+    out.append("User-Agent: QuotaBar")
     out.append("Connection: close")
+    if !left.isEmpty { log?("left out: " + left.joined(separator: ", ")) }
     return out.joined(separator: "\r\n") + "\r\n\r\n"
   }
 
-  private func forward(_ c: NWConnection, _ first: Data) {
+  /// The reply's head for the client: Connection: close, so it doesn't send another request on
+  /// this connection (which would reach the API without the path and Host rewritten).
+  static func rewriteReply(_ head: String) -> String {
+    let lines = head.components(separatedBy: "\r\n")
+    guard let status = lines.first else { return head + "\r\n\r\n" }
+    let out = [status] + without(["connection", "proxy-connection", "keep-alive"], lines.dropFirst()) + ["Connection: close"]
+    return out.joined(separator: "\r\n") + "\r\n\r\n"
+  }
+
+  private static func without(_ names: Set<String>, _ lines: ArraySlice<String>) -> [String] {
+    lines.filter { l in
+      let name = l.split(separator: ":", maxSplits: 1).first.map { $0.trimmingCharacters(in: .whitespaces).lowercased() } ?? ""
+      return !l.isEmpty && !names.contains(name)
+    }
+  }
+
+  private func forward(_ c: NWConnection, _ request: Data) {
     let up = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: targetPort)!, using: .tcp)
     // The state handler runs on `queue` only.
     let started = Once()
@@ -173,16 +271,15 @@ public final class LocalForwarder: @unchecked Sendable {
       switch s {
       case .ready:
         guard started.first() else { return }
-        let line = String(decoding: first.prefix(while: { $0 != 13 }), as: UTF8.self)
+        let line = String(decoding: request.prefix(while: { $0 != 13 }), as: UTF8.self)
         self.log?("\(line) → \(self.host):\(self.targetPort) (\(up.currentPath?.remoteEndpoint.map { "\($0)" } ?? "?"))")
-        up.send(content: first, completion: .contentProcessed { e in
+        up.send(content: request, completion: .contentProcessed { e in
           if e != nil { return self.close(c, up) }
-          self.pipe(c, to: up, last: false)
-          self.pipe(up, to: c, last: true)
+          self.replyHead(up, to: c, Data())
         })
       case .failed(let e), .waiting(let e):
-        // Once connected, the API closing (or failing) is seen by the pipes, which pass on
-        // all of the reply first; closing the client here would drop what is still to be sent.
+        // Once connected, the API closing (or failing) is seen while the reply is passed on,
+        // which sends all of it first; closing the client here would drop what is still to come.
         if started.first() {
           up.cancel()
           self.log?("can't reach \(self.host):\(self.targetPort): \(e)")
@@ -201,26 +298,50 @@ public final class LocalForwarder: @unchecked Sendable {
     }
   }
 
-  /// Passes what `from` sends on to `to`. `last`: when `from` is done, so is the exchange.
-  private func pipe(_ from: NWConnection, to: NWConnection, last: Bool) {
-    from.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, complete, error in
+  /// Reads the reply's head, passes it on rewritten, then the rest as it comes.
+  private func replyHead(_ up: NWConnection, to c: NWConnection, _ got: Data) {
+    up.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, complete, error in
       guard let self else { return }
-      let finish = complete || error != nil
-      if last || error != nil {
-        self.log?("\(last ? "reply" : "request") \(data?.count ?? 0) bytes" + (complete ? ", end" : "") + (error.map { ", \($0)" } ?? ""))
-      }
-      // The data first, the end on its own after it: an end sent along with the last data,
-      // with the connection closed right after, can lose that data.
-      self.send(data, to: to) { ok in
-        guard ok else { return self.close(from, to) }
-        if !finish { return self.pipe(from, to: to, last: last) }
-        to.send(content: nil, contentContext: .finalMessage, isComplete: true, completion: .contentProcessed { _ in
-          guard last else { return }
-          // The reply is out: let the client close first, then make sure both are closed.
-          self.queue.asyncAfter(deadline: .now() + 2) { self.close(from, to) }
-        })
+      var buf = got
+      if let data { buf.append(data) }
+      if let r = buf.range(of: Data("\r\n\r\n".utf8)) {
+        let head = Self.rewriteReply(String(decoding: buf[..<r.lowerBound], as: UTF8.self))
+        let status = String(head.prefix(while: { $0 != "\r" }))
+        let code = Int(status.split(separator: " ").dropFirst().first ?? "") ?? 0
+        self.log?(status + (code >= 400 ? " — " + String(decoding: buf[r.upperBound...].prefix(300), as: UTF8.self) : ""))
+        self.send(Data(head.utf8) + buf[r.upperBound...], to: c) { ok in
+          guard ok else { return self.close(up, c) }
+          if complete || error != nil { return self.finish(up, c) }
+          self.pipe(up, to: c)
+        }
+      } else if complete || error != nil || buf.count > 64 * 1024 {
+        // No reply head: pass on what came, and end.
+        self.send(buf, to: c) { _ in self.finish(up, c) }
+      } else {
+        self.replyHead(up, to: c, buf)
       }
     }
+  }
+
+  /// Passes the rest of the reply on as it comes, then ends the exchange.
+  private func pipe(_ up: NWConnection, to c: NWConnection) {
+    up.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, complete, error in
+      guard let self else { return }
+      if let error { self.log?("reply ended: \(error)") }
+      // The data first, the end on its own after it: an end sent along with the last data,
+      // with the connection closed right after, can lose that data.
+      self.send(data, to: c) { ok in
+        guard ok else { return self.close(up, c) }
+        if complete || error != nil { self.finish(up, c) } else { self.pipe(up, to: c) }
+      }
+    }
+  }
+
+  /// The reply is all passed on: end it, let the client close first, then close both.
+  private func finish(_ up: NWConnection, _ c: NWConnection) {
+    c.send(content: nil, contentContext: .finalMessage, isComplete: true, completion: .contentProcessed { [weak self] _ in
+      self?.queue.asyncAfter(deadline: .now() + 2) { self?.close(up, c) }
+    })
   }
 
   private func send(_ data: Data?, to: NWConnection, then: @escaping (Bool) -> Void) {
