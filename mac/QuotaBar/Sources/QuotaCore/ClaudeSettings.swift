@@ -14,11 +14,11 @@ public enum SettingsError: Error, Equatable, LocalizedError {
 
   public var errorDescription: String? {
     switch self {
-    case .notUTF8: return "settings.json 不是 UTF-8 文本，没有修改。"
-    case .notJSON(let why): return "settings.json 不是有效的 JSON，没有修改：\(why)"
-    case .rootNotObject: return "settings.json 的最外层不是 { … } 对象，没有修改。"
-    case .envNotObject: return "settings.json 里的 \"env\" 不是 { … } 对象，没有修改。"
-    case .verifyFailed: return "修改后的内容校验不通过（会改动其他配置），没有修改。"
+    case .notUTF8: return "settings.json 不是 UTF-8 文本, 未修改"
+    case .notJSON(let why): return "settings.json 不是有效 JSON, 未修改: \(why)"
+    case .rootNotObject: return "settings.json 最外层不是 {...} 对象, 未修改"
+    case .envNotObject: return "settings.json 的 \"env\" 不是 {...} 对象, 未修改"
+    case .verifyFailed: return "修改后校验不通过 (会改动其他配置), 未修改"
     }
   }
 }

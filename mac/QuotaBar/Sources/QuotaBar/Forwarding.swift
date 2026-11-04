@@ -79,7 +79,7 @@ final class Forwarding {
       .compactMap { NSRunningApplication(processIdentifier: $0) }
       .filter { $0.bundleIdentifier == Bundle.main.bundleIdentifier }
     guard !others.isEmpty else { return }
-    ForwardLog.write("端口 \(p) 被另一个 QuotaBar（\(others.map { String($0.processIdentifier) }.joined(separator: ", "))）占着，结束它")
+    ForwardLog.write("端口 \(p) 被另一个 QuotaBar (\(others.map { String($0.processIdentifier) }.joined(separator: ", "))) 占着, 结束它")
     others.forEach { $0.terminate() }
     for _ in 0..<30 where others.contains(where: { !$0.isTerminated }) { try? await Task.sleep(for: .milliseconds(100)) }
     others.filter { !$0.isTerminated }.forEach { $0.forceTerminate() }

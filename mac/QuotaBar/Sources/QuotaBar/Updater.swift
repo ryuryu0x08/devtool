@@ -77,7 +77,7 @@ final class Updater {
   func check(install: Bool = false) async {
     guard let source, let commit, state != .checking, state != .installing else { return }
     guard FileManager.default.fileExists(atPath: source.appendingPathComponent("build.sh").path) else {
-      state = .failed("源码目录不在了：\(source.path)")
+      state = .failed("源码目录不在了: \(source.path)")
       return
     }
     state = .checking
@@ -88,9 +88,9 @@ final class Updater {
       state = r.count > 0 ? .available(count: r.count, subject: r.subject) : .upToDate
       if r.count > 0 && install { await self.install() }
     } catch {
-      state = .failed("检查失败：" + error.localizedDescription)
+      state = .failed("检查失败: " + error.localizedDescription)
       let agent = await Task.detached { ShellEnv.values["SSH_AUTH_SOCK"] != nil }.value
-      LogFile("update.log").write("检查失败（\(source.path)，终端里的 ssh agent：\(agent ? "已读到" : "没读到")）：" + error.localizedDescription)
+      LogFile("update.log").write("检查失败 (\(source.path), 终端 ssh agent: \(agent ? "已读到" : "没读到")): " + error.localizedDescription)
     }
   }
 
@@ -104,13 +104,13 @@ final class Updater {
     do {
       try await Task.detached { try u.fastForward() }.value
     } catch {
-      state = .failed("更新失败：" + error.localizedDescription)
+      state = .failed("更新失败: " + error.localizedDescription)
       return
     }
     do {
       _ = try await Task.detached { try SourceUpdate.run(["bash", "build.sh"], in: source, timeout: 900, log: log) }.value
     } catch {
-      state = .failed("编译失败，详见日志")
+      state = .failed("编译失败, 详见日志")
       return
     }
     await reinstall(from: source.appendingPathComponent("build/QuotaBar.app"))
@@ -122,7 +122,7 @@ final class Updater {
     do {
       try await Task.detached { try AppSwap.replace(me, with: built) }.value
     } catch {
-      state = .failed("安装失败：" + error.localizedDescription)
+      state = .failed("安装失败: " + error.localizedDescription)
       return
     }
     let c = NSWorkspace.OpenConfiguration()
@@ -133,22 +133,22 @@ final class Updater {
     // one quits once the new one's process is there.
     NSWorkspace.shared.openApplication(at: me, configuration: c) { _, error in
       guard let error else { return }
-      Task { @MainActor in Updater.shared.state = .failed("新版本已装好，但没能打开：" + error.localizedDescription + "。手动重开即可") }
+      Task { @MainActor in Updater.shared.state = .failed("新版本已装好, 但没能打开: " + error.localizedDescription + ". 请手动重开") }
     }
     let mine = ProcessInfo.processInfo.processIdentifier
     let id = Bundle.main.bundleIdentifier ?? "local.quotabar"
     let log = LogFile("update.log")
-    log.write("已装好新版本，打开它（本进程 \(mine)）")
+    log.write("已装好新版本, 打开它 (本进程 \(mine))")
     for _ in 0..<200 {
       // Seen by the system as an app, or (sooner) as a process of that name.
       let listed = NSRunningApplication.runningApplications(withBundleIdentifier: id).contains { $0.processIdentifier != mine }
       let pids = (try? SourceUpdate.run(["pgrep", "-x", "QuotaBar"], in: me.deletingLastPathComponent(), timeout: 5)) ?? ""
       if listed || pids.split(separator: "\n").contains(where: { Int32($0) != nil && Int32($0) != mine }) {
-        log.write("新版本已打开，本进程退出")
+        log.write("新版本已打开, 本进程退出")
         // If quitting is held up (a sheet, a window that doesn't close), quit anyway: the new one
         // waits for this one, and two would be in the menu bar.
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-          LogFile("update.log").write("正常退出没完成，直接结束本进程")
+          LogFile("update.log").write("正常退出没完成, 直接结束本进程")
           Thread.sleep(forTimeInterval: 0.3)
           exit(0)
         }
@@ -159,6 +159,6 @@ final class Updater {
       try? await Task.sleep(for: .milliseconds(50))
     }
     log.write("10 秒内没看到新版本的进程")
-    state = .failed("新版本已装好，但没能打开，手动重开即可")
+    state = .failed("新版本已装好, 但没能打开, 请手动重开")
   }
 }

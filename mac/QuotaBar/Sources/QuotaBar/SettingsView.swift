@@ -52,9 +52,12 @@ struct SettingsView: View {
         Section {
           DesktopRows()
           ForwardRow(needed: LocalForwarder.needed(for: baseURL.isEmpty ? Config.defaultBaseURL : baseURL))
-          Picker(selection: Binding(get: { store.config.desktopRestart }, set: { store.setDesktopRestart($0) })) {
-            ForEach(DesktopRestart.allCases, id: \.self) { Text($0.label).font(.ui(13)) }
-          } label: { label("改动后重启 Desktop") }
+          HStack {
+            label("改动后重启 Desktop")
+            Spacer()
+            Segmented(selection: Binding(get: { store.config.desktopRestart }, set: { store.setDesktopRestart($0) }),
+                      options: DesktopRestart.allCases.map { ($0, $0.label) })
+          }
         } header: {
           header("Desktop")
         }
@@ -82,7 +85,7 @@ struct SettingsView: View {
         } header: {
           header("目录")
         } footer: {
-          footer("留空即自动识别。Claude Code 读其中的 settings.json，Desktop 读 configLibrary。")
+          footer("留空自动识别; Claude Code 读 settings.json, Desktop 读 configLibrary")
         }
       }
       .formStyle(.grouped)
@@ -182,17 +185,17 @@ private struct ForwardRow: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 5) {
       if needed {
-        row("本地转发", info: "Desktop 不支持非本机的 HTTP 接口，开启后经本地代理转发。",
+        row("本地转发", info: "Desktop 不支持非本机 HTTP 接口, 开启后经本地代理转发",
             isOn: Binding(get: { on }, set: { store.setForward($0) }),
             disabled: store.forwardState == .starting || store.config.swapKeys)
       }
-      row("免重启切换", info: "由本地转发换上选中的 key，切换时 Desktop 不用重启。", show: CommandLine.arguments.contains("--show-tip"),
+      row("免重启切换", info: "由本地转发换上选中的 key, 切换时 Desktop 不用重启", show: CommandLine.arguments.contains("--show-tip"),
           isOn: Binding(get: { store.config.swapKeys && on }, set: { store.setSwapKeys($0) }),
           disabled: store.forwardState == .starting || store.people.allSatisfy(\.key.isEmpty))
       switch store.forwardState {
       case .on where store.desktopOffForwarder != nil:
         HStack(spacing: 8) {
-          Label { Text("Desktop 没有经本地转发（用的是 \(store.desktopOffForwarder ?? "")）") } icon: { Icon(.warning, size: 11) }
+          Label { Text("Desktop 未经本地转发 (当前: \(store.desktopOffForwarder ?? ""))") } icon: { Icon(.warning, size: 11) }
             .foregroundStyle(.orange)
           Button("改为本地转发") { store.pointDesktopAtForwarder() }
             .buttonStyle(.link)
@@ -213,7 +216,7 @@ private struct ForwardRow: View {
         }
         .font(.ui(11))
       case .failed(let why):
-        Label { Text("启动失败：" + why + (store.forwardWanted ? "，会自动重试" : "")) } icon: { Icon(.warning, size: 11) }
+        Label { Text("启动失败: " + why + (store.forwardWanted ? ", 会自动重试" : "")) } icon: { Icon(.warning, size: 11) }
           .foregroundStyle(.orange)
           .font(.ui(11))
           .textSelection(.enabled)
@@ -262,7 +265,7 @@ private struct LoginItemRow: View {
       if v { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
       error = nil
     } catch {
-      self.error = "未能更改：" + error.localizedDescription
+      self.error = "未能更改: " + error.localizedDescription
     }
     on = SMAppService.mainApp.status == .enabled
   }
@@ -280,18 +283,15 @@ private struct CookieSyncRows: View {
       HStack {
         Text("浏览器").font(.ui(13))
         Spacer()
-        Picker("浏览器", selection: Binding(get: { store.config.cookieBrowser }, set: { store.setCookieBrowser($0) })) {
-          ForEach(ChromeCookies.all, id: \.name) { Text($0.name).font(.ui(13)).tag($0.name) }
-        }
-        .labelsHidden()
-        .fixedSize()
+        Segmented(selection: Binding(get: { store.config.cookieBrowser }, set: { store.setCookieBrowser($0) }),
+                  options: ChromeCookies.all.map { ($0.name, $0.name) })
       }
       HStack {
         if store.cookieSyncing {
           ProgressView().controlSize(.small)
-          Text("正在读取…").font(.ui(11)).foregroundStyle(.secondary)
+          Text("正在读取...").font(.ui(11)).foregroundStyle(.secondary)
         } else {
-          Text("每 10 分钟自动同步一次").font(.ui(11)).foregroundStyle(.secondary)
+          Text("每 10 分钟自动同步").font(.ui(11)).foregroundStyle(.secondary)
         }
         Spacer()
         Button { Task { await store.syncFromCookies(interactive: true) } } label: { Text("立即同步").font(.ui(12)) }
@@ -314,13 +314,8 @@ private struct DesktopRows: View {
         HStack {
           Text("启动方式").font(.ui(13))
           Spacer()
-          Picker("启动方式", selection: Binding(get: { gateway }, set: { if $0 != gateway { store.setDesktopMode(gateway: $0) } })) {
-            Text("第三方网关").tag(true)
-            Text("官方登录").tag(false)
-          }
-          .pickerStyle(.segmented)
-          .labelsHidden()
-          .fixedSize()
+          Segmented(selection: Binding(get: { gateway }, set: { if $0 != gateway { store.setDesktopMode(gateway: $0) } }),
+                    options: [(true, "第三方网关"), (false, "官方登录")])
         }
         if case .gateway(let url) = store.desktopMode, let url {
           Text(url).font(.mono(11)).foregroundStyle(.secondary).textSelection(.enabled).lineLimit(1).truncationMode(.middle)
@@ -346,7 +341,7 @@ private struct PendingRow: View {
       Circle().fill(.orange).frame(width: 7, height: 7)
       VStack(alignment: .leading, spacing: 2) {
         Text("有改动待 Desktop 重启后生效").font(.ui(12.5, .medium))
-        Text(pending.why.joined(separator: "；")).font(.ui(11)).foregroundStyle(.secondary).lineLimit(2)
+        Text(pending.why.joined(separator: "; ")).font(.ui(11)).foregroundStyle(.secondary).lineLimit(2)
       }
       Spacer(minLength: 8)
       if store.restartingDesktop {
@@ -387,13 +382,13 @@ private struct UpdateRows: View {
         case .idle:
           EmptyView()
         case .checking:
-          Text("检查中…").foregroundStyle(.secondary)
+          Text("检查中...").foregroundStyle(.secondary)
         case .upToDate:
           Text("已是最新").foregroundStyle(.secondary)
         case .available(let n, let subject):
-          Text("有 \(n) 处新改动" + (subject.map { "：" + $0 } ?? "")).foregroundStyle(.blue).lineLimit(2)
+          Text("有 \(n) 处新改动" + (subject.map { ": " + $0 } ?? "")).foregroundStyle(.blue).lineLimit(2)
         case .installing:
-          Text("正在编译安装，约 1 分钟，完成后自动重开").foregroundStyle(.secondary)
+          Text("正在编译安装, 约 1 分钟, 完成后自动重开").foregroundStyle(.secondary)
         case .failed(let why):
           HStack(spacing: 8) {
             Text(why).foregroundStyle(.orange)
@@ -402,7 +397,7 @@ private struct UpdateRows: View {
             }
           }
         case .unavailable:
-          Text("不是用 build.sh 从 git 目录编译的，不能自动更新").foregroundStyle(.secondary)
+          Text("非 build.sh 从 git 目录编译, 不能自动更新").foregroundStyle(.secondary)
         }
       }
       .font(.ui(11))

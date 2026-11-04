@@ -12,8 +12,8 @@ enum Dialogs {
   static func otherAPI(current: [String], wanted: String) -> OtherAPI {
     let r = ask(Ask(
       title: "接口和设置里的不同",
-      message: "切换 key 时要不要把接口也改成设置里的？",
-      lines: current + ["设置里：" + wanted.replacingOccurrences(of: "\n", with: "，")],
+      message: "切换 key 时, 接口也改成设置里的吗?",
+      lines: current + ["设置里: " + wanted.replacingOccurrences(of: "\n", with: ", ")],
       buttons: [.init("取消", .cancel), .init("只换 key"), .init("一并换接口", .main)]))
     switch r.button {
     case 2: return .replace
@@ -25,9 +25,9 @@ enum Dialogs {
   /// Desktop's configuration changed (`why`): relaunch it now? And remember the answer?
   static func restartDesktop(why: String) -> (now: Bool, remember: Bool) {
     let r = ask(Ask(
-      title: "重启 Claude Desktop？",
-      message: why + "。",
-      note: "Desktop 只在启动时读取配置，重启会中断正在进行的对话。",
+      title: "重启 Claude Desktop?",
+      message: why,
+      note: "Desktop 只在启动时读配置; 重启会中断进行中的对话",
       remember: "记住我的选择",
       buttons: [.init("稍后", .cancel), .init("重启", .main)]))
     return (r.button == 1, r.remember)

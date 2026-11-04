@@ -95,8 +95,8 @@ public enum ClaudeDesktop {
     case noDesktop
     public var errorDescription: String? {
       switch self {
-      case .managed: return "Desktop 由公司管理，不能改"
-      case .noDesktop: return "没找到 Desktop 的目录（没装或没打开过）"
+      case .managed: return "Desktop 由公司管理, 不能改"
+      case .noDesktop: return "没找到 Desktop 的目录 (没装或没打开过)"
       }
     }
   }

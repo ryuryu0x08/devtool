@@ -221,7 +221,7 @@ final class Store {
       config.forwardPort = Int(p)
       remember(LocalForwarder.url(port: p))
       saveConfig()
-      ForwardLog.write("转发已开：\(LocalForwarder.url(port: p)) → \(target.absoluteString)")
+      ForwardLog.write("转发已开: \(LocalForwarder.url(port: p)) → \(target.absoluteString)")
       withAnimation(.snappy) { forwardState = .on(LocalForwarder.url(port: p)) }
       // Its key again, now that it is on (Desktop's configured key is read with it running).
       forwarding.key = forwarderKey
@@ -231,7 +231,7 @@ final class Store {
       return
     } catch {
       guard gen == forwardGen else { return }
-      ForwardLog.write("转发没能启动：\(error.localizedDescription)")
+      ForwardLog.write("转发没能启动: \(error.localizedDescription)")
       withAnimation(.snappy) { forwardState = .failed(error.localizedDescription) }
       if !again {
         config.forward = false
@@ -252,7 +252,7 @@ final class Store {
 
   /// The forwarder stopped by itself (the system ended its listener): started again at once.
   private func forwarderStopped(_ why: String) {
-    ForwardLog.write("转发停了（\(why)），重新启动")
+    ForwardLog.write("转发停了 (\(why)), 重新启动")
     Task { await startForwarder(again: true) }
   }
 
@@ -310,7 +310,7 @@ final class Store {
       readDesktop()
       announceDesktop(why: c.why, live: c.live)
     } catch {
-      notice = Notice(text: "Desktop 未改：" + error.localizedDescription, bad: true)
+      notice = Notice(text: "Desktop 未改: " + error.localizedDescription, bad: true)
     }
   }
 
@@ -323,7 +323,7 @@ final class Store {
     let restart = changed && !live && desktopRunning
     var t = text ?? why
     if text == nil {
-      if live { t += "，已生效，无需重启" } else if restart { t += "，重启 Desktop 后生效" }
+      if live { t += ", 已生效, 无需重启" } else if restart { t += ", 重启 Desktop 后生效" }
     }
     let n = Notice(text: t)
     notice = n
@@ -379,7 +379,7 @@ final class Store {
     } else if notice?.id == id {
       notice?.restartDesktop = true
     } else {
-      notice = Notice(text: why + "，重启 Desktop 后生效", restartDesktop: true)
+      notice = Notice(text: why + ", 重启 Desktop 后生效", restartDesktop: true)
     }
   }
 
@@ -409,8 +409,8 @@ final class Store {
         try ClaudeDesktop.useGateway(key: p.key, baseURL: want, root: config.desktopRoot, previous: config.desktopPrevious)
         remember(want)
         if config.swapKeys { config.desktopPerson = p.id }
-        text = "Desktop 改用网关（\(p.label) 的 key）"
-        if LocalForwarder.needed(for: want) && !want.hasPrefix("http://127.0.0.1") { text += "，需开本地转发" }
+        text = "Desktop 改用网关 (\(p.label) 的 key)"
+        if LocalForwarder.needed(for: want) && !want.hasPrefix("http://127.0.0.1") { text += ", 需开本地转发" }
       } else {
         if let was = try ClaudeDesktop.useSignIn(root: config.desktopRoot) { config.desktopPrevious = was }
         text = "Desktop 改用官方登录"
@@ -420,7 +420,7 @@ final class Store {
       announceDesktop(why: text)
     } catch {
       readDesktop()
-      notice = Notice(text: "Desktop 未改：" + error.localizedDescription, bad: true)
+      notice = Notice(text: "Desktop 未改: " + error.localizedDescription, bad: true)
     }
   }
 
@@ -450,7 +450,7 @@ final class Store {
         let aside = Self.dir.appendingPathComponent("config.unreadable-\(Int(Date().timeIntervalSince1970)).json")
         try? FileManager.default.copyItem(at: configFile, to: aside)
         try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: aside.path)
-        notice = Notice(text: "设置文件读不出来，已另存为 \(aside.lastPathComponent)，现在用的是默认设置", bad: true)
+        notice = Notice(text: "设置文件读不出, 已另存为 \(aside.lastPathComponent), 现用默认设置", bad: true)
       }
     }
     if let d = try? Data(contentsOf: historyFile), let h = try? dec.decode([Sample].self, from: d) { history = History.thin(h) }
@@ -471,7 +471,7 @@ final class Store {
       try enc.encode(v).write(to: url, options: .atomic)
       try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     } catch {
-      notice = Notice(text: "无法保存 \(url.lastPathComponent)：\(error.localizedDescription)", bad: true)
+      notice = Notice(text: "无法保存 \(url.lastPathComponent): \(error.localizedDescription)", bad: true)
     }
   }
 
@@ -485,13 +485,13 @@ final class Store {
       return
     case .exists(let id):
       let label = people.first { $0.id == id }?.label ?? ""
-      notice = Notice(text: "已在列表：\(label)")
+      notice = Notice(text: "已在列表: \(label)")
       return
     case .added(let id):
       withAnimation(.snappy) { config.people = ps }
       saveConfig()
       guard let url = usageURL else {
-        notice = Notice(text: "已添加，填好用量接口后识别")
+        notice = Notice(text: "已添加, 填好用量接口后识别")
         return
       }
       adding = true
@@ -503,10 +503,10 @@ final class Store {
       saveConfig()
       writeHistory()
       if case .failed(let f, _) = r {
-        notice = Notice(text: "已添加，未识别：" + f.friendly, bad: true)
+        notice = Notice(text: "已添加, 未识别: " + f.friendly, bad: true)
       } else if let b, let p = people.first(where: { $0.id == b.id }), notice?.bad != true {
-        let claude = b.replaced != nil && activeToken == key ? "，Claude Code 已同步" : ""
-        notice = Notice(text: b.merged != nil ? "已更新「\(p.label)」的 key" + claude : "已添加「\(p.label)」")
+        let claude = b.replaced != nil && activeToken == key ? ", Claude Code 已同步" : ""
+        notice = Notice(text: b.merged != nil ? "已更新 \"\(p.label)\" 的 key" + claude : "已添加 \"\(p.label)\"")
       }
     }
   }
@@ -634,12 +634,12 @@ final class Store {
     var problems: [String] = []
     if code {
       do { _ = try ClaudeSettings.switchToken(new, path: config.settingsPath); readSettings() }
-      catch { problems.append("Claude Code：" + error.localizedDescription) }
+      catch { problems.append("Claude Code: " + error.localizedDescription) }
     }
     var desktopChanged = false
     if desktop {
       do { desktopChanged = try ClaudeDesktop.switchKey(new, dir: config.desktopLibrary) == .written }
-      catch { problems.append("Desktop：" + error.localizedDescription) }
+      catch { problems.append("Desktop: " + error.localizedDescription) }
       // Through the forwarder, which now sends the new key: nothing to restart.
       if desktopChanged && link.keyChangeIsLive {
         readDesktop()
@@ -647,11 +647,11 @@ final class Store {
       }
     }
     if !problems.isEmpty {
-      notice = Notice(text: "「\(name)」换了新 key，未能同步：" + problems.joined(separator: "；"), bad: true)
+      notice = Notice(text: "\"\(name)\" 换了新 key, 未能同步: " + problems.joined(separator: "; "), bad: true)
       return
     }
-    announceDesktop(why: "「\(name)」换了新 key，Desktop 改用新 key",
-                    text: "「\(name)」换了新 key，已同步" + (desktopChanged && desktopRunning ? "，Desktop 重启后生效" : ""),
+    announceDesktop(why: "\"\(name)\" 换了新 key, Desktop 改用新 key",
+                    text: "\"\(name)\" 换了新 key, 已同步" + (desktopChanged && desktopRunning ? ", Desktop 重启后生效" : ""),
                     changed: desktopChanged)
   }
 
@@ -702,10 +702,10 @@ final class Store {
 
     switch result {
     case .failure(let f):
-      if interactive { notice = Notice(text: "Cookie 同步失败：" + f.detail, bad: true) }
+      if interactive { notice = Notice(text: "Cookie 同步失败: " + f.detail, bad: true) }
     case .success(let u):
       guard let name = u.nickname, let token = u.token else {
-        if interactive { notice = Notice(text: "Cookie 同步：没拿到 token（可能未登录）", bad: true) }
+        if interactive { notice = Notice(text: "Cookie 同步: 没拿到 token (可能未登录)", bad: true) }
         return
       }
       let reading = GoodReading(at: Date(), usage: u.usage)
@@ -724,8 +724,8 @@ final class Store {
         Task { await self.refresh() }
       }
       if b.replaced == nil && notice?.bad != true {
-        if before == token { if interactive { notice = Notice(text: "「\(name)」的 key 已是最新") } }
-        else { notice = Notice(text: "Cookie 同步：已添加「\(name)」") }
+        if before == token { if interactive { notice = Notice(text: "\"\(name)\" 的 key 已是最新") } }
+        else { notice = Notice(text: "Cookie 同步: 已添加 \"\(name)\"") }
       }
     }
   }
@@ -753,22 +753,22 @@ final class Store {
     var onGateway = false
     if case .gateway(_, let u) = desk { onGateway = true; desktopURL = u }
     guard cliFile != nil || onGateway else {
-      notice = Notice(text: "没有可切换的：无 \(config.settingsPath)，Desktop 未用网关", bad: true)
+      notice = Notice(text: "无可切换: 没有 \(config.settingsPath), Desktop 未用网关", bad: true)
       return
     }
 
     // Another model API somewhere: change it too, or only the key?
     var others: [String] = []
     if let t = cliFile, !ClaudeSettings.sameURL(ClaudeSettings.currentEnv(ClaudeSettings.baseURLKey, in: t), base) {
-      others.append("Claude Code：" + (ClaudeSettings.currentEnv(ClaudeSettings.baseURLKey, in: t) ?? "未设置（官方接口）"))
+      others.append("Claude Code: " + (ClaudeSettings.currentEnv(ClaudeSettings.baseURLKey, in: t) ?? "未设置 (官方接口)"))
     }
     // Desktop is to use the forwarder while it runs; an address of ours is put right silently.
     let desktopWant = self.desktopWant
     let desktopChange = onGateway ? DesktopURL.change(current: desktopURL, want: desktopWant, ours: config.ours + [base]) : .same
-    if desktopChange == .ask { others.append("Desktop：" + (desktopURL ?? "未设置")) }
+    if desktopChange == .ask { others.append("Desktop: " + (desktopURL ?? "未设置")) }
     var setURL = false
     if !others.isEmpty {
-      let wanted = desktopWant == base ? base : base + "\nDesktop 经本地转发：" + desktopWant
+      let wanted = desktopWant == base ? base : base + "\nDesktop 经本地转发: " + desktopWant
       switch Dialogs.otherAPI(current: others, wanted: wanted) {
       case .replace: setURL = true
       case .keyOnly: setURL = false
@@ -784,7 +784,7 @@ final class Store {
         _ = try ClaudeSettings.switchToken(p.key, baseURL: wantURL, path: config.settingsPath)
         withAnimation(.snappy) { readSettings() }
         parts.append("Claude Code 已生效")
-      } catch { problems.append("Claude Code：" + error.localizedDescription) }
+      } catch { problems.append("Claude Code: " + error.localizedDescription) }
     }
     var desktopChanged = false
     switch desk {
@@ -792,7 +792,7 @@ final class Store {
       // The forwarder sends the key: changed there, at once.
       config.desktopPerson = p.id
       saveConfig()
-      parts.append("Desktop 已生效，无需重启")
+      parts.append("Desktop 已生效, 无需重启")
     case .gateway:
       do {
         let wantURL = desktopChange == .replace || desktopChange == .ask && setURL ? desktopWant : nil
@@ -801,21 +801,21 @@ final class Store {
         // Desktop goes through the forwarder, which now sends this key: nothing to restart.
         let live = desktopChanged && wantURL == nil && link.keyChangeIsLive
         if live { readDesktop() }
-        parts.append(live ? "Desktop 已生效，无需重启" : !desktopChanged ? "Desktop 已在用" : desktopRunning ? "Desktop 重启后生效" : "Desktop 下次打开生效")
+        parts.append(live ? "Desktop 已生效, 无需重启" : !desktopChanged ? "Desktop 已在用" : desktopRunning ? "Desktop 重启后生效" : "Desktop 下次打开生效")
         if live { desktopChanged = false }
-        if LocalForwarder.needed(for: wantURL ?? desktopURL ?? "") { parts.append("Desktop 需开本地转发（设置 → 接口）") }
-      } catch { problems.append("Desktop：" + error.localizedDescription) }
+        if LocalForwarder.needed(for: wantURL ?? desktopURL ?? "") { parts.append("Desktop 需开本地转发 (设置 → Desktop)") }
+      } catch { problems.append("Desktop: " + error.localizedDescription) }
     case .managed:
-      parts.append("Desktop 由公司管理，未改")
+      parts.append("Desktop 由公司管理, 未改")
     case .notGateway:
       break
     }
     if !problems.isEmpty {
-      notice = Notice(text: "切换到「\(p.label)」未完成：" + problems.joined(separator: "；"), bad: true)
+      notice = Notice(text: "切换到 \"\(p.label)\" 未完成: " + problems.joined(separator: "; "), bad: true)
       return
     }
     readDesktop()
-    announceDesktop(why: "Desktop 改用「\(p.label)」的 key", text: "已切换到「\(p.label)」：" + parts.joined(separator: "，"), changed: desktopChanged)
+    announceDesktop(why: "Desktop 改用 \"\(p.label)\" 的 key", text: "已切换到 \"\(p.label)\": " + parts.joined(separator: ", "), changed: desktopChanged)
   }
 
   // MARK: - Claude Desktop
@@ -830,18 +830,18 @@ final class Store {
     // Clicked again, or asked for twice: the one under way does it.
     guard !restartingDesktop else { return }
     restartingDesktop = true
-    notice = Notice(text: "正在重启 Desktop" + (why.map { "：" + $0 } ?? "…"))
+    notice = Notice(text: "正在重启 Desktop" + (why.map { ": " + $0 } ?? "..."))
     Task {
       defer { restartingDesktop = false }
       switch await DesktopApp.relaunch() {
       case .didNotQuit:
-        notice = Notice(text: "Desktop 未退出（可能在等确认），手动重开即可", bad: true)
+        notice = Notice(text: "Desktop 未退出 (可能在等确认), 请手动重开", bad: true)
       case .notFound:
-        notice = Notice(text: "Desktop 已退出，但没找到它的位置，手动打开即可", bad: true)
+        notice = Notice(text: "Desktop 已退出, 但找不到它, 请手动打开", bad: true)
       case .done:
         desktopAddressChangedAt = nil
         withAnimation(.snappy) { desktopPending = nil }
-        notice = Notice(text: "Desktop 已重启，改动已生效")
+        notice = Notice(text: "Desktop 已重启, 改动已生效")
       }
     }
   }

@@ -153,7 +153,7 @@ public final class LocalForwarder: @unchecked Sendable {
           if once.first() { k.resume(returning: l) }
         case .failed(let e) where started.isSet:
           l.cancel()
-          if !stopping.isSet { stopping.set(); self?.onStop?("监听出错：\(e.localizedDescription)") }
+          if !stopping.isSet { stopping.set(); self?.onStop?("监听出错: \(e.localizedDescription)") }
         case .cancelled where started.isSet:
           if !stopping.isSet { stopping.set(); self?.onStop?("监听被系统关闭") }
         case .failed, .cancelled, .waiting: if once.first() { l.cancel(); k.resume(returning: nil) }
@@ -361,7 +361,7 @@ public final class LocalForwarder: @unchecked Sendable {
         if started.first() {
           up.cancel()
           self.log?("can't reach \(self.host):\(self.targetPort): \(e)")
-          self.reply(c, 502, "QuotaBar 本地转发连不上 \(self.host):\(self.targetPort)（\(e)）")
+          self.reply(c, 502, "QuotaBar 本地转发连不上 \(self.host):\(self.targetPort) (\(e))")
         }
       default: break
       }

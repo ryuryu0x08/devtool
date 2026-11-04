@@ -93,24 +93,24 @@ public struct DesktopLink: Equatable, Sendable {
     var why: [String] = []
     if move {
       if forwarder != nil {
-        if let taken { why.append("端口 \(taken) 被其他程序占用，本地转发改用 \(Self.short(want))") }
+        if let taken { why.append("端口 \(taken) 被其他程序占用, 本地转发改用 \(Self.short(want))") }
         else if Self.isLocal(current) { why.append("本地转发的地址改为 \(Self.short(want))") }
-        else { why.append("Desktop 改为经本地转发（\(Self.short(want))）访问模型接口") }
+        else { why.append("Desktop 改经本地转发 (\(Self.short(want))) 访问模型接口") }
       } else {
-        why.append((failed ? "本地转发没能启动" : "本地转发已关闭") + "，Desktop 改回直连模型接口（\(want)）")
+        why.append((failed ? "本地转发没能启动" : "本地转发已关闭") + ", Desktop 改回直连模型接口 (\(want))")
       }
     }
     if newKey != nil {
-      why.append("免重启切换已关闭，Desktop 改用配置里" + (owner.map { "「\($0)」的" } ?? "的") + " key")
+      why.append("免重启切换已关闭, Desktop 改用配置里" + (owner.map { " \"\($0)\" 的" } ?? "的") + " key")
     }
-    return Change(url: move ? want : nil, key: newKey, why: why.joined(separator: "；"), live: !move && throughForwarder)
+    return Change(url: move ? want : nil, key: newKey, why: why.joined(separator: "; "), live: !move && throughForwarder)
   }
 
   /// Desktop onto the running forwarder (asked for in the settings); nil: it is there already,
   /// or there is no forwarder or gateway.
   public func toForwarder() -> Change? {
     guard let forwarder, case .gateway(_, let cur) = desktop, !ClaudeSettings.sameURL(cur, forwarder) else { return nil }
-    return Change(url: forwarder, key: nil, why: "Desktop 改为经本地转发（\(Self.short(forwarder))）访问模型接口", live: false)
+    return Change(url: forwarder, key: nil, why: "Desktop 改经本地转发 (\(Self.short(forwarder))) 访问模型接口", live: false)
   }
 
   /// A new key written to Desktop's configuration (and no new address) reaches it at once.

@@ -45,7 +45,7 @@ public struct SourceUpdate: Sendable {
       do {
         try git(["-c", "credential.interactive=never", "fetch", "--quiet", "--no-tags", https, spec], timeout: 90)
       } catch let second {
-        throw Failed(message: error.localizedDescription + "；改用 \(https) 也失败：" + second.localizedDescription)
+        throw Failed(message: error.localizedDescription + "; 改用 \(https) 也失败: " + second.localizedDescription)
       }
     }
   }
@@ -125,7 +125,7 @@ public struct SourceUpdate: Sendable {
     if let log, file != nil { text = (try? String(contentsOf: log, encoding: .utf8)) ?? "" }
     guard p.terminationStatus == 0 else {
       let why = text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.prefix(3).joined(separator: " ")
-      throw Failed(message: why.isEmpty ? "\(cmd.joined(separator: " ")) 失败（\(p.terminationStatus)）" : why)
+      throw Failed(message: why.isEmpty ? "\(cmd.joined(separator: " ")) 失败 (\(p.terminationStatus))" : why)
     }
     return text
   }
@@ -177,7 +177,7 @@ public enum AppSwap {
   public static func replace(_ app: URL, with built: URL) throws {
     let fm = FileManager.default
     guard fm.fileExists(atPath: built.appendingPathComponent("Contents/MacOS").path) else {
-      throw SourceUpdate.Failed(message: "没有编译出的 app：\(built.path)")
+      throw SourceUpdate.Failed(message: "没有编译出的 app: \(built.path)")
     }
     let temp = app.deletingLastPathComponent().appendingPathComponent(".\(app.deletingPathExtension().lastPathComponent)-new-\(UUID().uuidString).app")
     try fm.copyItem(at: built, to: temp)

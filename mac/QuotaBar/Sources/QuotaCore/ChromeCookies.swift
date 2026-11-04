@@ -41,10 +41,10 @@ public enum ChromeCookies {
     case database(String)
     public var errorDescription: String? {
       switch self {
-      case .notInstalled(let n): return "没找到 \(n)（没装或没打开过）"
-      case .noKeychainKey(let n): return "读不到 \(n) 的钥匙串密钥（可能被拒绝）"
-      case .noCookies(let d): return "\(d) 在该浏览器里没有 cookie（先在浏览器里登录）"
-      case .database(let why): return "读 cookie 库失败：" + why
+      case .notInstalled(let n): return "没找到 \(n) (没装或没打开过)"
+      case .noKeychainKey(let n): return "读不到 \(n) 的钥匙串密钥 (可能被拒绝)"
+      case .noCookies(let d): return "\(d) 在该浏览器里没有 cookie (先在浏览器登录)"
+      case .database(let why): return "读 cookie 库失败: " + why
       }
     }
   }

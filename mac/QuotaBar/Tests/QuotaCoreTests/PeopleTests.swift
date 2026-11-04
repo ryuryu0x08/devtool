@@ -10,7 +10,7 @@ final class PeopleTests: XCTestCase {
     var ps: [Person] = []
     guard case .added(let id) = People.add("  sk-abcdefghijk\n", to: &ps) else { return XCTFail() }
     XCTAssertEqual(ps.map(\.key), ["sk-abcdefghijk"])
-    XCTAssertEqual(ps[0].label, "sk-abcdefg…")
+    XCTAssertEqual(ps[0].label, "sk-abcdefg...")
     XCTAssertEqual(People.add("sk-abcdefghijk", to: &ps), .exists(id: id))
     XCTAssertEqual(People.add(" ", to: &ps), .empty)
     People.bind(id: id, name: "yy", reading: r1, in: &ps)

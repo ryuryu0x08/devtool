@@ -23,10 +23,10 @@ struct QuotaBarApp: App {
     AppSwap.wait(for: pid)
     guard kill(pid, 0) == 0 else { return }
     guard let old = NSRunningApplication(processIdentifier: pid), old.bundleIdentifier == Bundle.main.bundleIdentifier else {
-      LogFile("update.log").write("旧版本（\(pid)）没退出，但已不是 QuotaBar，不处理")
+      LogFile("update.log").write("旧版本 (\(pid)) 没退出, 但已不是 QuotaBar, 不处理")
       return
     }
-    LogFile("update.log").write("旧版本（\(pid)）15 秒没退出，结束它")
+    LogFile("update.log").write("旧版本 (\(pid)) 15 秒没退出, 结束它")
     old.terminate()
     AppSwap.wait(for: pid, limit: 3)
     if kill(pid, 0) == 0 { old.forceTerminate(); AppSwap.wait(for: pid, limit: 3) }

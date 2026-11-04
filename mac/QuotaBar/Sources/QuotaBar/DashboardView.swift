@@ -15,7 +15,7 @@ struct DashboardView: View {
           ContentUnavailableView {
             Label { Text(store.hasURL ? "还没有 key" : "先填写用量接口地址").font(.serif(20, .semibold)) } icon: { Icon(.key, size: 30) }
           } description: {
-            Text("在设置里粘贴 key，自动识别是谁").font(.ui(13))
+            Text("在设置里粘贴 key, 自动识别是谁").font(.ui(13))
           } actions: {
             Button { showSettings = true } label: { Text("打开设置").font(.ui(13, .medium)) }.buttonStyle(.borderedProminent)
           }
@@ -99,7 +99,7 @@ struct PoolCard: View {
           .animation(.snappy, value: p)
       }
       FillBar(fraction: p / 100, color: color)
-      Text(p >= 100 ? "已满：超额暂时用不了" : "剩 \(Fmt.num((q.poolLimit ?? 0) - (q.pool ?? 0))) · 超额从这里扣")
+      Text(p >= 100 ? "已满: 超额暂不可用" : "剩 \(Fmt.num((q.poolLimit ?? 0) - (q.pool ?? 0))) · 超额从这里扣")
         .font(.ui(11.5)).foregroundStyle(.secondary)
     }
     .card()
@@ -151,7 +151,7 @@ struct PersonCard: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .card(highlight: store.active?.id == p.id)
     .contextMenu {
-      Button("删除「\(p.label)」", role: .destructive) { withAnimation(.snappy) { store.remove(p) } }
+      Button("删除 \"\(p.label)\"", role: .destructive) { withAnimation(.snappy) { store.remove(p) } }
     }
   }
 
@@ -159,11 +159,11 @@ struct PersonCard: View {
   private func trouble(_ s: Shown) -> some View {
     switch s {
     case .waiting:
-      Text(store.adding ? "正在识别…" : "等待第一次刷新…").font(.ui(12)).foregroundStyle(.secondary)
+      Text(store.adding ? "正在识别..." : "等待首次刷新...").font(.ui(12)).foregroundStyle(.secondary)
     case .failing(let f, let last):
-      Trouble(text: p.name == nil && last == nil ? "未识别：" + f.friendly : f.friendly, detail: f.detail, age: last?.at)
+      Trouble(text: p.name == nil && last == nil ? "未识别: " + f.friendly : f.friendly, detail: f.detail, age: last?.at)
     case .noKey(let last):
-      Trouble(text: "key 已归他人，粘贴「\(p.label)」的新 key", age: last?.at)
+      Trouble(text: "key 已归他人, 粘贴 \"\(p.label)\" 的新 key", age: last?.at)
     case .ok:
       EmptyView()
     }
@@ -220,22 +220,14 @@ struct TrendsCard: View {
       HStack {
         Text("趋势").font(.serif(17, .semibold))
         Spacer()
-        Picker("", selection: $range) {
-          Text("1 小时").tag(3600)
-          Text("6 小时").tag(6 * 3600)
-          Text("24 小时").tag(86400)
-          Text("7 天").tag(7 * 86400)
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .fixedSize()
+        Segmented(selection: $range, options: [(3600, "1 小时"), (6 * 3600, "6 小时"), (86400, "24 小时"), (7 * 86400, "7 天")])
       }
       if usage.points.isEmpty {
-        Text("暂无数据：运行时每 5 分钟记一点，存 7 天")
+        Text("暂无数据: 运行时每 5 分钟记一次, 保留 7 天")
           .font(.ui(12.5)).foregroundStyle(.secondary)
           .frame(maxWidth: .infinity, minHeight: 120)
       } else {
-        chart("今日用量（含超额部分）", usage, from: from, to: now)
+        chart("今日用量 (含超额)", usage, from: from, to: now)
         if !pool.points.isEmpty { chart("共用额度池", pool, from: from, to: now, color: .orange) }
       }
     }

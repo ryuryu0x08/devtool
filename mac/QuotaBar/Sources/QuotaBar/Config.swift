@@ -150,9 +150,9 @@ extension Failure {
   /// What it means, in a few words; `detail` has the rest.
   var friendly: String {
     switch kind {
-    case .keyRejected: return "key 失效（可能已轮换），粘贴新 key 即可"
-    case .server: return "接口出错，稍后重试"
-    case .network: return "连不上接口，稍后重试"
+    case .keyRejected: return "key 失效 (可能已轮换), 粘贴新 key"
+    case .server: return "接口出错, 稍后重试"
+    case .network: return "连不上接口, 稍后重试"
     }
   }
 }

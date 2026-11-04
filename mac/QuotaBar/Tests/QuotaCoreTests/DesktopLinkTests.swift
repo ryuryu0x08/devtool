@@ -15,13 +15,13 @@ final class DesktopLinkTests: XCTestCase {
 
   func testTurnedOnDesktopOnTheAPIGoesThroughTheForwarder() {
     let c = link(desktop: .gateway(key: "sk-a", baseURL: api), forwarder: f1).afterForwarder()
-    XCTAssertEqual(c, .init(url: f1, key: nil, why: "Desktop 改为经本地转发（127.0.0.1:47831）访问模型接口", live: false))
+    XCTAssertEqual(c, .init(url: f1, key: nil, why: "Desktop 改经本地转发 (127.0.0.1:47831) 访问模型接口", live: false))
   }
 
   func testPortTakenByAnotherProgramSaysSo() {
     let c = link(desktop: .gateway(key: "sk-a", baseURL: f1), forwarder: f2).afterForwarder(taken: 47831)
     XCTAssertEqual(c?.url, f2)
-    XCTAssertEqual(c?.why, "端口 47831 被其他程序占用，本地转发改用 127.0.0.1:47832")
+    XCTAssertEqual(c?.why, "端口 47831 被其他程序占用, 本地转发改用 127.0.0.1:47832")
     XCTAssertEqual(c?.live, false)
   }
 
@@ -32,13 +32,13 @@ final class DesktopLinkTests: XCTestCase {
 
   func testTurnedOffDesktopGoesBackToTheAPI() {
     let c = link(desktop: .gateway(key: "sk-a", baseURL: f1), forwarder: nil).afterForwarder()
-    XCTAssertEqual(c, .init(url: api, key: nil, why: "本地转发已关闭，Desktop 改回直连模型接口（\(api)）", live: false))
+    XCTAssertEqual(c, .init(url: api, key: nil, why: "本地转发已关闭, Desktop 改回直连模型接口 (\(api))", live: false))
   }
 
   func testCouldNotStartDesktopGoesBackToTheAPI() {
     let c = link(desktop: .gateway(key: "sk-a", baseURL: f1), forwarder: nil).afterForwarder(failed: true)
     XCTAssertEqual(c?.url, api)
-    XCTAssertEqual(c?.why, "本地转发没能启动，Desktop 改回直连模型接口（\(api)）")
+    XCTAssertEqual(c?.why, "本地转发没能启动, Desktop 改回直连模型接口 (\(api))")
   }
 
   func testAnAddressSetElsewhereIsLeftAlone() {
@@ -64,21 +64,21 @@ final class DesktopLinkTests: XCTestCase {
     // http model API: the forwarder stays, Desktop stays on it; the key goes in its configuration
     // and the forwarder sends that one from now on.
     let c = link(desktop: .gateway(key: "sk-a", baseURL: f1), forwarder: f1).afterForwarder(key: "sk-b", owner: "B")
-    XCTAssertEqual(c, .init(url: nil, key: "sk-b", why: "免重启切换已关闭，Desktop 改用配置里「B」的 key", live: true))
+    XCTAssertEqual(c, .init(url: nil, key: "sk-b", why: "免重启切换已关闭, Desktop 改用配置里 \"B\" 的 key", live: true))
   }
 
   func testSwappingOffWithAnHttpsAPIMovesDesktopBackAndNeedsARestart() {
     let c = link(desktop: .gateway(key: "sk-a", baseURL: f1), forwarder: nil).afterForwarder(key: "sk-b", owner: "B")
     XCTAssertEqual(c?.url, api)
     XCTAssertEqual(c?.key, "sk-b")
-    XCTAssertEqual(c?.why, "本地转发已关闭，Desktop 改回直连模型接口（\(api)）；免重启切换已关闭，Desktop 改用配置里「B」的 key")
+    XCTAssertEqual(c?.why, "本地转发已关闭, Desktop 改回直连模型接口 (\(api)); 免重启切换已关闭, Desktop 改用配置里 \"B\" 的 key")
     XCTAssertEqual(c?.live, false)
   }
 
   func testDesktopOpenedBeforeTheAddressChangeDoesNotGetItAtOnce() {
     let c = link(desktop: .gateway(key: "sk-a", baseURL: f1), forwarder: f1, old: true).afterForwarder(key: "sk-b")
     XCTAssertEqual(c?.live, false)
-    XCTAssertEqual(c?.why, "免重启切换已关闭，Desktop 改用配置里的 key")
+    XCTAssertEqual(c?.why, "免重启切换已关闭, Desktop 改用配置里的 key")
   }
 
   // MARK: - The forwarder's key
@@ -119,7 +119,7 @@ final class DesktopLinkTests: XCTestCase {
     XCTAssertNil(DesktopLink.offForwarder(forwarder: f1, desktop: .signIn))
 
     let c = link(desktop: .gateway(key: "sk-a", baseURL: "https://other.example.com"), forwarder: f1).toForwarder()
-    XCTAssertEqual(c, .init(url: f1, key: nil, why: "Desktop 改为经本地转发（127.0.0.1:47831）访问模型接口", live: false))
+    XCTAssertEqual(c, .init(url: f1, key: nil, why: "Desktop 改经本地转发 (127.0.0.1:47831) 访问模型接口", live: false))
     XCTAssertNil(link(desktop: .gateway(key: "sk-a", baseURL: f1), forwarder: f1).toForwarder())
     XCTAssertNil(link(desktop: .gateway(key: "sk-a", baseURL: api), forwarder: nil).toForwarder())
   }

@@ -32,7 +32,7 @@ public enum People {
   public static let shown = 10
 
   public static func shortKey(_ key: String) -> String {
-    key.count <= shown ? key : String(key.prefix(shown)) + "…"
+    key.count <= shown ? key : String(key.prefix(shown)) + "..."
   }
 
   public enum Added: Equatable, Sendable {

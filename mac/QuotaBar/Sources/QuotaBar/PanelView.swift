@@ -23,7 +23,7 @@ struct PanelView: View {
         .frame(maxHeight: 460)
         .fixedSize(horizontal: false, vertical: true)
         if store.hasKeyHelper {
-          Trouble(text: "settings.json 有 apiKeyHelper，可能优先于 key")
+          Trouble(text: "settings.json 有 apiKeyHelper, 可能优先于 key")
         }
       }
       Divider().padding(.top, 2)
@@ -51,7 +51,7 @@ struct PanelView: View {
   private var empty: some View {
     VStack(spacing: 10) {
       Icon(.key, size: 28).foregroundStyle(.secondary)
-      Text("在设置里粘贴 key 即可").font(.ui(12.5)).foregroundStyle(.secondary)
+      Text("在设置里粘贴 key").font(.ui(12.5)).foregroundStyle(.secondary)
       Button { Windows.showDashboard(store, settings: true) } label: { Text("打开设置").font(.ui(12.5, .medium)) }
         .buttonStyle(.borderedProminent)
     }
@@ -155,7 +155,7 @@ struct PersonRow: View {
     }
     .card(padding: 10, highlight: store.active?.id == p.id)
     .contextMenu {
-      Button("删除「\(p.label)」", role: .destructive) { withAnimation(.snappy) { store.remove(p) } }
+      Button("删除 \"\(p.label)\"", role: .destructive) { withAnimation(.snappy) { store.remove(p) } }
     }
   }
 
@@ -163,11 +163,11 @@ struct PersonRow: View {
   private func trouble(_ s: Shown) -> some View {
     switch s {
     case .waiting:
-      Text(store.adding ? "正在识别…" : "等待第一次刷新…").font(.ui(11)).foregroundStyle(.secondary)
+      Text(store.adding ? "正在识别..." : "等待首次刷新...").font(.ui(11)).foregroundStyle(.secondary)
     case .failing(let f, let last):
-      Trouble(text: p.name == nil && last == nil ? "未识别：" + f.friendly : f.friendly, detail: f.detail, age: last?.at)
+      Trouble(text: p.name == nil && last == nil ? "未识别: " + f.friendly : f.friendly, detail: f.detail, age: last?.at)
     case .noKey(let last):
-      Trouble(text: "key 已归他人，粘贴「\(p.label)」的新 key", age: last?.at)
+      Trouble(text: "key 已归他人, 粘贴 \"\(p.label)\" 的新 key", age: last?.at)
     case .ok:
       EmptyView()
     }

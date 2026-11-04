@@ -1,4 +1,5 @@
 // Pieces shared by the menu bar panel and the dashboard.
+import AppKit
 import QuotaCore
 import SwiftUI
 
@@ -139,7 +140,7 @@ struct UseButton: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
-        .help("Claude Code 和 Claude Desktop（第三方推理）都改用这个人的 key")
+        .help("Claude Code 和 Desktop 都改用这个人的 key")
         .transition(.opacity.combined(with: .scale(scale: 0.9)))
       }
     }
@@ -163,7 +164,7 @@ struct AddKeyField: View {
         }
       }
       .frame(width: 16)
-      TextField("", text: $text, prompt: Text("粘贴 key，回车添加").font(.ui(12.5)))
+      TextField("", text: $text, prompt: Text("粘贴 key, 回车添加").font(.ui(12.5)))
         .textFieldStyle(.plain)
         .font(.mono(12.5))
         .focused($focused)
@@ -346,5 +347,44 @@ struct InfoTip: View {
         try? await Task.sleep(for: .seconds(1))
         shown = true
       }
+  }
+}
+
+/// A segmented choice in the app's fonts (the system's segmented and pop-up controls draw their
+/// titles in the system font, whatever the view says).
+struct Segmented<Value: Hashable>: View {
+  @Binding var selection: Value
+  let options: [(Value, String)]
+  @Namespace private var thumb
+
+  var body: some View {
+    HStack(spacing: 2) {
+      ForEach(options.indices, id: \.self) { i in
+        let value = options[i].0
+        let on = value == selection
+        Text(options[i].1)
+          .font(.ui(12, on ? .medium : .regular))
+          .foregroundStyle(on ? .primary : .secondary)
+          .padding(.horizontal, 10)
+          .frame(minHeight: 22)
+          .background {
+            if on {
+              RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(Color(nsColor: .controlColor))
+                .shadow(color: .black.opacity(0.12), radius: 1, y: 0.5)
+                .matchedGeometryEffect(id: "thumb", in: thumb)
+            }
+          }
+          .contentShape(Rectangle())
+          .onTapGesture {
+            guard !on else { return }
+            withAnimation(.snappy(duration: 0.2)) { selection = value }
+          }
+          .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+      }
+    }
+    .padding(2)
+    .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+    .fixedSize()
   }
 }
