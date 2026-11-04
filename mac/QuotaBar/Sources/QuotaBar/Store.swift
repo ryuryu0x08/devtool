@@ -289,22 +289,46 @@ final class Store {
       }
       saveConfig()
       readDesktop()
-      changedDesktop(c.why, live: c.live)
+      announceDesktop(why: c.why, live: c.live)
     } catch {
       notice = Notice(text: "Desktop 未改：" + error.localizedDescription, bad: true)
     }
   }
 
-  /// Says what changed in Desktop's configuration and why; if Desktop runs, it needs a restart
-  /// for it (asked, done or offered, as set).
-  /// `live`: only the key changed and Desktop goes through the forwarder, which sends it now.
-  private func changedDesktop(_ why: String, live: Bool = false) {
-    if live {
-      notice = Notice(text: why + "，已生效，无需重启")
-      return
+  /// The one place a change to Desktop's configuration is told: what changed and why (`text`,
+  /// else `why`), and, when the running Desktop needs a restart for it, the restart as set
+  /// (done, asked with `why`, or offered by the message's button).
+  /// `live`: it reached Desktop at once (only the key, through the forwarder). `changed`: false
+  /// when nothing was written to Desktop (the message only).
+  private func announceDesktop(why: String, text: String? = nil, live: Bool = false, changed: Bool = true) {
+    let restart = changed && !live && desktopRunning
+    var t = text ?? why
+    if text == nil {
+      if live { t += "，已生效，无需重启" } else if restart { t += "，重启 Desktop 后生效" }
     }
-    notice = Notice(text: why + (desktopRunning ? "，重启 Desktop 后生效" : ""))
-    if desktopRunning { afterDesktopChanged(why) }
+    let n = Notice(text: t)
+    notice = n
+    guard restart else { return }
+    // After this turn: a question asked in the middle of a refresh or an animation would hold
+    // them up.
+    Task { @MainActor in self.restartAsSet(why: why, notice: n.id) }
+  }
+
+  /// Relaunches Desktop, asks first, or leaves a button for it in the message, as set.
+  private func restartAsSet(why: String, notice id: UUID) {
+    var choice = config.desktopRestart
+    if choice == .ask {
+      let (now, remember) = Dialogs.restartDesktop(why: why)
+      choice = now ? .always : .never
+      if remember { setDesktopRestart(choice) }
+    }
+    if choice == .always {
+      restartDesktop(why: why)
+    } else if notice?.id == id {
+      notice?.restartDesktop = true
+    } else {
+      notice = Notice(text: why + "，重启 Desktop 后生效", restartDesktop: true)
+    }
   }
 
 
@@ -341,7 +365,7 @@ final class Store {
       }
       saveConfig()
       withAnimation(.snappy) { readDesktop() }
-      changedDesktop(text)
+      announceDesktop(why: text)
     } catch {
       readDesktop()
       notice = Notice(text: "Desktop 未改：" + error.localizedDescription, bad: true)
@@ -563,9 +587,9 @@ final class Store {
       notice = Notice(text: "「\(name)」换了新 key，未能同步：" + problems.joined(separator: "；"), bad: true)
       return
     }
-    notice = Notice(text: "「\(name)」换了新 key，已同步" + (desktopChanged ? "，Desktop 重启后生效" : ""),
-                    restartDesktop: desktopChanged && desktopRunning && config.desktopRestart != .never)
-    if desktopChanged && config.desktopRestart == .always && desktopRunning { restartDesktop(why: "「\(name)」换了新 key") }
+    announceDesktop(why: "「\(name)」换了新 key，Desktop 改用新 key",
+                    text: "「\(name)」换了新 key，已同步" + (desktopChanged && desktopRunning ? "，Desktop 重启后生效" : ""),
+                    changed: desktopChanged)
   }
 
   // MARK: - Cookie sync
@@ -728,21 +752,7 @@ final class Store {
       return
     }
     readDesktop()
-    notice = Notice(text: "已切换到「\(p.label)」：" + parts.joined(separator: "，"))
-    if desktopChanged && desktopRunning { afterDesktopChanged("Desktop 改用「\(p.label)」的 key") }
-  }
-
-  /// Desktop's configuration changed (`why`) while it runs: relaunch it, or not, as chosen (or
-  /// ask, saying why).
-  private func afterDesktopChanged(_ why: String) {
-    var choice = config.desktopRestart
-    if choice == .ask {
-      let (now, remember) = Dialogs.restartDesktop(why: why)
-      choice = now ? .always : .never
-      if remember { setDesktopRestart(choice) }
-    }
-    if choice == .always { restartDesktop(why: why) }
-    else { notice?.restartDesktop = true }
+    announceDesktop(why: "Desktop 改用「\(p.label)」的 key", text: "已切换到「\(p.label)」：" + parts.joined(separator: "，"), changed: desktopChanged)
   }
 
   // MARK: - Claude Desktop
