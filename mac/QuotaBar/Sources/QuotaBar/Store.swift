@@ -630,7 +630,7 @@ final class Store {
     cookieSyncing = true
     defer { cookieSyncing = false }
     let browser = cookieBrowser
-    let result: Result<ProxyUsage, Failure> = await Task.detached {
+    let result: Result<ProxyUsage, Failure> = await Task.detached { () async -> Result<ProxyUsage, Failure> in
       do {
         let cookie = try ChromeCookies.header(domain: url.host ?? "ai-coding.bilibili.co", browser: browser)
         let (data, resp) = try await URLSession(configuration: .ephemeral).data(for: ProxyUsageAPI.request(url: url, cookie: cookie))

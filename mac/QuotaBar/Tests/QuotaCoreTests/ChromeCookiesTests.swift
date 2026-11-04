@@ -20,16 +20,20 @@ final class ChromeCookiesTests: XCTestCase {
     if let host {
       // Newer Chrome prepends SHA256(host).
       var h = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
-      Data(host.utf8).withUnsafeBytes { _ = CC_SHA256($0.baseAddress, CC_LONG($0.count), &h) }
+      let bytes = Array(host.utf8)
+      _ = CC_SHA256(bytes, CC_LONG(bytes.count), &h)
       plain = Data(h) + plain
     }
     let iv = [UInt8](repeating: 0x20, count: kCCBlockSizeAES128)
-    var out = [UInt8](repeating: 0, count: plain.count + kCCBlockSizeAES128)
+    let size = plain.count + kCCBlockSizeAES128
+    var out = [UInt8](repeating: 0, count: size)
     var moved = 0
     _ = plain.withUnsafeBytes { pin in
       key.withUnsafeBytes { k in
-        CCCrypt(CCOperation(kCCEncrypt), CCAlgorithm(kCCAlgorithmAES), CCOptions(kCCOptionPKCS7Padding),
-                k.baseAddress, k.count, iv, pin.baseAddress, pin.count, &out, out.count, &moved)
+        out.withUnsafeMutableBytes { o in
+          CCCrypt(CCOperation(kCCEncrypt), CCAlgorithm(kCCAlgorithmAES), CCOptions(kCCOptionPKCS7Padding),
+                  k.baseAddress, k.count, iv, pin.baseAddress, pin.count, o.baseAddress, size, &moved)
+        }
       }
     }
     return Data(version.utf8) + Data(out.prefix(moved))

@@ -25,7 +25,7 @@ public struct Usage: Equatable, Codable, Sendable {
 }
 
 /// Why a reading failed, and the details (HTTP status, the API's message, the system's error).
-public struct Failure: Equatable, Codable, Sendable {
+public struct Failure: Error, Equatable, Codable, Sendable {
   public enum Kind: String, Codable, Sendable {
     /// The API turned the key down: it was rotated, or stopped.
     case keyRejected

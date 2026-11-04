@@ -8,7 +8,7 @@ let package = Package(
   platforms: [.macOS(.v14)],
   targets: [
     // Reading the usage API, working out what is left, history, and editing settings.json.
-    .target(name: "QuotaCore"),
+    .target(name: "QuotaCore", linkerSettings: [.linkedLibrary("sqlite3")]),
     // The app itself (SwiftUI, Swift Charts, AppKit).
     .executableTarget(name: "QuotaBar", dependencies: ["QuotaCore"]),
     .testTarget(name: "QuotaCoreTests", dependencies: ["QuotaCore"]),

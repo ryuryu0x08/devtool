@@ -155,13 +155,16 @@ public enum ChromeCookies {
 
   // MARK: - Finding and reading the SQLite stores
 
-  /// Every "Cookies" file under the data directory (one per profile).
+  /// Every "Cookies" file under the data directory (one per profile), in name order ("Default",
+  /// then "Profile 1", …): the directory listing itself comes in no set order.
   static func cookieDatabases(_ base: URL) -> [URL] {
     let fm = FileManager.default
     var dbs: [URL] = []
     let direct = base.appendingPathComponent("Cookies")
     if fm.fileExists(atPath: direct.path) { dbs.append(direct) }
-    for sub in (try? fm.contentsOfDirectory(at: base, includingPropertiesForKeys: nil)) ?? [] {
+    let subs = ((try? fm.contentsOfDirectory(at: base, includingPropertiesForKeys: nil)) ?? [])
+      .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+    for sub in subs {
       let c = sub.appendingPathComponent("Cookies")
       if fm.fileExists(atPath: c.path) { dbs.append(c) }
     }
