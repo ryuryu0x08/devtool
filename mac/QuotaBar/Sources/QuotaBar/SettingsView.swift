@@ -192,6 +192,14 @@ private struct ForwardRow: View {
       }
       .disabled(store.forwardState == .starting || store.people.allSatisfy(\.key.isEmpty))
       switch store.forwardState {
+      case .on(let u) where store.desktopOnOldAddress:
+        HStack(spacing: 8) {
+          Label { Text("Desktop 还在用旧地址，重启后才经 " + u.replacingOccurrences(of: "http://", with: "")) } icon: { Icon(.warning, size: 11) }
+            .foregroundStyle(.orange)
+          Button("重启 Desktop") { store.restartDesktop() }
+            .buttonStyle(.link)
+        }
+        .font(.ui(11))
       case .on(let u):
         HStack(spacing: 8) {
           Label { Text("已启用 · " + u.replacingOccurrences(of: "http://", with: "")) } icon: { Icon(.checkFilled, size: 11) }

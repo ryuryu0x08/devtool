@@ -187,6 +187,9 @@ final class Store {
   enum ForwardState: Equatable { case off, starting, on(String), failed(String) }
   private(set) var forwardState = ForwardState.off
   @ObservationIgnored private var forwarder: LocalForwarder?
+  /// When this app last changed the address in Desktop's configuration: a Desktop opened before
+  /// then still uses the old one (it reads it at launch).
+  private(set) var desktopAddressChangedAt: Date?
 
   @ObservationIgnored private var loop: Task<Void, Never>?
   @ObservationIgnored private var cookieLoop: Task<Void, Never>?
@@ -221,6 +224,14 @@ final class Store {
       Task { @MainActor in
         self?.restart(after: 3)
         await self?.checkForwarder()
+      }
+    }
+    // Desktop opened again (by hand too): once none is left from before the address change, the
+    // settings say so.
+    NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] _ in
+      Task { @MainActor in
+        guard let self, self.desktopAddressChangedAt != nil, !self.desktopOnOldAddress else { return }
+        self.desktopAddressChangedAt = nil
       }
     }
     network.pathUpdateHandler = { [weak self] path in
@@ -350,6 +361,7 @@ final class Store {
           self.forwarderStopped(why)
         }
       }
+      await reclaimPort(UInt16(clamping: config.forwardPort))
       let p = try await f.start(preferred: UInt16(clamping: config.forwardPort))
       // Shown as on only once it really answers there.
       guard await Task.detached(operation: { LocalForwarder.accepting(p) }).value else {
@@ -372,6 +384,31 @@ final class Store {
       }
       withAnimation(.snappy) { forwardState = .failed(error.localizedDescription) }
     }
+  }
+
+  /// Desktop runs but was opened before its address was changed: it still uses the old one,
+  /// and the forwarder is no use to it until it is restarted.
+  var desktopOnOldAddress: Bool {
+    guard let t = desktopAddressChangedAt else { return false }
+    return desktopApps.contains { ($0.launchDate ?? .distantPast) < t }
+  }
+
+  /// The forwarder's port is held by another QuotaBar (an older one an update left running):
+  /// that one is ended, so that the port, the one Desktop uses, stays the same.
+  private func reclaimPort(_ p: UInt16) async {
+    guard !LocalForwarder.free(p) else { return }
+    let out = (try? await Task.detached { try SourceUpdate.run(["lsof", "-nP", "-t", "-iTCP:\(p)", "-sTCP:LISTEN"], in: URL(fileURLWithPath: "/"), timeout: 5) }.value) ?? ""
+    let mine = ProcessInfo.processInfo.processIdentifier
+    let others = out.split(separator: "\n").compactMap { pid_t($0.trimmingCharacters(in: .whitespaces)) }
+      .filter { $0 != mine }
+      .compactMap { NSRunningApplication(processIdentifier: $0) }
+      .filter { $0.bundleIdentifier == Bundle.main.bundleIdentifier }
+    guard !others.isEmpty else { return }
+    ForwardLog.write("端口 \(p) 被另一个 QuotaBar（\(others.map { String($0.processIdentifier) }.joined(separator: ", "))）占着，结束它")
+    others.forEach { $0.terminate() }
+    for _ in 0..<30 where others.contains(where: { !$0.isTerminated }) { try? await Task.sleep(for: .milliseconds(100)) }
+    others.filter { !$0.isTerminated }.forEach { $0.forceTerminate() }
+    for _ in 0..<20 where !LocalForwarder.free(p) { try? await Task.sleep(for: .milliseconds(100)) }
   }
 
   /// The forwarder stopped by itself (the system ended its listener): started again at once.
@@ -412,7 +449,10 @@ final class Store {
     guard move || key != nil else { return }
     do {
       guard try ClaudeDesktop.switchKey(key, baseURL: move ? want : nil, dir: config.desktopLibrary) == .written else { return }
-      if move { remember(want) }
+      if move {
+        remember(want)
+        desktopAddressChangedAt = Date()
+      }
       saveConfig()
       notice = Notice(text: (move ? "Desktop 已改用 \(want)" : "Desktop 的 key 已更新") + (desktopRunning ? "，重启后生效" : ""))
       if desktopRunning { afterDesktopChanged() }
@@ -883,6 +923,7 @@ final class Store {
       let c = NSWorkspace.OpenConfiguration()
       c.activates = false
       _ = try? await NSWorkspace.shared.openApplication(at: url, configuration: c)
+      desktopAddressChangedAt = nil
       notice = Notice(text: "Desktop 已重启，改动已生效")
     }
   }
