@@ -16,6 +16,9 @@ jobs:
         working-directory: mac/QuotaBar
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Whole history: pushing quotabar-stable forward needs the commit it is on now.
+          fetch-depth: 0
       - run: swift --version
       - run: swift test
       - run: ./build.sh
@@ -34,7 +37,13 @@ jobs:
       # Built and tested: the app's update check may install this version now.
       - name: Mark as stable
         if: github.ref == 'refs/heads/main'
-        run: git push origin HEAD:refs/heads/quotabar-stable || echo "quotabar-stable is ahead (a newer run); left as it is"
+        run: |
+          git fetch --quiet origin quotabar-stable || true
+          if git merge-base --is-ancestor FETCH_HEAD HEAD 2>/dev/null || ! git rev-parse -q --verify FETCH_HEAD >/dev/null; then
+            git push origin HEAD:refs/heads/quotabar-stable
+          else
+            echo "quotabar-stable is ahead (a newer run); left as it is"
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: QuotaBar
