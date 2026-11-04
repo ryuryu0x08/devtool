@@ -182,7 +182,8 @@ ls -a "$APPS"
 [[ "$(ls -A "$APPS")" == "QuotaBar.app" ]] || { echo "something was left beside the app"; exit 1; }
 ps -o args= -p "$NEW" | grep -q -- "Apps/QuotaBar.app/Contents/MacOS/QuotaBar --after-update $OLD" || { echo "not the replaced app, or not told to wait"; exit 1; }
 for _ in $(seq 40); do curl -s -o /dev/null "http://127.0.0.1:47831/" && break; sleep 0.5; done
-out="$(curl -sS -m 10 "http://127.0.0.1:47831/v1/billing/usage")"
+# As Desktop does: with the key it read at launch (ye); the forwarder sends the configured one (yy).
+out="$(curl -sS -m 10 -H 'Authorization: Bearer sk-demo-ye' "http://127.0.0.1:47831/v1/billing/usage")"
 [[ "$out" == *'"nick_name": "yy"'* ]] || { echo "the new app's forwarder is not on 47831: $out"; exit 1; }
 echo "OK: updated in place, the old app quit, the new one opened on the same port"
 quit
