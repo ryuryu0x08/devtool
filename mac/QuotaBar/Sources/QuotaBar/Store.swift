@@ -289,10 +289,20 @@ final class Store {
   /// The model API is http and not this machine: Desktop needs the forwarder for it.
   var forwardNeeded: Bool { LocalForwarder.needed(for: config.baseURL) }
 
-  /// The address Desktop is to use: the forwarder's while it runs, else the model API.
-  var desktopWant: String {
+  /// The running forwarder's address.
+  var forwarderURL: String? {
     if case .on(let u) = forwardState { return u }
-    return config.baseURL
+    return nil
+  }
+
+  /// The address Desktop is to use: the forwarder's while it runs, else the model API.
+  var desktopWant: String { link.want }
+
+  /// Desktop and the forwarder as they are now, for the rules in DesktopLink.
+  var link: DesktopLink {
+    DesktopLink(desktop: ClaudeDesktop.status(dir: config.desktopLibrary), forwarder: forwarderURL, baseURL: config.baseURL,
+                ours: config.ours, swapKeys: config.swapKeys,
+                chosenKey: people.first { $0.id == config.desktopPerson }?.key, desktopOnOldAddress: desktopOnOldAddress)
   }
 
   func setForward(_ on: Bool) {
@@ -304,32 +314,14 @@ final class Store {
   /// The forwarder runs: Desktop needs it for an http model API, or it swaps the keys.
   var forwardWanted: Bool { config.swapKeys || config.forward && forwardNeeded }
 
-  /// The key the forwarder sends in place of Desktop's: the chosen person's when swapping keys;
-  /// otherwise the one in Desktop's configuration, which a Desktop opened earlier may not have
-  /// read yet (so a key written there works at once, with no restart).
-  var forwarderKey: String? {
-    guard config.swapKeys else {
-      if case .gateway(let k?, _) = ClaudeDesktop.status(dir: config.desktopLibrary) { return k }
-      return nil
-    }
-    return people.first { $0.id == config.desktopPerson && !$0.key.isEmpty }?.key
-  }
-
-  /// The running Desktop goes through the running forwarder (it was opened on its address): the
-  /// key the forwarder sends reaches it at once.
-  var desktopOnForwarder: Bool {
-    guard case .on(let u) = forwardState, case .gateway(_, let cur) = ClaudeDesktop.status(dir: config.desktopLibrary) else { return false }
-    return ClaudeSettings.sameURL(cur, u) && !desktopOnOldAddress
-  }
+  /// The key the forwarder sends in place of Desktop's (see DesktopLink.forwarderKey).
+  var forwarderKey: String? { link.forwarderKey }
 
   /// The person whose key Desktop uses through the forwarder.
   var desktopPersonNow: Person? { config.swapKeys ? people.first { $0.id == config.desktopPerson } : nil }
 
-  /// Desktop is on the running forwarder, which sends the key: a switch needs no restart.
-  var desktopViaForwarder: Bool {
-    guard config.swapKeys, case .on(let u) = forwardState, case .gateway(_, let cur) = ClaudeDesktop.status(dir: config.desktopLibrary) else { return false }
-    return ClaudeSettings.sameURL(cur, u)
-  }
+  /// Desktop is on the running forwarder, which swaps the keys: a switch needs no restart.
+  var desktopViaForwarder: Bool { link.swapping }
 
   /// Swapping keys on: Desktop goes through the forwarder (one restart, to read the new address),
   /// which keeps the key Desktop has now. Off: Desktop gets that key in its own configuration.
@@ -455,63 +447,38 @@ final class Store {
     config.ours = Array((config.ours + [url]).suffix(20))
   }
 
-  /// Desktop is on one of our addresses, not the one it is to use (the forwarder moved, was
-  /// turned on or off): put right, and said why (and asked about the restart Desktop needs).
-  /// `taken`: the port the forwarder wanted, held by another program. `failed`: the forwarder
-  /// couldn't start, so is off.
+  /// After the forwarder started, moved or stopped: Desktop follows if it is on one of our
+  /// addresses (see DesktopLink.afterForwarder), and it is said why. `key`: the swapped key, to
+  /// be written when swapping was turned off.
   private func syncDesktopAddress(key: String? = nil, taken: UInt16? = nil, failed: Bool = false) {
-    guard case .gateway(_, let current) = ClaudeDesktop.status(dir: config.desktopLibrary) else { return }
-    let want = desktopWant
-    let move = DesktopURL.change(current: current, want: want, ours: config.ours + [config.baseURL]) == .replace
-    guard move || key != nil else { return }
-    do {
-      guard try ClaudeDesktop.switchKey(key, baseURL: move ? want : nil, dir: config.desktopLibrary) == .written else { return }
-      if move {
-        remember(want)
-        desktopAddressChangedAt = Date()
-      }
-      saveConfig()
-      readDesktop()
-      var why: [String] = []
-      if move {
-        let short = want.replacingOccurrences(of: "http://", with: "")
-        if case .on = forwardState {
-          if let taken { why.append("端口 \(taken) 被其他程序占用，本地转发改用 \(short)") }
-          else if current.map({ $0.contains("127.0.0.1") }) ?? false { why.append("本地转发的地址改为 \(short)") }
-          else { why.append("Desktop 改为经本地转发（\(short)）访问模型接口") }
-        } else {
-          why.append((failed ? "本地转发没能启动" : "本地转发已关闭") + "，Desktop 改回直连模型接口（\(want)）")
-        }
-      }
-      if let key {
-        let name = people.first { $0.key == key }.map { "「\($0.label)」的" } ?? ""
-        why.append("免重启切换已关闭，Desktop 改用配置里\(name) key")
-      }
-      changedDesktop(why.joined(separator: "；"), live: !move && desktopOnForwarder)
-    } catch {
-      notice = Notice(text: "Desktop 地址未改：" + error.localizedDescription, bad: true)
-    }
+    let owner = key.flatMap { k in people.first { $0.key == k }?.label }
+    guard let c = link.afterForwarder(key: key, owner: owner, taken: taken, failed: failed) else { return }
+    writeDesktop(c)
   }
 
   /// Desktop is on the gateway but not on the running forwarder's address (one set elsewhere):
   /// the settings offer to put it there.
-  var desktopOffForwarder: String? {
-    guard case .on(let u) = forwardState, case .gateway(let cur) = desktopMode, !ClaudeSettings.sameURL(cur, u) else { return nil }
-    return cur ?? "未设置"
-  }
+  var desktopOffForwarder: String? { DesktopLink.offForwarder(forwarder: forwarderURL, desktop: desktopMode) }
 
   /// Puts Desktop on the forwarder's address (asked for in the settings).
   func pointDesktopAtForwarder() {
-    guard case .on(let u) = forwardState else { return }
+    guard let c = link.toForwarder() else { return readDesktop() }
+    writeDesktop(c)
+  }
+
+  /// Writes a change into Desktop's configuration and says what changed and why.
+  private func writeDesktop(_ c: DesktopLink.Change) {
     do {
-      guard try ClaudeDesktop.switchKey(nil, baseURL: u, dir: config.desktopLibrary) == .written else { return readDesktop() }
-      remember(u)
-      desktopAddressChangedAt = Date()
+      guard try ClaudeDesktop.switchKey(c.key, baseURL: c.url, dir: config.desktopLibrary) == .written else { return readDesktop() }
+      if let u = c.url {
+        remember(u)
+        desktopAddressChangedAt = Date()
+      }
       saveConfig()
       readDesktop()
-      changedDesktop("Desktop 改为经本地转发（\(u.replacingOccurrences(of: "http://", with: ""))）访问模型接口")
+      changedDesktop(c.why, live: c.live)
     } catch {
-      notice = Notice(text: "Desktop 地址未改：" + error.localizedDescription, bad: true)
+      notice = Notice(text: "Desktop 未改：" + error.localizedDescription, bad: true)
     }
   }
 
@@ -774,7 +741,7 @@ final class Store {
       do { desktopChanged = try ClaudeDesktop.switchKey(new, dir: config.desktopLibrary) == .written }
       catch { problems.append("Desktop：" + error.localizedDescription) }
       // Through the forwarder, which now sends the new key: nothing to restart.
-      if desktopChanged && desktopOnForwarder {
+      if desktopChanged && link.keyChangeIsLive {
         readDesktop()
         desktopChanged = false
       }
@@ -942,7 +909,7 @@ final class Store {
         desktopChanged = try ClaudeDesktop.switchKey(p.key, baseURL: wantURL, dir: config.desktopLibrary) == .written
         if let wantURL { remember(wantURL); saveConfig() }
         // Desktop goes through the forwarder, which now sends this key: nothing to restart.
-        let live = desktopChanged && wantURL == nil && desktopOnForwarder
+        let live = desktopChanged && wantURL == nil && link.keyChangeIsLive
         if live { readDesktop() }
         parts.append(live ? "Desktop 已生效，无需重启" : !desktopChanged ? "Desktop 已在用" : desktopRunning ? "Desktop 重启后生效" : "Desktop 下次打开生效")
         if live { desktopChanged = false }
