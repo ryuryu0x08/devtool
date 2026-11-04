@@ -13,6 +13,8 @@ final class Forwarding {
   private var attempt = 0
   /// Told when the running forwarder stopped by itself (the system ended its listener).
   var onStop: ((String) -> Void)?
+  /// Told of each request through the running forwarder.
+  var onRequest: (() -> Void)?
 
   /// The running forwarder's port.
   var port: UInt16? { forwarder?.port }
@@ -37,6 +39,12 @@ final class Forwarding {
     let f = try LocalForwarder(target: target)
     f.log = { ForwardLog.write($0) }
     f.key = key
+    f.onRequest = { [weak self, weak f] in
+      Task { @MainActor in
+        guard let self, let f, self.forwarder === f else { return }
+        self.onRequest?()
+      }
+    }
     f.onStop = { [weak self, weak f] why in
       Task { @MainActor in
         guard let self, let f, self.forwarder === f else { return }

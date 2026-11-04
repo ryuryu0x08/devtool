@@ -33,6 +33,9 @@ public final class LocalForwarder: @unchecked Sendable {
   public var connectTimeout: TimeInterval = 15
   /// Told what happens to each request (for the app's log).
   public var log: (@Sendable (String) -> Void)?
+  /// Told of each request taken (from this machine, well formed), on the forwarder's queue: the
+  /// client goes through here now.
+  public var onRequest: (@Sendable () -> Void)?
   /// Told (on the forwarder's queue) when the listener stops by itself after it started (the
   /// system ended it, e.g. around sleep): the port no longer answers. Not called for `stop()`.
   public var onStop: (@Sendable (String) -> Void)?
@@ -186,6 +189,7 @@ public final class LocalForwarder: @unchecked Sendable {
         let head = String(decoding: buf[..<r.lowerBound], as: UTF8.self)
         guard Self.fromThisMachine(head) else { return self.reply(c, 403, "QuotaBar 本地转发只接受本机程序的请求") }
         guard let req = self.rewrite(head), let framing = Self.framing(head) else { return self.reply(c, 400, "bad request") }
+        self.onRequest?()
         self.readBody(c, head: Data(req.utf8), framing: framing, got: Data(buf[r.upperBound...]), ended: complete || error != nil)
       } else if complete || error != nil {
         c.cancel()
@@ -438,7 +442,8 @@ public final class LocalForwarder: @unchecked Sendable {
 
   private func reply(_ c: NWConnection, _ status: Int, _ text: String) {
     let body = Data(text.utf8)
-    let head = "HTTP/1.1 \(status) \(status == 502 ? "Bad Gateway" : "Bad Request")\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n"
+    let reason = [403: "Forbidden", 413: "Content Too Large", 431: "Request Header Fields Too Large", 502: "Bad Gateway"][status] ?? "Bad Request"
+    let head = "HTTP/1.1 \(status) \(reason)\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n"
     c.send(content: Data(head.utf8) + body, contentContext: .finalMessage, isComplete: true, completion: .contentProcessed { _ in c.cancel() })
   }
 }

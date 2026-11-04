@@ -62,6 +62,7 @@ final class Store {
 
   init() {
     forwarding.onStop = { [weak self] why in self?.forwarderStopped(why) }
+    forwarding.onRequest = { [weak self] in self?.heardDesktop() }
     load()
     findDesktop()
     readSettings()
@@ -350,15 +351,34 @@ final class Store {
   /// The running Desktop read the configuration as it is now (just opened, or found running
   /// with nothing known of what it read): kept, also for the next start of this app.
   private func sawDesktop() {
-    let seen = DesktopSeen(mode: ClaudeDesktop.mode(root: config.desktopRoot), status: ClaudeDesktop.status(dir: config.desktopLibrary))
+    keep(DesktopSeen(mode: ClaudeDesktop.mode(root: config.desktopRoot), status: ClaudeDesktop.status(dir: config.desktopLibrary)))
+  }
+
+  /// Keeps what the running Desktop has, also for the next start of this app.
+  private func keep(_ seen: DesktopSeen) {
     desktopSeen = seen
-    let launched = DesktopApp.apps.compactMap(\.launchDate).min()?.timeIntervalSince1970 ?? 0
-    if let d = try? JSONEncoder().encode(SeenSaved(launched: launched, seen: seen)) { UserDefaults.standard.set(d, forKey: "desktopSeen") }
+    if let d = try? JSONEncoder().encode(SeenSaved(launched: Self.desktopLaunched, seen: seen)) { UserDefaults.standard.set(d, forKey: "desktopSeen") }
+  }
+
+  /// When the running Desktop was opened (its first process).
+  private static var desktopLaunched: TimeInterval {
+    DesktopApp.apps.compactMap(\.launchDate).min()?.timeIntervalSince1970 ?? 0
   }
 
   private func forgetDesktop() {
     desktopSeen = nil
     UserDefaults.standard.removeObject(forKey: "desktopSeen")
+  }
+
+  /// A request came through the forwarder while Desktop runs: Desktop is on the forwarder's
+  /// address now. What it was thought to have read is corrected if it said otherwise (it was
+  /// changed while this app didn't run, or by hand); checked again then.
+  private func heardDesktop() {
+    guard let seen = desktopSeen, let url = forwarderURL else { return }
+    let heard = seen.heard(on: url)
+    guard heard.mode != seen.mode || !ClaudeSettings.sameURL(heard.url, seen.url) else { return }
+    keep(heard)
+    readDesktop()
   }
 
   /// What Desktop read, with its launch time (still the same Desktop when this app starts again).
@@ -371,8 +391,7 @@ final class Store {
   /// Desktop, else taken as it is now.
   private func findDesktop() {
     guard DesktopApp.running else { return forgetDesktop() }
-    let launched = DesktopApp.apps.compactMap(\.launchDate).min()?.timeIntervalSince1970 ?? 0
-    if let d = UserDefaults.standard.data(forKey: "desktopSeen"), let s = try? JSONDecoder().decode(SeenSaved.self, from: d), abs(s.launched - launched) < 1 {
+    if let d = UserDefaults.standard.data(forKey: "desktopSeen"), let s = try? JSONDecoder().decode(SeenSaved.self, from: d), abs(s.launched - Self.desktopLaunched) < 1 {
       desktopSeen = s.seen
     } else {
       sawDesktop()

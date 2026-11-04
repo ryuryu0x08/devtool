@@ -151,6 +151,13 @@ public struct DesktopSeen: Codable, Equatable, Sendable {
     }
   }
 
+  /// Corrected by what Desktop was seen doing: its requests reach the forwarder at `url`, so it
+  /// is on the gateway at that address, whatever was thought it read. (Its key isn't taken from
+  /// them: through the forwarder the key doesn't count.)
+  public func heard(on url: String) -> DesktopSeen {
+    DesktopSeen(mode: .gateway, url: url, key: mode == .gateway ? key : nil)
+  }
+
   /// What a Desktop that read `self` lacks of the configuration `now`, in a few words each;
   /// empty: it has it all (it needs no restart). `forwarder`: the running forwarder's address:
   /// a Desktop going through it gets the configured key from it, so the key doesn't count then.

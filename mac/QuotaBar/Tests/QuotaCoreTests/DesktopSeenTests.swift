@@ -54,6 +54,15 @@ final class DesktopSeenTests: XCTestCase {
     XCTAssertEqual(gw(api).lacks(DesktopSeen(mode: .managed, url: nil, key: nil), forwarder: nil), [])
   }
 
+  func testCorrectedByItsRequestsAtTheForwarder() {
+    // Thought to be on the API (changed while QuotaBar didn't run), seen at the forwarder.
+    let heard = gw(api, "sk-a").heard(on: f1)
+    XCTAssertEqual(heard, gw(f1, "sk-a"))
+    XCTAssertEqual(heard.lacks(gw(f1), forwarder: f1), [])
+    // Thought to be at the sign-in: it is on the gateway (no key known).
+    XCTAssertEqual(DesktopSeen(mode: .signIn, url: nil, key: nil).heard(on: f1), gw(f1, nil))
+  }
+
   func testFromDesktopsFiles() {
     XCTAssertEqual(DesktopSeen(mode: .gateway(baseURL: api), status: .gateway(key: "sk-a", baseURL: api)), gw(api, "sk-a"))
     XCTAssertEqual(DesktopSeen(mode: .signIn, status: .notGateway), DesktopSeen(mode: .signIn, url: nil, key: nil))

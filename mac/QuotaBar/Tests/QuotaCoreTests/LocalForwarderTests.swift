@@ -274,6 +274,25 @@ final class LocalForwarderTests: XCTestCase {
     XCTAssertNil(f.key)
   }
 
+  /// What the app learns where Desktop is from: each request taken, none turned away.
+  func testEachRequestTakenIsTold() async throws {
+    let up = Upstream()
+    try await up.start()
+    let f = try LocalForwarder(target: URL(string: "http://127.0.0.1:\(up.port)/api")!)
+    let told = Counter()
+    f.onRequest = { told.add() }
+    let port = try await f.start(preferred: 48130)
+    defer { f.stop() }
+    for _ in 0..<2 {
+      var req = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/v1/models")!)
+      req.setValue("Bearer sk-x", forHTTPHeaderField: "Authorization")
+      _ = try await URLSession.shared.data(for: req)
+    }
+    let away = try await rawExchange(port: port, send: "GET /v1/models HTTP/1.1\r\nHost: evil.example\r\n\r\n")
+    XCTAssertTrue(away.hasPrefix("HTTP/1.1 403"), away)
+    XCTAssertEqual(told.n, 2)
+  }
+
   func testOnlyRequestsAddressedToThisMachine() {
     XCTAssertTrue(LocalForwarder.fromThisMachine("POST /v1/messages HTTP/1.1\r\nHost: 127.0.0.1:47831"))
     XCTAssertTrue(LocalForwarder.fromThisMachine("POST /v1/messages HTTP/1.1\r\nhost: LOCALHOST:47831"))
