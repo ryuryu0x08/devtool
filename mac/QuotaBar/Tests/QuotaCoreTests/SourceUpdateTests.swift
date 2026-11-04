@@ -78,3 +78,50 @@ final class SourceUpdateTests: XCTestCase {
     XCTAssertLessThan(Date().timeIntervalSince(start), 5)
   }
 }
+
+final class AppSwapTests: XCTestCase {
+  private var dir: URL!
+
+  override func setUpWithError() throws {
+    dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  }
+
+  override func tearDownWithError() throws { try? FileManager.default.removeItem(at: dir) }
+
+  private func bundle(_ name: String, _ text: String) throws -> URL {
+    let app = dir.appendingPathComponent(name)
+    try FileManager.default.createDirectory(at: app.appendingPathComponent("Contents/MacOS"), withIntermediateDirectories: true)
+    try text.write(to: app.appendingPathComponent("Contents/MacOS/QuotaBar"), atomically: true, encoding: .utf8)
+    return app
+  }
+
+  private func binary(_ app: URL) throws -> String {
+    try String(contentsOf: app.appendingPathComponent("Contents/MacOS/QuotaBar"), encoding: .utf8)
+  }
+
+  func testTheNewBuildTakesThePlaceOfTheOldAndTheBuildStays() throws {
+    let old = try bundle("Applications/QuotaBar.app", "old")
+    let built = try bundle("build/QuotaBar.app", "new")
+    try AppSwap.replace(old, with: built)
+    XCTAssertEqual(try binary(old), "new")
+    XCTAssertEqual(try binary(built), "new")
+    // Nothing left beside it.
+    XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.appendingPathComponent("Applications").path), ["QuotaBar.app"])
+  }
+
+  func testNoBuildLeavesTheOldOne() throws {
+    let old = try bundle("Applications/QuotaBar.app", "old")
+    XCTAssertThrowsError(try AppSwap.replace(old, with: dir.appendingPathComponent("build/QuotaBar.app")))
+    XCTAssertEqual(try binary(old), "old")
+  }
+
+  func testThePreviousAppsProcessFromTheArguments() {
+    XCTAssertEqual(AppSwap.previous(in: ["QuotaBar", "--after-update", "123"]), 123)
+    XCTAssertNil(AppSwap.previous(in: ["QuotaBar", "--after-update"]))
+    XCTAssertNil(AppSwap.previous(in: ["QuotaBar"]))
+    let start = Date()
+    AppSwap.wait(for: 999_999, limit: 2)
+    XCTAssertLessThan(Date().timeIntervalSince(start), 1)
+  }
+}

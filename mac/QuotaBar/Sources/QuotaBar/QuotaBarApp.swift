@@ -1,14 +1,21 @@
 // QuotaBar lives in the menu bar (no Dock icon). The dashboard is an ordinary window, opened from
 // the panel; it also opens by itself while nothing is set up yet.
 import AppKit
+import QuotaCore
 import SwiftUI
 
 @main
 struct QuotaBarApp: App {
   @NSApplicationDelegateAdaptor private var delegate: AppDelegate
-  @State private var store = Store.shared
+  @State private var store: Store
 
-  init() { AppFonts.load() }
+  init() {
+    // Opened by the update in place of an older one: that one is to be gone first (it holds the
+    // forwarder's port, which this one is to keep).
+    if let pid = AppSwap.previous(in: CommandLine.arguments) { AppSwap.wait(for: pid) }
+    _store = State(initialValue: Store.shared)
+    AppFonts.load()
+  }
 
   // The menu bar item is StatusBar's (it decides between the panel and the dashboard); SwiftUI
   // only needs a scene, and this one shows nothing.
@@ -24,6 +31,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       let store = Store.shared
       StatusBar.shared.start(store)
       Updater.shared.start(store)
+      // CI: the update's last step, from a given build (replace this app, open it, quit).
+      if let i = CommandLine.arguments.firstIndex(of: "--reinstall-from"), i + 1 < CommandLine.arguments.count {
+        let built = URL(fileURLWithPath: CommandLine.arguments[i + 1])
+        Task { try? await Task.sleep(for: .seconds(3)); await Updater.shared.reinstall(from: built) }
+      }
       let args = CommandLine.arguments
       let empty = !store.hasURL || store.people.isEmpty
       if empty || args.contains("--dashboard") || args.contains("--settings") {

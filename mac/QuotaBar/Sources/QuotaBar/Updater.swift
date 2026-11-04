@@ -1,6 +1,8 @@
 // Checks for a newer version and installs it: from the git clone the app was built from (build.sh
 // writes its folder and commit into Info.plist), on the branch CI moves after the tests passed.
-// Installing is build.sh --install, which quits this app and opens the new one.
+// Installing: build.sh builds it, this app puts the build in its own place and opens it (it
+// waits for this one to quit), then quits. (build.sh --install would quit this app itself, and
+// macOS ends what an app started when it quits: the install would stop half way.)
 import AppKit
 import Foundation
 import Observation
@@ -90,8 +92,8 @@ final class Updater {
     }
   }
 
-  /// Moves the clone forward and runs build.sh --install (about a minute); the new app replaces
-  /// this one. If the build fails, this one stays as it is.
+  /// Moves the clone forward, builds (about a minute) and puts the new app in place of this one,
+  /// which then quits for it. If the build fails, this one stays as it is.
   func install() async {
     guard let source, state != .installing else { return }
     state = .installing
@@ -104,11 +106,46 @@ final class Updater {
       return
     }
     do {
-      _ = try await Task.detached { try SourceUpdate.run(["bash", "build.sh", "--install"], in: source, timeout: 900, log: log) }.value
-      // build.sh quits this app before installing; reaching here means it didn't.
-      state = .upToDate
+      _ = try await Task.detached { try SourceUpdate.run(["bash", "build.sh"], in: source, timeout: 900, log: log) }.value
     } catch {
       state = .failed("编译失败，详见日志")
+      return
     }
+    await reinstall(from: source.appendingPathComponent("build/QuotaBar.app"))
+  }
+
+  /// Puts `built` where this app is, opens it and quits.
+  func reinstall(from built: URL) async {
+    let me = Bundle.main.bundleURL
+    do {
+      try await Task.detached { try AppSwap.replace(me, with: built) }.value
+    } catch {
+      state = .failed("安装失败：" + error.localizedDescription)
+      return
+    }
+    let c = NSWorkspace.OpenConfiguration()
+    c.createsNewApplicationInstance = true
+    c.activates = false
+    c.arguments = ["--after-update", String(ProcessInfo.processInfo.processIdentifier)]
+    // Not awaited: the new one waits for this one to quit before it finishes launching. This
+    // one quits once the new one's process is there.
+    NSWorkspace.shared.openApplication(at: me, configuration: c) { _, error in
+      guard let error else { return }
+      Task { @MainActor in Updater.shared.state = .failed("新版本已装好，但没能打开：" + error.localizedDescription + "。手动重开即可") }
+    }
+    let mine = ProcessInfo.processInfo.processIdentifier
+    let id = Bundle.main.bundleIdentifier ?? "local.quotabar"
+    for _ in 0..<200 {
+      // Seen by the system as an app, or (sooner) as a process of that name.
+      let listed = NSRunningApplication.runningApplications(withBundleIdentifier: id).contains { $0.processIdentifier != mine }
+      let pids = (try? SourceUpdate.run(["pgrep", "-x", "QuotaBar"], in: me.deletingLastPathComponent(), timeout: 5)) ?? ""
+      if listed || pids.split(separator: "\n").contains(where: { Int32($0) != nil && Int32($0) != mine }) {
+        NSApp.terminate(nil)
+        return
+      }
+      if case .failed = state { return }
+      try? await Task.sleep(for: .milliseconds(50))
+    }
+    state = .failed("新版本已装好，但没能打开，手动重开即可")
   }
 }

@@ -97,3 +97,41 @@ public struct SourceUpdate: Sendable {
     var data: Data { lock.lock(); defer { lock.unlock() }; return d }
   }
 }
+
+/// Putting a newly built app where the running one is. The running app keeps going (its files
+/// are open already); the next launch is the new one.
+public enum AppSwap {
+  /// Replaces the bundle at `app` with a copy of `built`, in one step (a copy beside it first, on
+  /// the same disk, then swapped in): a failure leaves the old one where it was.
+  public static func replace(_ app: URL, with built: URL) throws {
+    let fm = FileManager.default
+    guard fm.fileExists(atPath: built.appendingPathComponent("Contents/MacOS").path) else {
+      throw SourceUpdate.Failed(message: "没有编译出的 app：\(built.path)")
+    }
+    let temp = app.deletingLastPathComponent().appendingPathComponent(".\(app.deletingPathExtension().lastPathComponent)-new-\(UUID().uuidString).app")
+    try fm.copyItem(at: built, to: temp)
+    do {
+      if fm.fileExists(atPath: app.path) {
+        _ = try fm.replaceItemAt(app, withItemAt: temp)
+      } else {
+        try fm.moveItem(at: temp, to: app)
+      }
+    } catch {
+      try? fm.removeItem(at: temp)
+      throw error
+    }
+  }
+
+  /// "--after-update <pid>" among the arguments: the app that launched this one, which is to be
+  /// gone before this one starts (it holds the forwarder's port).
+  public static func previous(in args: [String]) -> pid_t? {
+    guard let i = args.firstIndex(of: "--after-update"), i + 1 < args.count else { return nil }
+    return pid_t(args[i + 1])
+  }
+
+  /// Waits (up to `limit`) for process `pid` to be gone.
+  public static func wait(for pid: pid_t, limit: TimeInterval = 15) {
+    let end = Date().addingTimeInterval(limit)
+    while kill(pid, 0) == 0 && Date() < end { usleep(50_000) }
+  }
+}

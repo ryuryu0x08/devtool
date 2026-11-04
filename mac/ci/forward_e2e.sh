@@ -130,3 +130,34 @@ echo "with swapping: $out"
 out="$(curl -sS -m 10 "http://127.0.0.1:47831/v1/billing/usage")"
 [[ "$out" == *'"nick_name": "yy"'* ]] || { echo "a request without a key did not get the chosen one: $out"; exit 1; }
 echo "OK: swapping keys, the forwarder sends the chosen person's key"
+
+# The update's last step, as the app does it: the build put in place of the running app (here a
+# copy in a folder of its own), opened, the old one quitting; the new one keeps the port.
+quit
+APPS="$TMP/Apps"
+mkdir -p "$APPS"
+cp -R build/QuotaBar.app "$APPS/"
+printf 'old' > "$APPS/QuotaBar.app/Contents/Resources/marker"
+open -n "$APPS/QuotaBar.app" --args --reinstall-from "$PWD/build/QuotaBar.app"
+OLD=""
+for _ in $(seq 40); do OLD="$(pgrep -x QuotaBar | head -1 || true)"; [[ -n "$OLD" ]] && break; sleep 0.25; done
+[[ -n "$OLD" ]] || { echo "the app did not open"; exit 1; }
+echo "old: $OLD"
+NEW=""
+for _ in $(seq 120); do
+  NEW="$(pgrep -x QuotaBar | grep -vx "$OLD" | head -1 || true)"
+  [[ -n "$NEW" ]] && ! kill -0 "$OLD" 2>/dev/null && break
+  sleep 0.25
+done
+ps -o pid,args -p "$NEW" 2>/dev/null || true
+[[ -n "$NEW" ]] || { echo "the new app was not opened"; cat "$TMP/app.log" || true; exit 1; }
+! kill -0 "$OLD" 2>/dev/null || { echo "the old app did not quit"; exit 1; }
+[[ ! -e "$APPS/QuotaBar.app/Contents/Resources/marker" ]] || { echo "the app was not replaced"; exit 1; }
+ls -a "$APPS"
+[[ "$(ls -A "$APPS")" == "QuotaBar.app" ]] || { echo "something was left beside the app"; exit 1; }
+ps -o args= -p "$NEW" | grep -q -- "Apps/QuotaBar.app/Contents/MacOS/QuotaBar --after-update $OLD" || { echo "not the replaced app, or not told to wait"; exit 1; }
+for _ in $(seq 40); do curl -s -o /dev/null "http://127.0.0.1:47831/" && break; sleep 0.5; done
+out="$(curl -sS -m 10 "http://127.0.0.1:47831/v1/billing/usage")"
+[[ "$out" == *'"nick_name": "yy"'* ]] || { echo "the new app's forwarder is not on 47831: $out"; exit 1; }
+echo "OK: updated in place, the old app quit, the new one opened on the same port"
+quit
