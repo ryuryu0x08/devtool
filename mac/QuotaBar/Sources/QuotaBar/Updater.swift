@@ -137,17 +137,28 @@ final class Updater {
     }
     let mine = ProcessInfo.processInfo.processIdentifier
     let id = Bundle.main.bundleIdentifier ?? "local.quotabar"
+    let log = LogFile("update.log")
+    log.write("已装好新版本，打开它（本进程 \(mine)）")
     for _ in 0..<200 {
       // Seen by the system as an app, or (sooner) as a process of that name.
       let listed = NSRunningApplication.runningApplications(withBundleIdentifier: id).contains { $0.processIdentifier != mine }
       let pids = (try? SourceUpdate.run(["pgrep", "-x", "QuotaBar"], in: me.deletingLastPathComponent(), timeout: 5)) ?? ""
       if listed || pids.split(separator: "\n").contains(where: { Int32($0) != nil && Int32($0) != mine }) {
+        log.write("新版本已打开，本进程退出")
+        // If quitting is held up (a sheet, a window that doesn't close), quit anyway: the new one
+        // waits for this one, and two would be in the menu bar.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+          LogFile("update.log").write("正常退出没完成，直接结束本进程")
+          Thread.sleep(forTimeInterval: 0.3)
+          exit(0)
+        }
         NSApp.terminate(nil)
         return
       }
       if case .failed = state { return }
       try? await Task.sleep(for: .milliseconds(50))
     }
+    log.write("10 秒内没看到新版本的进程")
     state = .failed("新版本已装好，但没能打开，手动重开即可")
   }
 }
