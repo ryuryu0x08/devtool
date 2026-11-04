@@ -211,6 +211,9 @@ final class Store {
       // Its key again, now that it is on (Desktop's configured key is read with it running).
       forwarding.key = forwarderKey
       syncDesktopAddress(key: desktopKey, taken: p != preferred ? preferred : nil)
+    } catch is CancellationError {
+      // Another start (or a stop) came meanwhile: that one says how it is.
+      return
     } catch {
       ForwardLog.write("转发没能启动：\(error.localizedDescription)")
       withAnimation(.snappy) { forwardState = .failed(error.localizedDescription) }
@@ -314,10 +317,22 @@ final class Store {
     Task { @MainActor in self.restartAsSet(why: why, notice: n.id) }
   }
 
+  /// A restart question is open.
+  @ObservationIgnored private var askingRestart = false
+
   /// Relaunches Desktop, asks first, or leaves a button for it in the message, as set.
   private func restartAsSet(why: String, notice id: UUID) {
+    // Quit meanwhile: nothing to restart (it reads the change when opened).
+    guard desktopRunning else { return }
     var choice = config.desktopRestart
+    if choice == .ask && askingRestart {
+      // A question is open already (its restart covers this change too): the button only.
+      if notice?.id == id { notice?.restartDesktop = true }
+      return
+    }
     if choice == .ask {
+      askingRestart = true
+      defer { askingRestart = false }
       let (now, remember) = Dialogs.restartDesktop(why: why)
       choice = now ? .always : .never
       if remember { setDesktopRestart(choice) }
@@ -389,7 +404,18 @@ final class Store {
   private func load() {
     let dec = JSONDecoder()
     dec.dateDecodingStrategy = .secondsSince1970
-    if let d = try? Data(contentsOf: configFile), let c = try? dec.decode(Config.self, from: d) { config = c }
+    if let d = try? Data(contentsOf: configFile) {
+      do {
+        config = try dec.decode(Config.self, from: d)
+      } catch {
+        // Unreadable (edited by hand, or written by another version): kept aside before anything
+        // is saved over it, since it holds the keys.
+        let aside = Self.dir.appendingPathComponent("config.unreadable-\(Int(Date().timeIntervalSince1970)).json")
+        try? FileManager.default.copyItem(at: configFile, to: aside)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: aside.path)
+        notice = Notice(text: "设置文件读不出来，已另存为 \(aside.lastPathComponent)，现在用的是默认设置", bad: true)
+      }
+    }
     if let d = try? Data(contentsOf: historyFile), let h = try? dec.decode([Sample].self, from: d) { history = History.thin(h) }
   }
 

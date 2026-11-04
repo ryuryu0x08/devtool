@@ -128,8 +128,10 @@ out="$(curl -sS -m 10 -H 'Authorization: Bearer sk-demo-ye' "http://127.0.0.1:47
 echo "with swapping: $out"
 [[ "$out" == *'"nick_name": "yy"'* ]] || { echo "the forwarder did not send the chosen key"; cat "$TMP/app.log"; exit 1; }
 out="$(curl -sS -m 10 "http://127.0.0.1:47831/v1/billing/usage")"
-[[ "$out" == *'"nick_name": "yy"'* ]] || { echo "a request without a key did not get the chosen one: $out"; exit 1; }
-echo "OK: swapping keys, the forwarder sends the chosen person's key"
+[[ "$out" != *'"nick_name"'* ]] || { echo "a request without a key of its own got one: $out"; exit 1; }
+code="$(curl -sS -m 10 -o /dev/null -w '%{http_code}' -H 'Host: evil.example:47831' -H 'Authorization: Bearer sk-demo-ye' "http://127.0.0.1:47831/v1/billing/usage")"
+[[ "$code" == 403 ]] || { echo "a request for another host name was not turned away: $code"; exit 1; }
+echo "OK: swapping keys, the forwarder sends the chosen person's key (only in place of one sent, only to this machine's name)"
 quit
 
 # Not swapping: the forwarder sends the key in Desktop's configuration (yy), not the one the

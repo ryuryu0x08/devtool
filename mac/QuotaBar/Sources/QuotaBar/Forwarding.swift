@@ -8,6 +8,9 @@ import QuotaCore
 @MainActor
 final class Forwarding {
   private var forwarder: LocalForwarder?
+  /// Counts starts and stops: a start that another start or a stop came after while it was
+  /// under way gives up (it would leave a forwarder nobody holds, on a port).
+  private var attempt = 0
   /// Told when the running forwarder stopped by itself (the system ended its listener).
   var onStop: ((String) -> Void)?
 
@@ -21,14 +24,16 @@ final class Forwarding {
   }
 
   func stop() {
+    attempt += 1
     forwarder?.stop()
     forwarder = nil
   }
 
   /// Starts a forwarder to `target` on `preferred`, or the next free port; returns the port, once
-  /// it really answers there.
+  /// it really answers there. Throws CancellationError if another start or a stop came meanwhile.
   func start(target: URL, preferred: UInt16, key: String?) async throws -> UInt16 {
     stop()
+    let mine = attempt
     let f = try LocalForwarder(target: target)
     f.log = { ForwardLog.write($0) }
     f.key = key
@@ -39,10 +44,19 @@ final class Forwarding {
       }
     }
     await Self.reclaim(preferred)
+    guard mine == attempt else { throw CancellationError() }
     let p = try await f.start(preferred: preferred)
+    guard mine == attempt else {
+      f.stop()
+      throw CancellationError()
+    }
     guard await Self.answers(p) else {
       f.stop()
       throw LocalForwarder.Failure.notAnswering(p)
+    }
+    guard mine == attempt else {
+      f.stop()
+      throw CancellationError()
     }
     forwarder = f
     return p

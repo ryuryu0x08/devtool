@@ -145,7 +145,7 @@ final class LocalForwarderTests: XCTestCase {
     let f = try LocalForwarder(target: URL(string: "http://127.0.0.1:\(up.port)/api")!)
     let port = try await f.start(preferred: 48070)
     defer { f.stop() }
-    let req = "POST /v1/messages HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n4\r\n{\"a\"\r\n4;ext=1\r\n:1}\n\r\n0\r\n\r\n"
+    let req = "POST /v1/messages HTTP/1.1\r\nHost: 127.0.0.1\r\nTransfer-Encoding: chunked\r\n\r\n4\r\n{\"a\"\r\n4;ext=1\r\n:1}\n\r\n0\r\n\r\n"
     let reply = try await rawExchange(port: port, send: req)
     XCTAssertTrue(reply.hasPrefix("HTTP/1.1 200 OK"), reply)
     let head = up.heads[0].lowercased()
@@ -264,11 +264,24 @@ final class LocalForwarderTests: XCTestCase {
     f.key = "sk-now"
     XCTAssertEqual(f.rewrite("POST /v1/messages HTTP/1.1\r\nauthorization: Bearer sk-desktop\r\nX-Api-Key: sk-desktop\r\nContent-Length: 2"),
                    "POST /api/v1/messages HTTP/1.1\r\nContent-Length: 2\r\nAuthorization: Bearer sk-now\r\nHost: api.example\r\nUser-Agent: QuotaBar\r\nConnection: close\r\n\r\n")
-    // A request with no key of its own gets it too.
-    XCTAssertEqual(f.rewrite("GET /v1/models HTTP/1.1"),
+    // x-api-key alone counts as a key sent.
+    XCTAssertEqual(f.rewrite("GET /v1/models HTTP/1.1\r\nx-api-key: sk-desktop"),
                    "GET /api/v1/models HTTP/1.1\r\nAuthorization: Bearer sk-now\r\nHost: api.example\r\nUser-Agent: QuotaBar\r\nConnection: close\r\n\r\n")
+    // A request with no key of its own (a web page's) doesn't get it.
+    XCTAssertEqual(f.rewrite("GET /v1/models HTTP/1.1"),
+                   "GET /api/v1/models HTTP/1.1\r\nHost: api.example\r\nUser-Agent: QuotaBar\r\nConnection: close\r\n\r\n")
     f.key = ""
     XCTAssertNil(f.key)
+  }
+
+  func testOnlyRequestsAddressedToThisMachine() {
+    XCTAssertTrue(LocalForwarder.fromThisMachine("POST /v1/messages HTTP/1.1\r\nHost: 127.0.0.1:47831"))
+    XCTAssertTrue(LocalForwarder.fromThisMachine("POST /v1/messages HTTP/1.1\r\nhost: LOCALHOST:47831"))
+    XCTAssertTrue(LocalForwarder.fromThisMachine("POST /v1/messages HTTP/1.1\r\nHost: [::1]:47831"))
+    XCTAssertTrue(LocalForwarder.fromThisMachine("GET / HTTP/1.0"))
+    // DNS rebinding: a site's own name, pointed at 127.0.0.1.
+    XCTAssertFalse(LocalForwarder.fromThisMachine("POST /v1/messages HTTP/1.1\r\nHost: evil.example:47831"))
+    XCTAssertFalse(LocalForwarder.fromThisMachine("POST /v1/messages HTTP/1.1\r\nHost: 127.0.0.1.evil.example"))
   }
 
   func testTheKeyChangesBetweenRequestsWithNoRestart() async throws {

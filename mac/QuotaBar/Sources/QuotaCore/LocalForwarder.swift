@@ -184,6 +184,7 @@ public final class LocalForwarder: @unchecked Sendable {
       if let data { buf.append(data) }
       if let r = buf.range(of: Data("\r\n\r\n".utf8)) {
         let head = String(decoding: buf[..<r.lowerBound], as: UTF8.self)
+        guard Self.fromThisMachine(head) else { return self.reply(c, 403, "QuotaBar 本地转发只接受本机程序的请求") }
         guard let req = self.rewrite(head), let framing = Self.framing(head) else { return self.reply(c, 400, "bad request") }
         self.readBody(c, head: Data(req.utf8), framing: framing, got: Data(buf[r.upperBound...]), ended: complete || error != nil)
       } else if complete || error != nil {
@@ -280,7 +281,13 @@ public final class LocalForwarder: @unchecked Sendable {
     guard parts.count == 3, parts[1].hasPrefix("/") else { return nil }
     var out = ["\(parts[0]) \(prefix)\(parts[1]) \(parts[2])"]
     var left: [String] = []
-    let key = self.key
+    // The key goes only in place of one the client sent: a request with none (a web page's, say)
+    // doesn't get it.
+    let sent = lines.dropFirst().contains { l in
+      let n = l.split(separator: ":", maxSplits: 1).first.map { $0.trimmingCharacters(in: .whitespaces).lowercased() } ?? ""
+      return n == "authorization" || n == "x-api-key"
+    }
+    let key = sent ? self.key : nil
     for l in lines.dropFirst() where !l.isEmpty {
       let name = l.split(separator: ":", maxSplits: 1).first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
       if key != nil && name.lowercased() == "authorization" { continue }
@@ -292,6 +299,24 @@ public final class LocalForwarder: @unchecked Sendable {
     out.append("Connection: close")
     if !left.isEmpty { log?("left out: " + left.joined(separator: ", ")) }
     return out.joined(separator: "\r\n") + "\r\n\r\n"
+  }
+
+  /// The request was addressed to this machine (its Host header, if any, is 127.0.0.1, localhost
+  /// or ::1). A web page that got its name to point here (DNS rebinding) sends its own name: it
+  /// is turned away, so it can't use the forwarder, and the key it sends.
+  static func fromThisMachine(_ head: String) -> Bool {
+    for l in head.components(separatedBy: "\r\n").dropFirst() {
+      let kv = l.split(separator: ":", maxSplits: 1)
+      guard kv.count == 2, kv[0].trimmingCharacters(in: .whitespaces).lowercased() == "host" else { continue }
+      var h = kv[1].trimmingCharacters(in: .whitespaces).lowercased()
+      if h.hasPrefix("[") {
+        h = String(h.prefix { $0 != "]" }) + "]"
+      } else if let colon = h.firstIndex(of: ":") {
+        h = String(h[..<colon])
+      }
+      return ["127.0.0.1", "localhost", "[::1]"].contains(h)
+    }
+    return true
   }
 
   /// The reply's head for the client: Connection: close, so it doesn't send another request on
