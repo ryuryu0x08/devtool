@@ -39,7 +39,7 @@ cd devtool/mac/QuotaBar
   - **Desktop 启动方式**（设置 → Desktop：「第三方网关 / 官方登录」）：
     - 第三方网关：把「模型接口」（开了本地转发就用转发地址）和 Claude Code 的 key 写进第三方配置。已生效的配置是网关的就改它；否则重新启用上次切到官方登录前的那份，没有就新增一份名为「QuotaBar」的配置，设为生效（`_meta.json` 的 `appliedId`）。Desktop 记着的 `"deploymentMode"`（`claude_desktop_config.json`）改成 `"3p"`。之后打开不用登录。
     - 官方登录：去掉 `appliedId`（所有配置都留着），`deploymentMode` 改成 `"1p"`，Desktop 回到 Anthropic 登录。
-  - **重启 Desktop**：Desktop 只在启动时读配置。配置真的变了、Desktop 开着、而且改动到不了正在运行的 Desktop 时（经本地转发只换 key 就能立即到），问「重启」「稍后」并写明原因，可勾「记住我的选择」；之后在设置「改动后重启 Desktop」里改（每次询问 / 自动重启 / 不重启）。切换人员、key 轮换、开关转发、切换启动方式都按这同一条规则。
+  - **重启 Desktop**：Desktop 只在启动时读配置。配置真的变了、Desktop 开着、而且改动到不了正在运行的 Desktop 时（经本地转发只换 key 就能立即到），问「重启」「稍后」并写明原因，可勾「记住我的选择」；之后在设置「改动后重启 Desktop」里改（每次询问 / 自动重启 / 不重启）。切换人员、key 轮换、开关转发、切换启动方式都按这同一条规则。选了「稍后」（或设成「不重启」）时，设置「Desktop」最上面一直显示「有改动待 Desktop 重启后生效」、具体是哪些改动和「重启 Desktop」按钮，直到 Desktop 重启（在这里点，或自己重开）或退出。
   - 改动前的文件都留一份同目录的 `.bak`；写入前校验除改动项外内容不变，否则不写。
 - **字号**：设置「显示 → 字号」，所有文字一起加大或减小。
 - **自动获取 key**（设置 → 人员下方）：key 会不定时轮换。打开「从浏览器 cookie 自动更新」后，QuotaBar 读浏览器里 `ai-coding.bilibili.co` 的 cookie（和 `yt-dlp --cookies-from-browser` 同一方式：cookie 库是 SQLite，值用钥匙串里的「Chrome Safe Storage」密钥 AES 解密，首次读取时 macOS 会问一次，点「始终允许」），带 cookie 调用门户的 `proxy-usage`，拿到当前的 `nickname` 和 `token`，按昵称更新这个人的 key。启动后和每 10 分钟各同步一次，也可点「立即同步」。轮换出来的新 key 若 Claude Code 或 Desktop 正用着旧的，会一并更新（和粘贴新 key 一样）。支持 Chrome / Edge / Brave / Chromium，全程只发往门户本身。

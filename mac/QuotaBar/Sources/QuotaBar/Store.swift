@@ -76,10 +76,10 @@ final class Store {
     }
     // Desktop opened again (by hand too): once none is left from before the address change, the
     // settings say so.
-    NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] _ in
-      Task { @MainActor in
-        guard let self, self.desktopAddressChangedAt != nil, !self.desktopOnOldAddress else { return }
-        self.desktopAddressChangedAt = nil
+    // Desktop opened again (by hand too) or quit: what it hadn't read yet, it reads at launch.
+    for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
+      NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+        Task { @MainActor in self?.desktopRelaunched() }
       }
     }
     network.pathUpdateHandler = { [weak self] path in
@@ -328,6 +328,7 @@ final class Store {
     let n = Notice(text: t)
     notice = n
     guard restart else { return }
+    addPending(why)
     // After this turn: a question asked in the middle of a refresh or an animation would hold
     // them up.
     Task { @MainActor in self.restartAsSet(why: why, notice: n.id) }
@@ -335,6 +336,26 @@ final class Store {
 
   /// A restart question is open.
   @ObservationIgnored private var askingRestart = false
+
+  /// Changes the running Desktop hasn't read yet (it was opened before them, and not restarted
+  /// since): shown in the settings, with a restart button, until it is restarted or quit.
+  struct DesktopPending: Equatable {
+    var since: Date
+    var why: [String]
+  }
+  private(set) var desktopPending: DesktopPending?
+
+  private func addPending(_ why: String) {
+    var p = desktopPending ?? DesktopPending(since: Date(), why: [])
+    if !p.why.contains(why) { p.why.append(why) }
+    withAnimation(.snappy) { desktopPending = p }
+  }
+
+  /// Desktop was opened or quit: what it was waiting for is read now, or at its next launch.
+  private func desktopRelaunched() {
+    if let t = desktopAddressChangedAt, !DesktopApp.openedBefore(t) { desktopAddressChangedAt = nil }
+    if let p = desktopPending, !DesktopApp.openedBefore(p.since) { withAnimation(.snappy) { desktopPending = nil } }
+  }
 
   /// Relaunches Desktop, asks first, or leaves a button for it in the message, as set.
   private func restartAsSet(why: String, notice id: UUID) {
@@ -802,7 +823,7 @@ final class Store {
   var desktopRunning: Bool { DesktopApp.running }
 
   /// Desktop is being relaunched.
-  @ObservationIgnored private var restartingDesktop = false
+  private(set) var restartingDesktop = false
 
   /// Quits Claude Desktop and opens it again, so that it reads its new configuration.
   func restartDesktop(why: String? = nil) {
@@ -819,6 +840,7 @@ final class Store {
         notice = Notice(text: "Desktop 已退出，但没找到它的位置，手动打开即可", bad: true)
       case .done:
         desktopAddressChangedAt = nil
+        withAnimation(.snappy) { desktopPending = nil }
         notice = Notice(text: "Desktop 已重启，改动已生效")
       }
     }

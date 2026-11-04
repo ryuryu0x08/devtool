@@ -182,15 +182,13 @@ private struct ForwardRow: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 5) {
       if needed {
-        Toggle(isOn: Binding(get: { on }, set: { store.setForward($0) })) {
-          title("本地转发", info: "Desktop 不支持非本机的 HTTP 接口，开启后经本地代理转发。")
-        }
-        .disabled(store.forwardState == .starting || store.config.swapKeys)
+        row("本地转发", info: "Desktop 不支持非本机的 HTTP 接口，开启后经本地代理转发。",
+            isOn: Binding(get: { on }, set: { store.setForward($0) }),
+            disabled: store.forwardState == .starting || store.config.swapKeys)
       }
-      Toggle(isOn: Binding(get: { store.config.swapKeys && on }, set: { store.setSwapKeys($0) })) {
-        title("免重启切换", info: "由本地转发换上选中的 key，切换时 Desktop 不用重启。", show: CommandLine.arguments.contains("--show-tip"))
-      }
-      .disabled(store.forwardState == .starting || store.people.allSatisfy(\.key.isEmpty))
+      row("免重启切换", info: "由本地转发换上选中的 key，切换时 Desktop 不用重启。", show: CommandLine.arguments.contains("--show-tip"),
+          isOn: Binding(get: { store.config.swapKeys && on }, set: { store.setSwapKeys($0) }),
+          disabled: store.forwardState == .starting || store.people.allSatisfy(\.key.isEmpty))
       switch store.forwardState {
       case .on where store.desktopOffForwarder != nil:
         HStack(spacing: 8) {
@@ -201,13 +199,10 @@ private struct ForwardRow: View {
         }
         .font(.ui(11))
       case .on(let u) where store.desktopOnOldAddress:
-        HStack(spacing: 8) {
-          Label { Text("Desktop 还在用旧地址，重启后才经 " + u.replacingOccurrences(of: "http://", with: "")) } icon: { Icon(.warning, size: 11) }
-            .foregroundStyle(.orange)
-          Button("重启 Desktop") { store.restartDesktop() }
-            .buttonStyle(.link)
-        }
-        .font(.ui(11))
+        // Not green: Desktop doesn't go through it yet (the row above has the restart).
+        Text("已启用 · " + u.replacingOccurrences(of: "http://", with: "") + " · Desktop 重启后经此访问")
+          .font(.ui(11))
+          .foregroundStyle(.secondary)
       case .on(let u):
         HStack(spacing: 8) {
           Label { Text("已启用 · " + u.replacingOccurrences(of: "http://", with: "")) } icon: { Icon(.checkFilled, size: 11) }
@@ -229,12 +224,18 @@ private struct ForwardRow: View {
     .animation(.snappy, value: store.forwardState)
   }
 
-  /// The name, an ⓘ that explains it on hover, and a spinner while the forwarder starts.
-  private func title(_ name: String, info: String, show: Bool = false) -> some View {
+  /// The name, an ⓘ that explains it on hover, a spinner while the forwarder starts, and the
+  /// switch. The ⓘ is beside the switch, not in its label: a disabled switch takes the hover
+  /// from its label too.
+  private func row(_ name: String, info: String, show: Bool = false, isOn: Binding<Bool>, disabled: Bool) -> some View {
     HStack(spacing: 5) {
-      Text(name).font(.ui(13))
+      Text(name).font(.ui(13)).foregroundStyle(disabled ? .secondary : .primary)
       InfoTip(text: info, showAtStart: show)
       if store.forwardState == .starting && (name == "本地转发" || !needed) { ProgressView().controlSize(.mini) }
+      Spacer()
+      Toggle(isOn: isOn) { EmptyView() }
+        .fixedSize()
+        .disabled(disabled)
     }
   }
 
@@ -305,6 +306,7 @@ private struct DesktopRows: View {
   @Environment(Store.self) private var store
 
   var body: some View {
+    if let p = store.desktopPending { PendingRow(pending: p) }
     if store.desktopMode == .managed {
       LabeledContent { Text("由公司管理").font(.ui(12)).foregroundStyle(.secondary) } label: { Text("启动方式").font(.ui(13)) }
     } else {
@@ -330,6 +332,31 @@ private struct DesktopRows: View {
   private var gateway: Bool {
     if case .gateway = store.desktopMode { return true }
     return false
+  }
+}
+
+/// Changes the running Desktop hasn't read yet (a restart was put off): what they are, and the
+/// restart, until Desktop is restarted or quit.
+private struct PendingRow: View {
+  @Environment(Store.self) private var store
+  let pending: Store.DesktopPending
+
+  var body: some View {
+    HStack(alignment: .center, spacing: 10) {
+      Circle().fill(.orange).frame(width: 7, height: 7)
+      VStack(alignment: .leading, spacing: 2) {
+        Text("有改动待 Desktop 重启后生效").font(.ui(12.5, .medium))
+        Text(pending.why.joined(separator: "；")).font(.ui(11)).foregroundStyle(.secondary).lineLimit(2)
+      }
+      Spacer(minLength: 8)
+      if store.restartingDesktop {
+        ProgressView().controlSize(.small)
+      } else {
+        Button { store.restartDesktop() } label: { Text("重启 Desktop").font(.ui(12)) }
+      }
+    }
+    .padding(.vertical, 2)
+    .transition(.opacity)
   }
 }
 
