@@ -32,6 +32,8 @@ final class Store {
   enum ForwardState: Equatable { case off, starting, on(String), failed(String) }
   private(set) var forwardState = ForwardState.off
   @ObservationIgnored private let forwarding = Forwarding()
+  /// Counts startForwarder calls (see there).
+  @ObservationIgnored private var forwardGen = 0
   /// When this app last changed the address in Desktop's configuration: a Desktop opened before
   /// then still uses the old one (it reads it at launch).
   private(set) var desktopAddressChangedAt: Date?
@@ -117,7 +119,9 @@ final class Store {
     let url = url.trimmingCharacters(in: .whitespaces)
     config.url = url.isEmpty ? Config.defaultURL : url
     let b = baseURL.trimmingCharacters(in: .whitespaces)
-    let newBase = b.isEmpty ? Config.defaultBaseURL : b
+    // Saved as it is typed: a half-typed address ("ht", "https:") is not taken (it would move
+    // Desktop onto it and turn the forwarder off); the one before stays until it is whole.
+    let newBase = b.isEmpty ? Config.defaultBaseURL : Self.usable(b) ? b : config.baseURL
     let baseChanged = newBase != config.baseURL
     config.baseURL = newBase
     config.interval = max(10, interval)
@@ -128,6 +132,12 @@ final class Store {
     readDesktop()
     restart()
     if baseChanged { Task { await startForwarder() } }
+  }
+
+  /// An http(s) address with a host.
+  static func usable(_ s: String) -> Bool {
+    guard let u = URL(string: s.trimmingCharacters(in: .whitespaces)), ["http", "https"].contains(u.scheme?.lowercased() ?? ""), let h = u.host, !h.isEmpty else { return false }
+    return true
   }
 
   // MARK: - Local forwarder
@@ -192,6 +202,10 @@ final class Store {
   /// `again`: a restart of a forwarder that stopped by itself; if it fails, the settings stay on
   /// (it is tried again at the next refresh) instead of being turned off.
   func startForwarder(desktopKey: String? = nil, again: Bool = false) async {
+    // Starts and stops can overlap (a toggle clicked twice, a refresh and a wake at once): only
+    // the latest one sets the state and the settings.
+    forwardGen += 1
+    let gen = forwardGen
     forwarding.stop()
     guard forwardWanted, let target = URL(string: config.baseURL.trimmingCharacters(in: .whitespaces)) else {
       if forwardState != .off { ForwardLog.write("转发已关") }
@@ -203,6 +217,7 @@ final class Store {
     do {
       let preferred = UInt16(clamping: config.forwardPort)
       let p = try await forwarding.start(target: target, preferred: preferred, key: forwarderKey)
+      guard gen == forwardGen else { return }
       config.forwardPort = Int(p)
       remember(LocalForwarder.url(port: p))
       saveConfig()
@@ -215,6 +230,7 @@ final class Store {
       // Another start (or a stop) came meanwhile: that one says how it is.
       return
     } catch {
+      guard gen == forwardGen else { return }
       ForwardLog.write("转发没能启动：\(error.localizedDescription)")
       withAnimation(.snappy) { forwardState = .failed(error.localizedDescription) }
       if !again {
@@ -325,7 +341,7 @@ final class Store {
     // Quit meanwhile: nothing to restart (it reads the change when opened).
     guard desktopRunning else { return }
     var choice = config.desktopRestart
-    if choice == .ask && askingRestart {
+    if choice == .ask && (askingRestart || Dialogs.isOpen) {
       // A question is open already (its restart covers this change too): the button only.
       if notice?.id == id { notice?.restartDesktop = true }
       return
@@ -785,10 +801,17 @@ final class Store {
 
   var desktopRunning: Bool { DesktopApp.running }
 
+  /// Desktop is being relaunched.
+  @ObservationIgnored private var restartingDesktop = false
+
   /// Quits Claude Desktop and opens it again, so that it reads its new configuration.
   func restartDesktop(why: String? = nil) {
+    // Clicked again, or asked for twice: the one under way does it.
+    guard !restartingDesktop else { return }
+    restartingDesktop = true
     notice = Notice(text: "正在重启 Desktop" + (why.map { "：" + $0 } ?? "…"))
     Task {
+      defer { restartingDesktop = false }
       switch await DesktopApp.relaunch() {
       case .didNotQuit:
         notice = Notice(text: "Desktop 未退出（可能在等确认），手动重开即可", bad: true)

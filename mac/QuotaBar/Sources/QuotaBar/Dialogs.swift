@@ -53,8 +53,13 @@ enum Dialogs {
     init(_ title: String, _ kind: Kind = .normal) { self.title = title; self.kind = kind }
   }
 
+  /// A question is open (another one waits for it, or is answered otherwise).
+  private(set) static var isOpen = false
+
   /// Shows `a` and waits for a button (its index; Esc and closing give the cancel one's).
   private static func ask(_ a: Ask) -> (button: Int, remember: Bool) {
+    isOpen = true
+    defer { isOpen = false }
     // Over the window it is asked from (the panel, the dashboard), else in the middle of the screen;
     // nothing else is closed or hidden for it.
     let over = StatusBar.shared.panelWindow ?? NSApp.keyWindow ?? NSApp.windows.first { $0.isVisible && $0.canBecomeKey && !($0 is DialogPanel) }
