@@ -5,8 +5,8 @@
 //
 // Desktop starts on the gateway, without an Anthropic sign-in, when the applied configuration has
 // an inference provider, unless a "deploymentMode": "1p" it remembered (claude_desktop_config.json)
-// says otherwise. Developer mode is "allowDevTools" in developer_settings.json. Both live in the
-// Claude-3p folder and in Claude, the folder of the signed-in app beside it.
+// says otherwise (it may be in the Claude-3p folder or in Claude, the signed-in app's folder
+// beside it). With no configuration applied, it starts at the sign-in.
 import Foundation
 
 public enum ClaudeDesktop {
@@ -81,7 +81,14 @@ public enum ClaudeDesktop {
     return .written
   }
 
-  // MARK: - Starting on the gateway
+  // MARK: - Gateway or Anthropic sign-in
+
+  /// How Desktop starts: on the gateway, at the Anthropic sign-in, or as the company set it.
+  public enum Mode: Equatable, Sendable {
+    case gateway(baseURL: String?)
+    case signIn
+    case managed
+  }
 
   public enum SetupError: Error, Equatable, LocalizedError {
     case managed
@@ -103,77 +110,94 @@ public enum ClaudeDesktop {
     return [r, r.deletingLastPathComponent().appendingPathComponent("Claude", isDirectory: true)]
   }
 
+  static func library(_ root: String) -> URL { folders(root)[0].appendingPathComponent("configLibrary", isDirectory: true) }
+
   static func exists(_ u: URL) -> Bool { FileManager.default.fileExists(atPath: u.path) }
 
-  /// Developer mode is on (in either folder).
-  public static func developerMode(root: String) -> Bool {
-    folders(root).contains { f in
-      guard let d = try? Data(contentsOf: f.appendingPathComponent("developer_settings.json")),
-            let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return false }
-      return o["allowDevTools"] as? Bool == true
+  /// The "deploymentMode" Desktop remembered, where it did: the file, its content, the mode.
+  static func remembered(_ root: String) -> [(URL, Data, String, String)] {
+    folders(root).compactMap { f in
+      let file = f.appendingPathComponent("claude_desktop_config.json")
+      guard let d = try? Data(contentsOf: file), let t = String(data: d, encoding: .utf8),
+            let m = (try? ClaudeSettings.parse(t))?["deploymentMode"] as? String else { return nil }
+      return (file, d, t, m)
     }
   }
 
-  /// Turns developer mode on in both folders (in the ones that exist; Claude-3p is made if only
-  /// Claude is there). Other settings in the files are left as they were. Desktop reads it at launch.
-  @discardableResult
-  public static func enableDeveloperMode(root: String) throws -> Bool {
-    let fs = folders(root)
-    guard fs.contains(where: exists) else { throw SetupError.noDesktop }
-    var changed = false
-    for f in fs where exists(f) || f == fs[0] {
-      let file = f.appendingPathComponent("developer_settings.json")
-      let old = try? Data(contentsOf: file)
-      let text: String
-      if let old, let t = String(data: old, encoding: .utf8), !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-        if (try? ClaudeSettings.parse(t))?["allowDevTools"] as? Bool == true { continue }
-        text = try ClaudeSettings.setTopLevel("allowDevTools", json: "true", value: true, in: t)
-      } else {
-        text = "{\n  \"allowDevTools\": true\n}\n"
-      }
-      _ = try ClaudeSettings.replace(file, was: old, with: text)
-      changed = true
-    }
-    return changed
+  public static func mode(root: String, managed: [String] = managedFiles) -> Mode {
+    if isManaged(managed) { return .managed }
+    if remembered(root).contains(where: { $0.3 == "1p" }) { return .signIn }
+    if case .gateway(_, let u) = status(dir: library(root).path, managed: []) { return .gateway(baseURL: u) }
+    return .signIn
   }
 
   /// Sets Desktop to start on the gateway at `baseURL` with `key`, with no Anthropic sign-in:
   /// - the applied configuration, if it is a gateway one, gets the key and the address;
-  /// - otherwise a configuration named "QuotaBar" (made if missing) gets them and is applied;
+  /// - otherwise `previous` (the one applied before the sign-in was chosen) if it is a gateway
+  ///   one, else a configuration named "QuotaBar" (made if missing), gets them and is applied;
   /// - a remembered "deploymentMode": "1p" becomes "3p".
   /// Everything else in the files stays; each changed file is kept as <file>.bak. Desktop reads
   /// all of it at launch. Returns whether anything changed.
   @discardableResult
-  public static func useGateway(key: String, baseURL: String, root: String, managed: [String] = managedFiles) throws -> Bool {
+  public static func useGateway(key: String, baseURL: String, root: String, previous: String? = nil, managed: [String] = managedFiles) throws -> Bool {
     if isManaged(managed) { throw SetupError.managed }
-    let fs = folders(root)
-    guard fs.contains(where: exists) else { throw SetupError.noDesktop }
-    let lib = fs[0].appendingPathComponent("configLibrary", isDirectory: true)
+    guard folders(root).contains(where: exists) else { throw SetupError.noDesktop }
+    let lib = library(root)
     var changed = false
     if case .gateway = status(dir: lib.path, managed: []) {
       changed = try switchKey(key, baseURL: baseURL, dir: lib.path, managed: []) == .written
     } else {
-      try addEntry(key: key, baseURL: baseURL, lib: lib)
+      try apply(key: key, baseURL: baseURL, lib: lib, previous: previous)
       changed = true
     }
-    for f in fs {
-      let file = f.appendingPathComponent("claude_desktop_config.json")
-      guard let old = try? Data(contentsOf: file), let t = String(data: old, encoding: .utf8),
-            let mode = (try? ClaudeSettings.parse(t))?["deploymentMode"] as? String, mode != "3p" else { continue }
-      _ = try ClaudeSettings.replace(file, was: old, with: try ClaudeSettings.setTopLevel("deploymentMode", to: "3p", in: t))
+    if try setRemembered("3p", root: root) { changed = true }
+    return changed
+  }
+
+  /// Sets Desktop to start at the Anthropic sign-in: no configuration is applied any more (all
+  /// stay stored), and a remembered "3p" becomes "1p". Returns the one that was applied, to go
+  /// back to it.
+  @discardableResult
+  public static func useSignIn(root: String, managed: [String] = managedFiles) throws -> String? {
+    if isManaged(managed) { throw SetupError.managed }
+    let metaFile = library(root).appendingPathComponent("_meta.json")
+    var was: String?
+    if let d = try? Data(contentsOf: metaFile), var meta = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+       let id = meta["appliedId"] as? String, !id.isEmpty {
+      was = id
+      meta["appliedId"] = nil
+      _ = try ClaudeSettings.replace(metaFile, was: d, with: try json(meta))
+    }
+    try setRemembered("1p", root: root)
+    return was
+  }
+
+  @discardableResult
+  static func setRemembered(_ mode: String, root: String) throws -> Bool {
+    var changed = false
+    for (file, d, t, m) in remembered(root) where m != mode {
+      _ = try ClaudeSettings.replace(file, was: d, with: try ClaudeSettings.setTopLevel("deploymentMode", to: mode, in: t))
       changed = true
     }
     return changed
   }
 
-  /// The "QuotaBar" configuration, with the gateway, made the applied one.
-  static func addEntry(key: String, baseURL: String, lib: URL) throws {
+  /// A gateway configuration with the key and the address, made the applied one.
+  static func apply(key: String, baseURL: String, lib: URL, previous: String?) throws {
     let metaFile = lib.appendingPathComponent("_meta.json")
     let metaData = try? Data(contentsOf: metaFile)
     var meta = metaData.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
     var entries = meta["entries"] as? [[String: Any]] ?? []
+    func ok(_ i: String?) -> Bool { i.map { !$0.isEmpty && !$0.contains("/") } ?? false }
+    func isGateway(_ i: String) -> Bool {
+      guard let d = try? Data(contentsOf: lib.appendingPathComponent(i + ".json")),
+            let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return false }
+      return o["inferenceProvider"] as? String == "gateway"
+    }
     let id: String
-    if let e = entries.first(where: { $0["name"] as? String == entryName }), let i = e["id"] as? String, !i.isEmpty, !i.contains("/") {
+    if let p = previous, ok(p), entries.contains(where: { $0["id"] as? String == p }), isGateway(p) {
+      id = p
+    } else if let e = entries.first(where: { $0["name"] as? String == entryName }), let i = e["id"] as? String, ok(i) {
       id = i
     } else {
       id = UUID().uuidString.lowercased()

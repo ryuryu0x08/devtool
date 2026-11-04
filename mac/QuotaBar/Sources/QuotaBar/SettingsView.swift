@@ -59,7 +59,7 @@ struct SettingsView: View {
         } header: {
           header("Desktop")
         } footer: {
-          footer("改用网关：用「模型接口」和 Claude Code 的 key，Desktop 打开不用登录。改过的文件留 .bak。")
+          footer("第三方网关：用「模型接口」和 Claude Code 的 key，打开不用登录。官方登录：登录 Anthropic 账号，网关配置留着。改过的文件留 .bak。")
         }
         Section {
           LoginItemRow()
@@ -243,40 +243,36 @@ private struct LoginItemRow: View {
   }
 }
 
-/// Claude Desktop: on the gateway or signing in, and developer mode.
+/// Claude Desktop: on the gateway, or at the Anthropic sign-in.
 private struct DesktopRows: View {
   @Environment(Store.self) private var store
 
   var body: some View {
-    HStack {
-      Text("模式").font(.ui(13))
-      Spacer()
-      switch store.desktopStatus {
-      case .gateway(_, let url):
-        Label { Text("第三方网关" + (url.map { "：" + $0 } ?? "")) } icon: { Icon(.checkFilled, size: 11) }
-          .font(.ui(12))
-          .foregroundStyle(.green)
-          .lineLimit(1)
-          .truncationMode(.middle)
-      case .notGateway:
-        Text("登录 Anthropic 账号").font(.ui(12)).foregroundStyle(.secondary)
-        Button { store.desktopUseGateway() } label: { Text("改用网关").font(.ui(12)) }
-          .disabled(store.desktopKeyPerson == nil)
-          .help(store.desktopKeyPerson.map { "用「模型接口」和 \($0.label) 的 key" } ?? "先添加 key")
-      case .managed:
-        Text("由公司管理").font(.ui(12)).foregroundStyle(.secondary)
+    if store.desktopMode == .managed {
+      LabeledContent { Text("由公司管理").font(.ui(12)).foregroundStyle(.secondary) } label: { Text("启动方式").font(.ui(13)) }
+    } else {
+      VStack(alignment: .leading, spacing: 5) {
+        HStack {
+          Text("启动方式").font(.ui(13))
+          Spacer()
+          Picker("启动方式", selection: Binding(get: { gateway }, set: { if $0 != gateway { store.setDesktopMode(gateway: $0) } })) {
+            Text("第三方网关").tag(true)
+            Text("官方登录").tag(false)
+          }
+          .pickerStyle(.segmented)
+          .labelsHidden()
+          .fixedSize()
+        }
+        if case .gateway(let url) = store.desktopMode, let url {
+          Text(url).font(.mono(11)).foregroundStyle(.secondary).textSelection(.enabled).lineLimit(1).truncationMode(.middle)
+        }
       }
     }
-    HStack {
-      Text("开发者模式").font(.ui(13))
-      Spacer()
-      if store.desktopDeveloper {
-        Text("已开启").font(.ui(12)).foregroundStyle(.secondary)
-      } else {
-        Button { store.desktopEnableDeveloper() } label: { Text("开启").font(.ui(12)) }
-          .help("等于 Desktop 的 Help → Troubleshooting → Enable Developer Mode")
-      }
-    }
+  }
+
+  private var gateway: Bool {
+    if case .gateway = store.desktopMode { return true }
+    return false
   }
 }
 

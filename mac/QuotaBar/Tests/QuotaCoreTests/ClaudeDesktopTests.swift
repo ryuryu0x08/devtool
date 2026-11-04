@@ -72,7 +72,6 @@ final class ClaudeDesktopTests: XCTestCase {
     XCTAssertThrowsError(try ClaudeDesktop.useGateway(key: "sk-1", baseURL: "http://127.0.0.1:47831", root: root.path, managed: [])) {
       XCTAssertEqual($0 as? ClaudeDesktop.SetupError, .noDesktop)
     }
-    XCTAssertThrowsError(try ClaudeDesktop.enableDeveloperMode(root: root.path))
     XCTAssertFalse(FileManager.default.fileExists(atPath: root.path))
   }
 
@@ -141,16 +140,46 @@ final class ClaudeDesktopTests: XCTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: root.path))
   }
 
-  func testDeveloperModeInBothFoldersOtherSettingsKept() throws {
+  func testToTheSignInAndBackToTheSameConfiguration() throws {
+    let lib = root.appendingPathComponent("configLibrary")
+    try FileManager.default.createDirectory(at: lib, withIntermediateDirectories: true)
     try FileManager.default.createDirectory(at: signedIn, withIntermediateDirectories: true)
-    let other = #"{"allowDevTools": false, "other": 1}"#
-    try other.write(to: signedIn.appendingPathComponent("developer_settings.json"), atomically: true, encoding: .utf8)
-    XCTAssertFalse(ClaudeDesktop.developerMode(root: root.path))
-    XCTAssertTrue(try ClaudeDesktop.enableDeveloperMode(root: root.path))
-    XCTAssertTrue(ClaudeDesktop.developerMode(root: root.path))
-    XCTAssertEqual(try String(contentsOf: signedIn.appendingPathComponent("developer_settings.json"), encoding: .utf8),
-                   #"{"allowDevTools": true, "other": 1}"#)
-    XCTAssertEqual(try read(root.appendingPathComponent("developer_settings.json"))["allowDevTools"] as? Bool, true)
-    XCTAssertFalse(try ClaudeDesktop.enableDeveloperMode(root: root.path))
+    let saved = dir
+    dir = lib
+    let gw = config(key: "sk-1")
+    try setUp(gw)
+    dir = saved
+    let remembered = root.appendingPathComponent("claude_desktop_config.json")
+    try #"{"deploymentMode":"3p","x":1}"#.write(to: remembered, atomically: true, encoding: .utf8)
+    XCTAssertEqual(ClaudeDesktop.mode(root: root.path, managed: []), .gateway(baseURL: "http://gw.example/"))
+
+    let was = try ClaudeDesktop.useSignIn(root: root.path, managed: [])
+    XCTAssertEqual(was, id)
+    XCTAssertEqual(ClaudeDesktop.mode(root: root.path, managed: []), .signIn)
+    let meta = try read(lib.appendingPathComponent("_meta.json"))
+    XCTAssertNil(meta["appliedId"])
+    XCTAssertEqual((meta["entries"] as! [Any]).count, 1)
+    XCTAssertEqual(try String(contentsOf: remembered, encoding: .utf8), #"{"deploymentMode":"1p","x":1}"#)
+    XCTAssertEqual(try String(contentsOf: lib.appendingPathComponent(id + ".json"), encoding: .utf8), gw)
+
+    // Back: the same configuration, not a new one; the key and address as given now.
+    XCTAssertTrue(try ClaudeDesktop.useGateway(key: "sk-2", baseURL: "http://127.0.0.1:47831", root: root.path, previous: was, managed: []))
+    XCTAssertEqual(ClaudeDesktop.mode(root: root.path, managed: []), .gateway(baseURL: "http://127.0.0.1:47831"))
+    let back = try read(lib.appendingPathComponent("_meta.json"))
+    XCTAssertEqual(back["appliedId"] as? String, id)
+    XCTAssertEqual((back["entries"] as! [Any]).count, 1)
+    XCTAssertEqual(try String(contentsOf: remembered, encoding: .utf8), #"{"deploymentMode":"3p","x":1}"#)
+    XCTAssertEqual(ClaudeDesktop.status(dir: lib.path, managed: []), .gateway(key: "sk-2", baseURL: "http://127.0.0.1:47831"))
+  }
+
+  func testARemembered1pMeansTheSignIn() throws {
+    let lib = root.appendingPathComponent("configLibrary")
+    try FileManager.default.createDirectory(at: lib, withIntermediateDirectories: true)
+    let saved = dir
+    dir = lib
+    try setUp(config(key: "sk-1"))
+    dir = saved
+    try #"{"deploymentMode": "1p"}"#.write(to: root.appendingPathComponent("claude_desktop_config.json"), atomically: true, encoding: .utf8)
+    XCTAssertEqual(ClaudeDesktop.mode(root: root.path, managed: []), .signIn)
   }
 }

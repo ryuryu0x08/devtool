@@ -44,6 +44,9 @@ struct Config: Codable, Equatable {
   var forwardPort = Int(LocalForwarder.defaultPort)
   /// Addresses this app gave Desktop (its forwarders, its model APIs): replaced without asking.
   var ours: [String] = []
+  /// Desktop's configuration that was applied before the sign-in was chosen: applied again on
+  /// the way back to the gateway.
+  var desktopPrevious: String?
 
   static var detectedClaudeDir: String {
     ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"].flatMap { $0.isEmpty ? nil : $0 } ?? "~/.claude"
@@ -57,7 +60,7 @@ struct Config: Codable, Equatable {
   init() {}
 
   private enum CodingKeys: String, CodingKey {
-    case url, interval, people, retired, settingsPath, claudeDir, desktopDir, baseURL, desktopRestart, forward, forwardPort, ours, keys
+    case url, interval, people, retired, settingsPath, claudeDir, desktopDir, baseURL, desktopRestart, forward, forwardPort, ours, desktopPrevious, keys
   }
   private struct OldKey: Decodable { var id: String; var key: String }
 
@@ -77,6 +80,7 @@ struct Config: Codable, Equatable {
     forward = try c.decodeIfPresent(Bool.self, forKey: .forward) ?? false
     forwardPort = try c.decodeIfPresent(Int.self, forKey: .forwardPort) ?? Int(LocalForwarder.defaultPort)
     ours = try c.decodeIfPresent([String].self, forKey: .ours) ?? []
+    desktopPrevious = try c.decodeIfPresent(String.self, forKey: .desktopPrevious)
     let b = try c.decodeIfPresent(String.self, forKey: .baseURL) ?? ""
     baseURL = b.isEmpty ? Config.defaultBaseURL : b
     desktopRestart = (try? c.decodeIfPresent(DesktopRestart.self, forKey: .desktopRestart)) ?? .ask
@@ -99,6 +103,7 @@ struct Config: Codable, Equatable {
     try c.encode(forward, forKey: .forward)
     try c.encode(forwardPort, forKey: .forwardPort)
     try c.encode(ours, forKey: .ours)
+    try c.encodeIfPresent(desktopPrevious, forKey: .desktopPrevious)
     try c.encode(baseURL, forKey: .baseURL)
     try c.encode(desktopRestart, forKey: .desktopRestart)
   }
@@ -292,45 +297,42 @@ final class Store {
     }
   }
 
-  /// Desktop as it is set: on a gateway, signing in, or managed; developer mode on.
-  private(set) var desktopStatus = ClaudeDesktop.Status.notGateway
-  private(set) var desktopDeveloper = false
+  /// How Desktop starts: on the gateway, at the Anthropic sign-in, or as the company set it.
+  private(set) var desktopMode = ClaudeDesktop.Mode.signIn
 
   func readDesktop() {
-    desktopStatus = ClaudeDesktop.status(dir: config.desktopLibrary)
-    desktopDeveloper = ClaudeDesktop.developerMode(root: config.desktopRoot)
+    desktopMode = ClaudeDesktop.mode(root: config.desktopRoot)
   }
 
   /// The key to give Desktop: Claude Code's, else the first one there is.
   var desktopKeyPerson: Person? { active ?? people.first { !$0.key.isEmpty } }
 
-  /// Puts Desktop on the gateway (the model API, through the forwarder if it is on) with
-  /// Claude Code's key, so it opens without an Anthropic sign-in.
-  func desktopUseGateway() {
-    guard let p = desktopKeyPerson else { return }
-    let want = desktopWant
+  /// Desktop to start on the gateway (the model API, through the forwarder if it is on) with
+  /// Claude Code's key, or at the Anthropic sign-in.
+  func setDesktopMode(gateway: Bool) {
     do {
-      let changed = try ClaudeDesktop.useGateway(key: p.key, baseURL: want, root: config.desktopRoot)
-      remember(want)
+      var text: String
+      if gateway {
+        guard let p = desktopKeyPerson else {
+          notice = Notice(text: "先添加 key", bad: true)
+          return
+        }
+        let want = desktopWant
+        try ClaudeDesktop.useGateway(key: p.key, baseURL: want, root: config.desktopRoot, previous: config.desktopPrevious)
+        remember(want)
+        text = "Desktop 改用网关（\(p.label) 的 key）"
+        if LocalForwarder.needed(for: want) && !want.hasPrefix("http://127.0.0.1") { text += "，需开本地转发" }
+      } else {
+        if let was = try ClaudeDesktop.useSignIn(root: config.desktopRoot) { config.desktopPrevious = was }
+        text = "Desktop 改用官方登录"
+      }
       saveConfig()
-      readDesktop()
-      var text = "Desktop 已改用网关（\(p.label) 的 key）"
-      if LocalForwarder.needed(for: want) { text += "，需开本地转发" }
-      notice = Notice(text: text + (changed && desktopRunning ? "，重启后生效" : ""))
-      if changed && desktopRunning { afterDesktopChanged() }
+      withAnimation(.snappy) { readDesktop() }
+      notice = Notice(text: text + (desktopRunning ? "，重启后生效" : ""))
+      if desktopRunning { afterDesktopChanged() }
     } catch {
+      readDesktop()
       notice = Notice(text: "Desktop 未改：" + error.localizedDescription, bad: true)
-    }
-  }
-
-  func desktopEnableDeveloper() {
-    do {
-      let changed = try ClaudeDesktop.enableDeveloperMode(root: config.desktopRoot)
-      readDesktop()
-      notice = Notice(text: "Desktop 开发者模式已开" + (changed && desktopRunning ? "，重启后生效" : ""))
-      if changed && desktopRunning { afterDesktopChanged() }
-    } catch {
-      notice = Notice(text: "未能开启：" + error.localizedDescription, bad: true)
     }
   }
 
