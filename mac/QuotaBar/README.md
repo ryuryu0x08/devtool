@@ -42,8 +42,6 @@ cd devtool/mac/QuotaBar
   - **重启 Desktop**：Desktop 只在启动时读配置。配置真的变了且 Desktop 开着时，问「重启」「稍后」，可勾「记住我的选择」；之后在设置「改动后重启 Desktop」里改（每次询问 / 自动重启 / 不重启）。
   - 改动前的文件都留一份同目录的 `.bak`；写入前校验除改动项外内容不变，否则不写。
 - **字号**：设置「显示 → 字号」，所有文字一起加大或减小。
-- **自动获取 key**（设置 → 人员下方）：key 会不定时轮换。打开「从浏览器 cookie 自动更新」后，QuotaBar 读浏览器里 `ai-coding.bilibili.co` 的 cookie（和 `yt-dlp --cookies-from-browser` 同一方式：cookie 库是 SQLite，值用钥匙串里的「Chrome Safe Storage」密钥 AES 解密，首次读取时 macOS 会问一次，点「始终允许」），带 cookie 调用门户的 `proxy-usage`，拿到当前的 `nickname` 和 `token`，按昵称更新这个人的 key。启动后和每 10 分钟各同步一次，也可点「立即同步」。轮换出来的新 key 若 Claude Code 或 Desktop 正用着旧的，会一并更新（和粘贴新 key 一样）。支持 Chrome / Edge / Brave / Chromium，全程只发往门户本身。
-
 - **更新**（设置 → 通用）：`build.sh` 把源码目录和 commit 记进 app。QuotaBar 启动后和每 6 小时在这个 git 目录里 `git fetch` 一次 `quotabar-stable` 分支（CI 在 Mac 上编译、测试都通过后才移动它），有改到 app 的新提交就快进并运行 `./build.sh --install`，约 1 分钟后自动重开；编译失败则原来的版本照用，日志在 `~/Library/Logs/QuotaBar/update.log`。用的是这个 git 目录自己的登录凭据，仓库私有也可以。可关掉「自动更新」，改为手动点「更新」。源码目录有本地改动挡住时不更新。
 - **目录**：设置最下面可改 Claude Code 目录（默认 `~/.claude`，或 `CLAUDE_CONFIG_DIR`）和 Desktop 目录（默认 `~/Library/Application Support/Claude-3p`），留空即自动识别。
 
