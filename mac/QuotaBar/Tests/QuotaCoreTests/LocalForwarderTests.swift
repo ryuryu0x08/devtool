@@ -240,7 +240,42 @@ final class LocalForwarderTests: XCTestCase {
     XCTAssertFalse(LocalForwarder.needed(for: "https://api.example.com"))
     XCTAssertFalse(LocalForwarder.needed(for: "http://127.0.0.1:8080"))
     XCTAssertFalse(LocalForwarder.needed(for: "http://localhost/api"))
-    XCTAssertThrowsError(try LocalForwarder(target: URL(string: "https://x/api")!))
+    XCTAssertNoThrow(try LocalForwarder(target: URL(string: "https://x/api")!))
+    XCTAssertThrowsError(try LocalForwarder(target: URL(string: "ftp://x/api")!))
+  }
+
+  func testWithAKeyItGoesInPlaceOfTheClients() throws {
+    let f = try LocalForwarder(target: URL(string: "https://api.example/api")!)
+    f.key = "sk-now"
+    XCTAssertEqual(f.rewrite("POST /v1/messages HTTP/1.1\r\nauthorization: Bearer sk-desktop\r\nX-Api-Key: sk-desktop\r\nContent-Length: 2"),
+                   "POST /api/v1/messages HTTP/1.1\r\nContent-Length: 2\r\nAuthorization: Bearer sk-now\r\nHost: api.example\r\nUser-Agent: QuotaBar\r\nConnection: close\r\n\r\n")
+    // A request with no key of its own gets it too.
+    XCTAssertEqual(f.rewrite("GET /v1/models HTTP/1.1"),
+                   "GET /api/v1/models HTTP/1.1\r\nAuthorization: Bearer sk-now\r\nHost: api.example\r\nUser-Agent: QuotaBar\r\nConnection: close\r\n\r\n")
+    f.key = ""
+    XCTAssertNil(f.key)
+  }
+
+  func testTheKeyChangesBetweenRequestsWithNoRestart() async throws {
+    let up = Upstream()
+    up.keepAlive = true
+    try await up.start()
+    let f = try LocalForwarder(target: URL(string: "http://127.0.0.1:\(up.port)/api")!)
+    let port = try await f.start(preferred: 47960)
+    defer { f.stop() }
+    func ask() async throws {
+      var req = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/v1/models")!)
+      req.setValue("Bearer sk-desktop", forHTTPHeaderField: "Authorization")
+      let (_, resp) = try await URLSession.shared.data(for: req)
+      XCTAssertEqual((resp as? HTTPURLResponse)?.statusCode, 200)
+    }
+    try await ask()
+    f.key = "sk-a"
+    try await ask()
+    f.key = "sk-b"
+    try await ask()
+    let auth = up.heads.map { $0.components(separatedBy: "\r\n").filter { $0.lowercased().hasPrefix("authorization:") } }
+    XCTAssertEqual(auth, [["Authorization: Bearer sk-desktop"], ["Authorization: Bearer sk-a"], ["Authorization: Bearer sk-b"]])
   }
 
   func testTheHeadIsRewritten() throws {

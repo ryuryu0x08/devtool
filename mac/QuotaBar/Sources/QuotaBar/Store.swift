@@ -47,6 +47,10 @@ struct Config: Codable, Equatable {
   /// Desktop's configuration that was applied before the sign-in was chosen: applied again on
   /// the way back to the gateway.
   var desktopPrevious: String?
+  /// Desktop goes through the forwarder, which sends the key of `desktopPerson`: switching
+  /// changes it there, with no restart of Desktop.
+  var swapKeys = false
+  var desktopPerson: String?
   /// Read the rotating key from the browser's cookies (the portal's proxy-usage endpoint).
   var cookieSync = false
   /// Which browser to read the cookies from (a ChromeCookies.Browser name).
@@ -66,7 +70,7 @@ struct Config: Codable, Equatable {
   init() {}
 
   private enum CodingKeys: String, CodingKey {
-    case url, interval, people, retired, settingsPath, claudeDir, desktopDir, baseURL, desktopRestart, forward, forwardPort, ours, desktopPrevious, cookieSync, cookieBrowser, cookieURL, keys
+    case url, interval, people, retired, settingsPath, claudeDir, desktopDir, baseURL, desktopRestart, forward, forwardPort, ours, desktopPrevious, swapKeys, desktopPerson, cookieSync, cookieBrowser, cookieURL, keys
   }
   private struct OldKey: Decodable { var id: String; var key: String }
 
@@ -87,6 +91,8 @@ struct Config: Codable, Equatable {
     forwardPort = try c.decodeIfPresent(Int.self, forKey: .forwardPort) ?? Int(LocalForwarder.defaultPort)
     ours = try c.decodeIfPresent([String].self, forKey: .ours) ?? []
     desktopPrevious = try c.decodeIfPresent(String.self, forKey: .desktopPrevious)
+    swapKeys = try c.decodeIfPresent(Bool.self, forKey: .swapKeys) ?? false
+    desktopPerson = try c.decodeIfPresent(String.self, forKey: .desktopPerson)
     cookieSync = try c.decodeIfPresent(Bool.self, forKey: .cookieSync) ?? false
     cookieBrowser = try c.decodeIfPresent(String.self, forKey: .cookieBrowser) ?? ChromeCookies.chrome.name
     let cu = try c.decodeIfPresent(String.self, forKey: .cookieURL) ?? ""
@@ -114,6 +120,8 @@ struct Config: Codable, Equatable {
     try c.encode(forwardPort, forKey: .forwardPort)
     try c.encode(ours, forKey: .ours)
     try c.encodeIfPresent(desktopPrevious, forKey: .desktopPrevious)
+    try c.encode(swapKeys, forKey: .swapKeys)
+    try c.encodeIfPresent(desktopPerson, forKey: .desktopPerson)
     try c.encode(cookieSync, forKey: .cookieSync)
     try c.encode(cookieBrowser, forKey: .cookieBrowser)
     try c.encode(cookieURL, forKey: .cookieURL)
@@ -267,28 +275,67 @@ final class Store {
     Task { await startForwarder() }
   }
 
-  /// (Re)starts the forwarder as the config says, on the port it had (or the next free one).
-  func startForwarder() async {
+  /// The forwarder runs: Desktop needs it for an http model API, or it swaps the keys.
+  var forwardWanted: Bool { config.swapKeys || config.forward && forwardNeeded }
+
+  /// The key the forwarder sends (swapping keys only).
+  var forwarderKey: String? {
+    guard config.swapKeys else { return nil }
+    return people.first { $0.id == config.desktopPerson && !$0.key.isEmpty }?.key
+  }
+
+  /// The person whose key Desktop uses through the forwarder.
+  var desktopPersonNow: Person? { config.swapKeys ? people.first { $0.id == config.desktopPerson } : nil }
+
+  /// Desktop is on the running forwarder, which sends the key: a switch needs no restart.
+  var desktopViaForwarder: Bool {
+    guard config.swapKeys, case .on(let u) = forwardState, case .gateway(_, let cur) = ClaudeDesktop.status(dir: config.desktopLibrary) else { return false }
+    return ClaudeSettings.sameURL(cur, u)
+  }
+
+  /// Swapping keys on: Desktop goes through the forwarder (one restart, to read the new address),
+  /// which keeps the key Desktop has now. Off: Desktop gets that key in its own configuration.
+  func setSwapKeys(_ on: Bool) {
+    if on {
+      var who: Person?
+      if case .gateway(let k?, _) = ClaudeDesktop.status(dir: config.desktopLibrary) { who = people.first { $0.key == k } }
+      config.desktopPerson = (who ?? active ?? people.first { !$0.key.isEmpty })?.id
+      config.swapKeys = true
+      saveConfig()
+      Task { await startForwarder() }
+    } else {
+      let key = forwarderKey
+      config.swapKeys = false
+      saveConfig()
+      Task { await startForwarder(desktopKey: key) }
+    }
+  }
+
+  /// (Re)starts the forwarder as the config says, on the port it had (or the next free one);
+  /// Desktop is put on its address (or back), and given `desktopKey` if there is one.
+  func startForwarder(desktopKey: String? = nil) async {
     forwarder?.stop()
     forwarder = nil
-    guard config.forward, forwardNeeded, let target = URL(string: config.baseURL.trimmingCharacters(in: .whitespaces)) else {
+    guard forwardWanted, let target = URL(string: config.baseURL.trimmingCharacters(in: .whitespaces)) else {
       forwardState = .off
-      syncDesktopAddress()
+      syncDesktopAddress(key: desktopKey)
       return
     }
     forwardState = .starting
     do {
       let f = try LocalForwarder(target: target)
       f.log = { ForwardLog.write($0) }
+      f.key = forwarderKey
       let p = try await f.start(preferred: UInt16(clamping: config.forwardPort))
       forwarder = f
       config.forwardPort = Int(p)
       remember(LocalForwarder.url(port: p))
       saveConfig()
       withAnimation(.snappy) { forwardState = .on(LocalForwarder.url(port: p)) }
-      syncDesktopAddress()
+      syncDesktopAddress(key: desktopKey)
     } catch {
       config.forward = false
+      config.swapKeys = false
       saveConfig()
       withAnimation(.snappy) { forwardState = .failed(error.localizedDescription) }
     }
@@ -301,15 +348,16 @@ final class Store {
 
   /// Desktop is on one of our addresses, not the one it is to use (the forwarder moved, was
   /// turned on or off): put it right without asking.
-  private func syncDesktopAddress() {
+  private func syncDesktopAddress(key: String? = nil) {
     guard case .gateway(_, let current) = ClaudeDesktop.status(dir: config.desktopLibrary) else { return }
     let want = desktopWant
-    guard DesktopURL.change(current: current, want: want, ours: config.ours + [config.baseURL]) == .replace else { return }
+    let move = DesktopURL.change(current: current, want: want, ours: config.ours + [config.baseURL]) == .replace
+    guard move || key != nil else { return }
     do {
-      guard try ClaudeDesktop.switchKey(nil, baseURL: want, dir: config.desktopLibrary) == .written else { return }
-      remember(want)
+      guard try ClaudeDesktop.switchKey(key, baseURL: move ? want : nil, dir: config.desktopLibrary) == .written else { return }
+      if move { remember(want) }
       saveConfig()
-      notice = Notice(text: "Desktop 已改用 \(want)" + (desktopRunning ? "，重启后生效" : ""))
+      notice = Notice(text: (move ? "Desktop 已改用 \(want)" : "Desktop 的 key 已更新") + (desktopRunning ? "，重启后生效" : ""))
       if desktopRunning { afterDesktopChanged() }
     } catch {
       notice = Notice(text: "Desktop 地址未改：" + error.localizedDescription, bad: true)
@@ -339,6 +387,7 @@ final class Store {
         let want = desktopWant
         try ClaudeDesktop.useGateway(key: p.key, baseURL: want, root: config.desktopRoot, previous: config.desktopPrevious)
         remember(want)
+        if config.swapKeys { config.desktopPerson = p.id }
         text = "Desktop 改用网关（\(p.label) 的 key）"
         if LocalForwarder.needed(for: want) && !want.hasPrefix("http://127.0.0.1") { text += "，需开本地转发" }
       } else {
@@ -375,7 +424,10 @@ final class Store {
     if let d = try? Data(contentsOf: historyFile), let h = try? dec.decode([Sample].self, from: d) { history = History.thin(h) }
   }
 
-  private func saveConfig() { write(config, to: configFile) }
+  private func saveConfig() {
+    write(config, to: configFile)
+    forwarder?.key = forwarderKey
+  }
   private func writeHistory() { write(history, to: historyFile) }
 
   private func write<T: Encodable>(_ v: T, to url: URL) {
@@ -513,7 +565,7 @@ final class Store {
     config.retired = Array((config.retired.filter { $0 != old } + [old]).suffix(50))
     let code = activeToken == old
     var desktop = false
-    if case .gateway(let k, _) = ClaudeDesktop.status(dir: config.desktopLibrary), k == old { desktop = true }
+    if case .gateway(let k, _) = ClaudeDesktop.status(dir: config.desktopLibrary), k == old, !desktopViaForwarder { desktop = true }
     guard code || desktop else { return }
     let name = people.first { $0.id == id }?.label ?? ""
     var problems: [String] = []
@@ -672,6 +724,11 @@ final class Store {
     }
     var desktopChanged = false
     switch desk {
+    case .gateway where desktopViaForwarder && desktopChange != .ask:
+      // The forwarder sends the key: changed there, at once.
+      config.desktopPerson = p.id
+      saveConfig()
+      parts.append("Desktop 已生效，无需重启")
     case .gateway:
       do {
         let wantURL = desktopChange == .replace || desktopChange == .ask && setURL ? desktopWant : nil

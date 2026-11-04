@@ -1,5 +1,7 @@
-// A forwarder on 127.0.0.1 to a plain-http model API: Claude Desktop accepts http only for this
-// machine, so it is pointed here and the forwarder passes each request on. One request per
+// A forwarder on 127.0.0.1 to the model API (http or https): Claude Desktop accepts http only for
+// this machine, so it is pointed here and the forwarder passes each request on. With `key` set,
+// that key goes with every request instead of the one Desktop sent: the key changes here at once,
+// with no restart of Desktop (which reads its own only at launch). One request per
 // connection, read whole (head and body); its head is rewritten (the API's path in front of the
 // path asked for, the API's Host, Connection: close), and so is the reply's (Connection: close, so
 // that a client keeping connections open doesn't send its next request down this one). The reply's
@@ -14,7 +16,7 @@ public final class LocalForwarder: @unchecked Sendable {
 
     public var errorDescription: String? {
       switch self {
-      case .notHTTP: return "转发只用于 http:// 地址"
+      case .notHTTP: return "转发只用于 http:// 或 https:// 地址"
       case .noPort(let p): return "端口 \(p) 起都被占用"
       }
     }
@@ -31,15 +33,26 @@ public final class LocalForwarder: @unchecked Sendable {
   public var log: (@Sendable (String) -> Void)?
   private let host: String
   private let targetPort: UInt16
+  private let tls: Bool
+  private let lock = NSLock()
+  private var _key: String?
+
+  /// The key sent with every request in place of the client's (nil: the client's as it is).
+  public var key: String? {
+    get { lock.lock(); defer { lock.unlock() }; return _key }
+    set { lock.lock(); _key = newValue.flatMap { $0.isEmpty ? nil : $0 }; lock.unlock() }
+  }
   private let prefix: String
   private let queue = DispatchQueue(label: "QuotaBar.LocalForwarder")
   private var listener: NWListener?
 
   public init(target: URL) throws {
-    guard target.scheme?.lowercased() == "http", let h = target.host, !h.isEmpty else { throw Failure.notHTTP }
+    let scheme = target.scheme?.lowercased()
+    guard scheme == "http" || scheme == "https", let h = target.host, !h.isEmpty else { throw Failure.notHTTP }
     self.target = target
     host = h
-    targetPort = UInt16(target.port ?? 80)
+    tls = scheme == "https"
+    targetPort = UInt16(target.port ?? (tls ? 443 : 80))
     var p = target.path
     while p.hasSuffix("/") { p.removeLast() }
     prefix = p
@@ -235,11 +248,14 @@ public final class LocalForwarder: @unchecked Sendable {
     guard parts.count == 3, parts[1].hasPrefix("/") else { return nil }
     var out = ["\(parts[0]) \(prefix)\(parts[1]) \(parts[2])"]
     var left: [String] = []
+    let key = self.key
     for l in lines.dropFirst() where !l.isEmpty {
       let name = l.split(separator: ":", maxSplits: 1).first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+      if key != nil && name.lowercased() == "authorization" { continue }
       if Self.passed.contains(name.lowercased()) { out.append(l) } else { left.append(name) }
     }
-    out.append("Host: " + (targetPort == 80 ? host : "\(host):\(targetPort)"))
+    if let key { out.append("Authorization: Bearer " + key) }
+    out.append("Host: " + (targetPort == (tls ? 443 : 80) ? host : "\(host):\(targetPort)"))
     out.append("User-Agent: QuotaBar")
     out.append("Connection: close")
     if !left.isEmpty { log?("left out: " + left.joined(separator: ", ")) }
@@ -266,7 +282,7 @@ public final class LocalForwarder: @unchecked Sendable {
     // Straight to the API, as curl and the Python forwarder go: Network.framework would otherwise
     // follow the system's proxy (Clash and the like set one), sending this plain-server request
     // to a proxy, which answers it with an empty 400.
-    let params = NWParameters.tcp
+    let params = tls ? NWParameters(tls: NWProtocolTLS.Options(), tcp: NWProtocolTCP.Options()) : NWParameters.tcp
     params.preferNoProxies = true
     let up = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: targetPort)!, using: params)
     // The state handler runs on `queue` only.

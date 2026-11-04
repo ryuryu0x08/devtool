@@ -21,9 +21,7 @@ struct SettingsView: View {
         Section {
           TextField(text: $baseURL, prompt: Text(Config.defaultBaseURL)) { label("模型接口") }
             .font(.mono(12.5))
-          if LocalForwarder.needed(for: baseURL.isEmpty ? Config.defaultBaseURL : baseURL) {
-            ForwardRow()
-          }
+          ForwardRow(needed: LocalForwarder.needed(for: baseURL.isEmpty ? Config.defaultBaseURL : baseURL))
           TextField(text: $url, prompt: Text(Config.defaultURL)) { label("用量接口") }
             .font(.mono(12.5))
           // In a row of its own (label, value, arrows), so that all three sit in the middle.
@@ -186,16 +184,27 @@ private struct PersonKeyRow: View {
 /// Under an http model API: the local forwarder Desktop needs, shown on only once it runs.
 private struct ForwardRow: View {
   @Environment(Store.self) private var store
+  /// The model API is http (not this machine): Desktop can't reach it without the forwarder.
+  let needed: Bool
 
   var body: some View {
     VStack(alignment: .leading, spacing: 5) {
-      Toggle(isOn: Binding(get: { on }, set: { store.setForward($0) })) {
+      if needed {
+        Toggle(isOn: Binding(get: { on }, set: { store.setForward($0) })) {
+          HStack(spacing: 6) {
+            Text("本地转发").font(.ui(13))
+            if store.forwardState == .starting { ProgressView().controlSize(.mini) }
+          }
+        }
+        .disabled(store.forwardState == .starting || store.config.swapKeys)
+      }
+      Toggle(isOn: Binding(get: { store.config.swapKeys && on }, set: { store.setSwapKeys($0) })) {
         HStack(spacing: 6) {
-          Text("本地转发").font(.ui(13))
-          if store.forwardState == .starting { ProgressView().controlSize(.mini) }
+          Text("免重启切换").font(.ui(13))
+          if !needed && store.forwardState == .starting { ProgressView().controlSize(.mini) }
         }
       }
-      .disabled(store.forwardState == .starting)
+      .disabled(store.forwardState == .starting || store.people.allSatisfy(\.key.isEmpty))
       Group {
         switch store.forwardState {
         case .on(let u):
@@ -206,13 +215,16 @@ private struct ForwardRow: View {
               .buttonStyle(.link)
               .help(ForwardLog.url.path)
           }
+          if let p = store.desktopPersonNow {
+            Text("Desktop 用「\(p.label)」的 key，切换时在转发里换，不用重启").foregroundStyle(.secondary)
+          }
         case .failed(let why):
           Label { Text("启动失败：" + why) } icon: { Icon(.warning, size: 11) }
             .foregroundStyle(.orange)
         case .starting:
           Text("启动中…").foregroundStyle(.secondary)
         case .off:
-          Text("Desktop 只认 HTTPS 或本机 HTTP，不开可能用不了").foregroundStyle(.secondary)
+          Text(needed ? "Desktop 只认 HTTPS 或本机 HTTP，不开可能用不了" : "免重启切换：Desktop 经本地转发，key 在转发里换").foregroundStyle(.secondary)
         }
       }
       .font(.ui(11))

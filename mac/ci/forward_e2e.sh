@@ -108,3 +108,25 @@ check 47832
 echo "OK: 47831 taken, forwarder on 47832, Desktop followed without asking"
 grep -o '"forwardPort" : [0-9]*' "$DIR/config.json"
 grep -q '"inferenceGatewayApiKey":"__sealed__:v1:x"' "$TMP/desktop/configLibrary/$ID.json" && echo "OK: Desktop's key left as it was"
+quit
+kill $BUSY 2>/dev/null || true; BUSY=""
+
+# Swapping keys: the forwarder sends the chosen person's key (yy), not the one the client sent (ye).
+python3 - "$DIR" "$TMP" "$IP" <<'PY'
+import json, sys
+d, tmp, ip = sys.argv[1:]
+json.dump({"url": "http://127.0.0.1:9931/api/v1/billing/usage", "baseURL": f"http://{ip}:9931/api", "forward": True,
+           "swapKeys": True, "desktopPerson": "b", "forwardPort": 47831,
+           "people": [{"id": "a", "name": "ye", "key": "sk-demo-ye"}, {"id": "b", "name": "yy", "key": "sk-demo-yy"}],
+           "claudeDir": tmp + "/claude", "desktopDir": tmp + "/desktop"},
+          open(d + "/config.json", "w"))
+PY
+launch
+sleep 2
+for _ in $(seq 40); do curl -s -o /dev/null "http://127.0.0.1:47831/" && break; sleep 0.5; done
+out="$(curl -sS -m 10 -H 'Authorization: Bearer sk-demo-ye' "http://127.0.0.1:47831/v1/billing/usage")"
+echo "with swapping: $out"
+[[ "$out" == *'"nick_name": "yy"'* ]] || { echo "the forwarder did not send the chosen key"; cat "$TMP/app.log"; exit 1; }
+out="$(curl -sS -m 10 "http://127.0.0.1:47831/v1/billing/usage")"
+[[ "$out" == *'"nick_name": "yy"'* ]] || { echo "a request without a key did not get the chosen one: $out"; exit 1; }
+echo "OK: swapping keys, the forwarder sends the chosen person's key"
