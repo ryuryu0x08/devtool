@@ -218,7 +218,10 @@ final class Store {
     // Just after waking the network is often not back yet: a moment first, and again as soon
     // as the network is there (Wi-Fi joining, a VPN connecting).
     NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
-      Task { @MainActor in self?.restart(after: 3) }
+      Task { @MainActor in
+        self?.restart(after: 3)
+        await self?.checkForwarder()
+      }
     }
     network.pathUpdateHandler = { [weak self] path in
       guard path.status == .satisfied else { return }
@@ -325,10 +328,13 @@ final class Store {
 
   /// (Re)starts the forwarder as the config says, on the port it had (or the next free one);
   /// Desktop is put on its address (or back), and given `desktopKey` if there is one.
-  func startForwarder(desktopKey: String? = nil) async {
+  /// `again`: a restart of a forwarder that stopped by itself; if it fails, the settings stay on
+  /// (it is tried again at the next refresh) instead of being turned off.
+  func startForwarder(desktopKey: String? = nil, again: Bool = false) async {
     forwarder?.stop()
     forwarder = nil
     guard forwardWanted, let target = URL(string: config.baseURL.trimmingCharacters(in: .whitespaces)) else {
+      if forwardState != .off { ForwardLog.write("转发已关") }
       forwardState = .off
       syncDesktopAddress(key: desktopKey)
       return
@@ -338,18 +344,57 @@ final class Store {
       let f = try LocalForwarder(target: target)
       f.log = { ForwardLog.write($0) }
       f.key = forwarderKey
+      f.onStop = { [weak self, weak f] why in
+        Task { @MainActor in
+          guard let self, let f, self.forwarder === f else { return }
+          self.forwarderStopped(why)
+        }
+      }
       let p = try await f.start(preferred: UInt16(clamping: config.forwardPort))
+      // Shown as on only once it really answers there.
+      guard await Task.detached(operation: { LocalForwarder.accepting(p) }).value else {
+        f.stop()
+        throw LocalForwarder.Failure.notAnswering(p)
+      }
       forwarder = f
       config.forwardPort = Int(p)
       remember(LocalForwarder.url(port: p))
       saveConfig()
+      ForwardLog.write("转发已开：\(LocalForwarder.url(port: p)) → \(target.absoluteString)")
       withAnimation(.snappy) { forwardState = .on(LocalForwarder.url(port: p)) }
       syncDesktopAddress(key: desktopKey)
     } catch {
-      config.forward = false
-      config.swapKeys = false
-      saveConfig()
+      ForwardLog.write("转发没能启动：\(error.localizedDescription)")
+      if !again {
+        config.forward = false
+        config.swapKeys = false
+        saveConfig()
+      }
       withAnimation(.snappy) { forwardState = .failed(error.localizedDescription) }
+    }
+  }
+
+  /// The forwarder stopped by itself (the system ended its listener): started again at once.
+  private func forwarderStopped(_ why: String) {
+    ForwardLog.write("转发停了（\(why)），重新启动")
+    Task { await startForwarder(again: true) }
+  }
+
+  /// Checks that the forwarder, if it is to run, really answers on its port (at each refresh,
+  /// after waking, when the network comes back); starts it again if not.
+  func checkForwarder() async {
+    switch forwardState {
+    case .on:
+      guard let p = forwarder?.port else { return forwarderStopped("没有在运行") }
+      if !(await Task.detached(operation: { LocalForwarder.accepting(p) }).value) {
+        // Still the same one, and still on (nothing restarted it meanwhile).
+        guard case .on = forwardState, forwarder?.port == p else { return }
+        forwarderStopped("端口 \(p) 连不上")
+      }
+    case .failed where forwardWanted:
+      await startForwarder(again: true)
+    default:
+      break
     }
   }
 
@@ -523,6 +568,7 @@ final class Store {
 
   /// The network is there again: read now if readings failed for want of it.
   private func networkBack() {
+    Task { await checkForwarder() }
     if failures.values.contains(where: { $0.kind == .network }) { restart() }
   }
 
@@ -534,6 +580,7 @@ final class Store {
   }
 
   func refresh() async {
+    await checkForwarder()
     readSettings()
     adoptClaudeKey()
     guard !refreshing, let url = usageURL else { return }

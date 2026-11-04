@@ -13,11 +13,13 @@ public final class LocalForwarder: @unchecked Sendable {
   public enum Failure: Error, Equatable, LocalizedError {
     case notHTTP
     case noPort(UInt16)
+    case notAnswering(UInt16)
 
     public var errorDescription: String? {
       switch self {
       case .notHTTP: return "转发只用于 http:// 或 https:// 地址"
       case .noPort(let p): return "端口 \(p) 起都被占用"
+      case .notAnswering(let p): return "端口 \(p) 开了但连不上"
       }
     }
   }
@@ -31,6 +33,9 @@ public final class LocalForwarder: @unchecked Sendable {
   public var connectTimeout: TimeInterval = 15
   /// Told what happens to each request (for the app's log).
   public var log: (@Sendable (String) -> Void)?
+  /// Told (on the forwarder's queue) when the listener stops by itself after it started (the
+  /// system ended it, e.g. around sleep): the port no longer answers. Not called for `stop()`.
+  public var onStop: (@Sendable (String) -> Void)?
   private let host: String
   private let targetPort: UInt16
   private let tls: Bool
@@ -45,6 +50,8 @@ public final class LocalForwarder: @unchecked Sendable {
   private let prefix: String
   private let queue = DispatchQueue(label: "QuotaBar.LocalForwarder")
   private var listener: NWListener?
+  /// Set by `stop()` for the listener it ends, so that its ending isn't taken for a failure.
+  private var stopping = Flag()
 
   public init(target: URL) throws {
     let scheme = target.scheme?.lowercased()
@@ -90,6 +97,7 @@ public final class LocalForwarder: @unchecked Sendable {
   }
 
   public func stop() {
+    stopping.set()
     listener?.cancel()
     listener = nil
     port = nil
@@ -113,17 +121,41 @@ public final class LocalForwarder: @unchecked Sendable {
     return r == 0
   }
 
+  /// Something accepts connections on 127.0.0.1:`p` (a forwarder that really runs there).
+  public static func accepting(_ p: UInt16) -> Bool {
+    let s = socket(AF_INET, SOCK_STREAM, 0)
+    guard s >= 0 else { return false }
+    defer { Darwin.close(s) }
+    var a = sockaddr_in()
+    a.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+    a.sin_family = sa_family_t(AF_INET)
+    a.sin_port = p.bigEndian
+    a.sin_addr.s_addr = inet_addr("127.0.0.1")
+    let r = withUnsafePointer(to: &a) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.connect(s, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) } }
+    return r == 0
+  }
+
   private func listen(on p: UInt16) async -> NWListener? {
     let params = NWParameters.tcp
     params.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: p)!)
     guard let l = try? NWListener(using: params) else { return nil }
     l.newConnectionHandler = { [weak self] c in self?.handle(c) }
+    let stopping = Flag()
+    self.stopping = stopping
     return await withCheckedContinuation { (k: CheckedContinuation<NWListener?, Never>) in
       // The state handler runs on `queue` only; this is set once there.
       let once = Once()
-      l.stateUpdateHandler = { s in
+      let started = Flag()
+      l.stateUpdateHandler = { [weak self] s in
         switch s {
-        case .ready: if once.first() { k.resume(returning: l) }
+        case .ready:
+          started.set()
+          if once.first() { k.resume(returning: l) }
+        case .failed(let e) where started.isSet:
+          l.cancel()
+          if !stopping.isSet { stopping.set(); self?.onStop?("监听出错：\(e.localizedDescription)") }
+        case .cancelled where started.isSet:
+          if !stopping.isSet { stopping.set(); self?.onStop?("监听被系统关闭") }
         case .failed, .cancelled, .waiting: if once.first() { l.cancel(); k.resume(returning: nil) }
         default: break
         }
@@ -384,6 +416,14 @@ public final class LocalForwarder: @unchecked Sendable {
     let head = "HTTP/1.1 \(status) \(status == 502 ? "Bad Gateway" : "Bad Request")\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n"
     c.send(content: Data(head.utf8) + body, contentContext: .finalMessage, isComplete: true, completion: .contentProcessed { _ in c.cancel() })
   }
+}
+
+/// Set once, read from any thread.
+private final class Flag: @unchecked Sendable {
+  private let lock = NSLock()
+  private var v = false
+  func set() { lock.lock(); v = true; lock.unlock() }
+  var isSet: Bool { lock.lock(); defer { lock.unlock() }; return v }
 }
 
 /// True the first time only (used from one serial queue).

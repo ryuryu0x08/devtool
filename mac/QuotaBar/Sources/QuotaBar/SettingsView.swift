@@ -219,7 +219,7 @@ private struct ForwardRow: View {
             Text("Desktop 用「\(p.label)」的 key，切换时在转发里换，不用重启").foregroundStyle(.secondary)
           }
         case .failed(let why):
-          Label { Text("启动失败：" + why) } icon: { Icon(.warning, size: 11) }
+          Label { Text("启动失败：" + why + (store.forwardWanted ? "，会自动重试" : "")) } icon: { Icon(.warning, size: 11) }
             .foregroundStyle(.orange)
         case .starting:
           Text("启动中…").foregroundStyle(.secondary)

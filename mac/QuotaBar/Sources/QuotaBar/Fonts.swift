@@ -161,6 +161,11 @@ final class TextSize {
       d.set(old - 1, forKey: "textSizeBump")
     }
     d.set(true, forKey: "textSizeV2")
+    // Back to the standard size once (sizes left over from the older steps were off).
+    if !d.bool(forKey: "textSizeV3") {
+      d.removeObject(forKey: "textSizeBump")
+      d.set(true, forKey: "textSizeV3")
+    }
     bump = (d.object(forKey: "textSizeBump") as? Double).map { CGFloat($0) } ?? TextSize.standard
   }
 

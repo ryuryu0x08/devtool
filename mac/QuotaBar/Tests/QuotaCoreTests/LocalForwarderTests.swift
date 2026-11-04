@@ -235,6 +235,21 @@ final class LocalForwarderTests: XCTestCase {
     f.stop()
   }
 
+  /// What the app checks before showing the forwarder as on, and at each refresh after.
+  func testItAnswersWhileRunningAndStoppingItIsNotTakenForAFailure() async throws {
+    let f = try LocalForwarder(target: URL(string: "http://127.0.0.1:9/api")!)
+    let stops = Counter()
+    f.onStop = { _ in stops.add() }
+    let p = try await f.start(preferred: 48110)
+    XCTAssertTrue(LocalForwarder.accepting(p))
+    _ = try await f.start(preferred: p)
+    XCTAssertTrue(LocalForwarder.accepting(p))
+    f.stop()
+    try await Task.sleep(for: .milliseconds(500))
+    XCTAssertFalse(LocalForwarder.accepting(p))
+    XCTAssertEqual(stops.n, 0)
+  }
+
   func testWhenItIsNeeded() {
     XCTAssertTrue(LocalForwarder.needed(for: "http://api-ai-coding.bilibili.co/api"))
     XCTAssertFalse(LocalForwarder.needed(for: "https://api.example.com"))
@@ -296,4 +311,11 @@ final class LocalForwarderTests: XCTestCase {
     XCTAssertEqual(DesktopURL.change(current: "https://other.example", want: "http://127.0.0.1:47832", ours: ours), .ask)
     XCTAssertEqual(DesktopURL.change(current: nil, want: "http://127.0.0.1:47832", ours: ours), .ask)
   }
+}
+
+private final class Counter: @unchecked Sendable {
+  private let lock = NSLock()
+  private var v = 0
+  func add() { lock.lock(); v += 1; lock.unlock() }
+  var n: Int { lock.lock(); defer { lock.unlock() }; return v }
 }
