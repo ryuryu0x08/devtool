@@ -72,6 +72,25 @@ final class SourceUpdateTests: XCTestCase {
     XCTAssertThrowsError(try app.newer(than: "HEAD"))
   }
 
+  func testTheShellsVariablesAreReadBetweenTheMarksOnly() {
+    let m = ShellEnv.mark
+    let out = "Welcome!\nSSH_AUTH_SOCK=/junk\n\n\(m)\nSSH_AUTH_SOCK=/tmp/agent.sock\nHOME=/Users/x\nhttps_proxy=http://127.0.0.1:7890\nGIT_SSH_COMMAND=\nPATH=/opt/homebrew/bin:/usr/bin\n\n\(m)\nbye\n"
+    XCTAssertEqual(ShellEnv.parse(out), [
+      "SSH_AUTH_SOCK": "/tmp/agent.sock",
+      "https_proxy": "http://127.0.0.1:7890",
+      "PATH": "/opt/homebrew/bin:/usr/bin",
+    ])
+    XCTAssertEqual(ShellEnv.parse("no marks"), [:])
+  }
+
+  func testExtraVariablesReachTheCommand() throws {
+    XCTAssertEqual(try SourceUpdate.run(["bash", "-c", "printf %s \"$SSH_AUTH_SOCK\""], in: dir, timeout: 10, extra: ["SSH_AUTH_SOCK": "/tmp/a.sock"]), "/tmp/a.sock")
+    // The real shell gives something back (PATH at least) and doesn't hang.
+    let start = Date()
+    XCTAssertNotNil(ShellEnv.values["PATH"])
+    XCTAssertLessThan(Date().timeIntervalSince(start), 12)
+  }
+
   func testATimeoutStopsTheCommand() throws {
     let start = Date()
     XCTAssertThrowsError(try SourceUpdate.run(["sleep", "10"], in: dir, timeout: 0.5))

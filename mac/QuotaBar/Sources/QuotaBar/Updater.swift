@@ -81,7 +81,7 @@ final class Updater {
       return
     }
     state = .checking
-    let u = SourceUpdate(dir: source)
+    let u = SourceUpdate(dir: source, shellEnv: true)
     do {
       let r = try await Task.detached { try u.newer(than: commit) }.value
       lastCheck = Date()
@@ -89,6 +89,8 @@ final class Updater {
       if r.count > 0 && install { await self.install() }
     } catch {
       state = .failed("检查失败：" + error.localizedDescription)
+      let agent = await Task.detached { ShellEnv.values["SSH_AUTH_SOCK"] != nil }.value
+      LogFile("update.log").write("检查失败（\(source.path)，终端里的 ssh agent：\(agent ? "已读到" : "没读到")）：" + error.localizedDescription)
     }
   }
 
@@ -97,7 +99,7 @@ final class Updater {
   func install() async {
     guard let source, state != .installing else { return }
     state = .installing
-    let u = SourceUpdate(dir: source)
+    let u = SourceUpdate(dir: source, shellEnv: true)
     let log = Self.log
     do {
       try await Task.detached { try u.fastForward() }.value

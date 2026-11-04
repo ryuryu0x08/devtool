@@ -7,8 +7,14 @@ public struct SourceUpdate: Sendable {
   public static let branch = "quotabar-stable"
   /// The folder build.sh is in (mac/QuotaBar inside the clone).
   public let dir: URL
+  /// git runs with what the user's shell sets (its ssh agent, proxy, PATH): an app opened from
+  /// Finder doesn't have them, and git over ssh then has no key ("Permission denied (publickey)").
+  public var shellEnv: Bool
 
-  public init(dir: URL) { self.dir = dir }
+  public init(dir: URL, shellEnv: Bool = false) {
+    self.dir = dir
+    self.shellEnv = shellEnv
+  }
 
   public struct Failed: Error, LocalizedError, Equatable {
     public let message: String
@@ -35,18 +41,19 @@ public struct SourceUpdate: Sendable {
 
   @discardableResult
   public func git(_ args: [String], timeout: TimeInterval = 30) throws -> String {
-    try Self.run(["git"] + args, in: dir, timeout: timeout)
+    try Self.run(["git"] + args, in: dir, timeout: timeout, extra: shellEnv ? ShellEnv.values : [:])
   }
 
   /// Runs a command (found on the usual paths; an app opened from Finder has a short PATH),
   /// without prompts: git fails rather than wait for a password nobody can type.
   @discardableResult
-  public static func run(_ cmd: [String], in dir: URL, timeout: TimeInterval, log: URL? = nil) throws -> String {
+  public static func run(_ cmd: [String], in dir: URL, timeout: TimeInterval, log: URL? = nil, extra: [String: String] = [:]) throws -> String {
     let p = Process()
     p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
     p.arguments = cmd
     p.currentDirectoryURL = dir
     var env = ProcessInfo.processInfo.environment
+    env.merge(extra) { _, new in new }
     env["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin" + (env["PATH"].map { ":" + $0 } ?? "")
     env["GIT_TERMINAL_PROMPT"] = "0"
     env["GIT_SSH_COMMAND"] = env["GIT_SSH_COMMAND"] ?? "ssh -o BatchMode=yes"
@@ -95,6 +102,37 @@ public struct SourceUpdate: Sendable {
     private var d = Data()
     func append(_ x: Data) { lock.lock(); d.append(x); lock.unlock() }
     var data: Data { lock.lock(); defer { lock.unlock() }; return d }
+  }
+}
+
+/// What the user's login shell sets that git needs (read once, from `$SHELL -l -i`): the ssh
+/// agent (keys added with ssh-add in a terminal, or another agent set up in .zshrc), the proxy,
+/// PATH, git's own ssh setting.
+public enum ShellEnv {
+  static let wanted: Set<String> = [
+    "SSH_AUTH_SOCK", "SSH_AGENT_PID", "PATH", "GIT_SSH", "GIT_SSH_COMMAND",
+    "http_proxy", "https_proxy", "all_proxy", "no_proxy", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
+  ]
+  static let mark = "__QUOTABAR_ENV__"
+
+  public static let values: [String: String] = {
+    let shell = ProcessInfo.processInfo.environment["SHELL"].flatMap { $0.isEmpty ? nil : $0 } ?? "/bin/zsh"
+    let out = try? SourceUpdate.run([shell, "-l", "-i", "-c", "printf '\\n\(mark)\\n'; /usr/bin/env; printf '\\n\(mark)\\n'"], in: FileManager.default.homeDirectoryForCurrentUser, timeout: 10)
+    return parse(out ?? "")
+  }()
+
+  /// The wanted, non-empty variables printed between the two marks (what the shell's startup
+  /// files print around them is left out).
+  static func parse(_ out: String) -> [String: String] {
+    let parts = out.components(separatedBy: "\n" + mark + "\n")
+    guard parts.count >= 3 else { return [:] }
+    var r: [String: String] = [:]
+    for line in parts[1].split(separator: "\n") {
+      guard let eq = line.firstIndex(of: "=") else { continue }
+      let k = String(line[..<eq]), v = String(line[line.index(after: eq)...])
+      if wanted.contains(k) && !v.isEmpty { r[k] = v }
+    }
+    return r
   }
 }
 
