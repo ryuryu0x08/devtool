@@ -104,7 +104,7 @@ final class Updater {
       return
     }
     do {
-      try await Task.detached { try SourceUpdate.run(["bash", "build.sh", "--install"], in: source, timeout: 900, log: log) }.value
+      _ = try await Task.detached { try SourceUpdate.run(["bash", "build.sh", "--install"], in: source, timeout: 900, log: log) }.value
       // build.sh quits this app before installing; reaching here means it didn't.
       state = .upToDate
     } catch {
