@@ -4,6 +4,7 @@
 import AppKit
 import Foundation
 import Observation
+import Network
 import QuotaCore
 import SwiftUI
 
@@ -167,6 +168,10 @@ final class Store {
   private(set) var config = Config()
   /// The failures of the last refresh, by person.
   private(set) var failures: [String: Failure] = [:]
+  /// Since when each person's readings have been failing (none: the last one was good).
+  private(set) var failingSince: [String: Date] = [:]
+  @ObservationIgnored private let network = NWPathMonitor()
+  @ObservationIgnored private var lastCookieKick: Date?
   private(set) var history: [Sample] = []
   private(set) var lastRefresh: Date?
   private(set) var refreshing = false
@@ -210,9 +215,16 @@ final class Store {
     restart()
     startCookieLoop()
     Task { await startForwarder() }
+    // Just after waking the network is often not back yet: a moment first, and again as soon
+    // as the network is there (Wi-Fi joining, a VPN connecting).
     NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
-      Task { @MainActor in self?.restart() }
+      Task { @MainActor in self?.restart(after: 3) }
     }
+    network.pathUpdateHandler = { [weak self] path in
+      guard path.status == .satisfied else { return }
+      Task { @MainActor in self?.networkBack() }
+    }
+    network.start(queue: .main)
   }
 
   var people: [Person] { config.people }
@@ -412,6 +424,7 @@ final class Store {
   func remove(_ p: Person) {
     config.people.removeAll { $0.id == p.id }
     failures[p.id] = nil
+    failingSince[p.id] = nil
     history.removeAll { $0.key == p.id }
     saveConfig()
     writeHistory()
@@ -489,9 +502,10 @@ final class Store {
 
   /// Refreshes now and then every `interval` seconds; after a reading failed for a reason other
   /// than the key (the network, the API), again after 15 seconds.
-  func restart() {
+  func restart(after delay: TimeInterval = 0) {
     loop?.cancel()
     loop = Task { [weak self] in
+      if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
       while !Task.isCancelled {
         guard let self else { return }
         await self.refresh()
@@ -499,6 +513,24 @@ final class Store {
         try? await Task.sleep(for: .seconds(soon ? min(15, max(10, self.config.interval)) : max(10, self.config.interval)))
       }
     }
+  }
+
+  /// Worth the "!" in the menu bar for `p` (see Failure.worthBar).
+  func troubleInBar(_ p: Person) -> Bool {
+    guard let f = failures[p.id] else { return p.key.isEmpty }
+    return f.worthBar(hasReading: p.lastGood != nil, failingFor: Date().timeIntervalSince(failingSince[p.id] ?? Date()))
+  }
+
+  /// The network is there again: read now if readings failed for want of it.
+  private func networkBack() {
+    if failures.values.contains(where: { $0.kind == .network }) { restart() }
+  }
+
+  /// A key was turned down: the cookie sync, if on, fetches the new one now (once a minute at most).
+  private func kickCookieSync() {
+    guard config.cookieSync, lastCookieKick.map({ Date().timeIntervalSince($0) > 60 }) ?? true else { return }
+    lastCookieKick = Date()
+    Task { await syncFromCookies(interactive: false) }
   }
 
   func refresh() async {
@@ -543,16 +575,25 @@ final class Store {
     switch reply {
     case .failed(let f, _):
       failures[id] = f
+      if failingSince[id] == nil { failingSince[id] = at }
+      let name = people.first(where: { $0.id == id })?.label ?? id
+      RefreshLog.write(name + ": " + f.kind.rawValue + " " + f.detail)
+      // A rotated key: the portal has the new one (when the cookie sync is on).
+      if f.kind == .keyRejected { kickCookieSync() }
       return nil
     case .ok(let q, let title):
       failures[id] = nil
+      if failingSince[id] != nil { RefreshLog.write((people.first(where: { $0.id == id })?.label ?? id) + ": ok again") }
+      failingSince[id] = nil
       guard let b = People.bind(id: id, name: title ?? "", reading: GoodReading(at: at, usage: q), in: &config.people) else { return nil }
       if let m = b.merged {
         // The entry the key came in on is gone: its points are the person's.
         for i in history.indices where history[i].key == m { history[i].key = b.id }
         failures[m] = nil
+        failingSince[m] = nil
       }
       failures[b.id] = nil
+      failingSince[b.id] = nil
       if let old = b.replaced { replaced(old, by: key, for: b.id) }
       history = History.thin(history + [Sample(t: at, key: b.id, daily: q.daily, over: q.over, pool: q.pool)], now: at)
       return b
@@ -659,6 +700,12 @@ final class Store {
       }
       saveConfig()
       writeHistory()
+      if before != token {
+        // The reading that failed was of the old key: read the new one now.
+        failures[b.id] = nil
+        failingSince[b.id] = nil
+        Task { await self.refresh() }
+      }
       if b.replaced == nil && notice?.bad != true {
         if before == token { if interactive { notice = Notice(text: "「\(name)」的 key 已是最新") } }
         else { notice = Notice(text: "Cookie 同步：已添加「\(name)」") }
@@ -794,16 +841,19 @@ final class Store {
   }
 }
 
-/// The forwarder's log: ~/Library/Logs/QuotaBar/forwarder.log (request lines, the names of the
-/// headers left out, reply statuses; no header values, so no keys). Kept under 1 MB.
-enum ForwardLog {
-  static let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/QuotaBar/forwarder.log")
-  private static let queue = DispatchQueue(label: "QuotaBar.ForwardLog")
+/// A log under ~/Library/Logs/QuotaBar, kept under 1 MB.
+struct LogFile: Sendable {
+  let url: URL
+  private static let queue = DispatchQueue(label: "QuotaBar.Log")
 
-  static func write(_ line: String) {
+  init(_ name: String) {
+    url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/QuotaBar/" + name)
+  }
+
+  func write(_ line: String) {
     let text = Date().formatted(.iso8601) + " " + line + "\n"
-    FileHandle.standardError.write(Data(("QuotaBar forwarder: " + line + "\n").utf8))
-    queue.async {
+    let url = self.url
+    Self.queue.async {
       let fm = FileManager.default
       try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
       if let size = try? fm.attributesOfItem(atPath: url.path)[.size] as? Int, size > 1_000_000 { try? fm.removeItem(at: url) }
@@ -814,4 +864,24 @@ enum ForwardLog {
       try? h.write(contentsOf: Data(text.utf8))
     }
   }
+}
+
+/// The forwarder's log: ~/Library/Logs/QuotaBar/forwarder.log (request lines, the names of the
+/// headers left out, reply statuses; no header values, so no keys).
+enum ForwardLog {
+  static let file = LogFile("forwarder.log")
+  static var url: URL { file.url }
+
+  static func write(_ line: String) {
+    FileHandle.standardError.write(Data(("QuotaBar forwarder: " + line + "\n").utf8))
+    file.write(line)
+  }
+}
+
+/// Failed readings and when they pass again: ~/Library/Logs/QuotaBar/refresh.log (the person's
+/// name and why; no keys).
+enum RefreshLog {
+  static let file = LogFile("refresh.log")
+  static var url: URL { file.url }
+  static func write(_ line: String) { file.write(line) }
 }

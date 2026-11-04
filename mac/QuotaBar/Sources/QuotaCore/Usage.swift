@@ -39,6 +39,16 @@ public struct Failure: Error, Equatable, Codable, Sendable {
   public var detail: String
 
   public init(_ kind: Kind, _ detail: String) { self.kind = kind; self.detail = detail }
+
+  /// How long the API may be unreachable (or erring) before the menu bar shows "!", while there
+  /// is a reading to show: a failed reading is tried again within 15 s, and most pass then.
+  public static let barGrace: TimeInterval = 120
+
+  /// Worth the "!" in the menu bar: the key was turned down, there is nothing else to show, or
+  /// the failing has gone on for `barGrace`.
+  public func worthBar(hasReading: Bool, failingFor: TimeInterval) -> Bool {
+    kind == .keyRejected || !hasReading || failingFor >= Self.barGrace
+  }
 }
 
 /// One key's reading: the numbers, or why there are none. `title` is the account's nick_name.

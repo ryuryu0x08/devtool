@@ -34,6 +34,7 @@ final class StatusBar: NSObject {
       popover.performClose(nil)
     } else if let b = item?.button {
       Store.shared.readSettings()
+      if let p = Store.shared.active, Store.shared.failures[p.id] != nil { Task { await Store.shared.refresh() } }
       popover.show(relativeTo: b.bounds, of: b, preferredEdge: .minY)
       popover.contentViewController?.view.window?.makeKey()
     }
@@ -61,12 +62,21 @@ final class StatusBar: NSObject {
 
   static func content(_ store: Store) -> (String, String?) {
     guard let p = store.active else { return ("gauge.with.dots.needle.50percent", nil) }
+    let g: GoodReading
     switch store.shown(p) {
-    case .failing, .noKey:
+    case .noKey:
       return ("exclamationmark.triangle", p.label)
+    case .failing(_, let last):
+      // A failed reading among good ones shows the last good one until it goes on (the panel
+      // and the dashboard say what failed).
+      guard let last, !store.troubleInBar(p) else { return ("exclamationmark.triangle", p.label) }
+      g = last
     case .waiting:
       return ("gauge.with.dots.needle.50percent", p.label)
-    case .ok(let g):
+    case .ok(let r):
+      g = r
+    }
+    do {
       let s = KeyState(g.usage)
       let symbol: String
       switch s.kind {

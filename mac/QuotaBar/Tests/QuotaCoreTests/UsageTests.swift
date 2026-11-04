@@ -128,4 +128,15 @@ final class TrendTests: XCTestCase {
     XCTAssertEqual(r.resets, [at(5)])
     XCTAssertEqual(Trend.runs([], gap: 900).points, [])
   }
+
+  func testWhenAFailureShowsInTheMenuBar() {
+    let net = Failure(.network, "x"), server = Failure(.server, "x"), key = Failure(.keyRejected, "x")
+    // One failed reading among good ones: not yet.
+    XCTAssertFalse(net.worthBar(hasReading: true, failingFor: 0))
+    XCTAssertFalse(server.worthBar(hasReading: true, failingFor: 119))
+    // Going on, or nothing else to show, or the key turned down: yes.
+    XCTAssertTrue(net.worthBar(hasReading: true, failingFor: Failure.barGrace))
+    XCTAssertTrue(net.worthBar(hasReading: false, failingFor: 0))
+    XCTAssertTrue(key.worthBar(hasReading: true, failingFor: 0))
+  }
 }
