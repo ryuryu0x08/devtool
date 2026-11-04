@@ -192,6 +192,14 @@ private struct ForwardRow: View {
       }
       .disabled(store.forwardState == .starting || store.people.allSatisfy(\.key.isEmpty))
       switch store.forwardState {
+      case .on where store.desktopOffForwarder != nil:
+        HStack(spacing: 8) {
+          Label { Text("Desktop 没有经本地转发（用的是 \(store.desktopOffForwarder ?? "")）") } icon: { Icon(.warning, size: 11) }
+            .foregroundStyle(.orange)
+          Button("改为本地转发") { store.pointDesktopAtForwarder() }
+            .buttonStyle(.link)
+        }
+        .font(.ui(11))
       case .on(let u) where store.desktopOnOldAddress:
         HStack(spacing: 8) {
           Label { Text("Desktop 还在用旧地址，重启后才经 " + u.replacingOccurrences(of: "http://", with: "")) } icon: { Icon(.warning, size: 11) }

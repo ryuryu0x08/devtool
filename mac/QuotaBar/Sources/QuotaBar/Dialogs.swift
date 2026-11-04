@@ -21,10 +21,10 @@ enum Dialogs {
   }
 
   /// Desktop got a new key: relaunch it now? And remember the answer?
-  static func restartDesktop() -> (now: Bool, remember: Bool) {
+  static func restartDesktop(why: String) -> (now: Bool, remember: Bool) {
     let a = NSAlert()
     a.messageText = "重启 Claude Desktop？"
-    a.informativeText = "Desktop 的改动重启后生效。"
+    a.informativeText = why + "。\n\nDesktop 只在启动时读取配置，重启后生效；正在进行的对话会中断。"
     a.addButton(withTitle: "重启")
     a.addButton(withTitle: "稍后")
     a.showsSuppressionButton = true

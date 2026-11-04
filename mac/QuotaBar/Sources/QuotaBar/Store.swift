@@ -361,8 +361,9 @@ final class Store {
           self.forwarderStopped(why)
         }
       }
-      await reclaimPort(UInt16(clamping: config.forwardPort))
-      let p = try await f.start(preferred: UInt16(clamping: config.forwardPort))
+      let preferred = UInt16(clamping: config.forwardPort)
+      await reclaimPort(preferred)
+      let p = try await f.start(preferred: preferred)
       // Shown as on only once it really answers there.
       guard await Task.detached(operation: { LocalForwarder.accepting(p) }).value else {
         f.stop()
@@ -374,15 +375,17 @@ final class Store {
       saveConfig()
       ForwardLog.write("转发已开：\(LocalForwarder.url(port: p)) → \(target.absoluteString)")
       withAnimation(.snappy) { forwardState = .on(LocalForwarder.url(port: p)) }
-      syncDesktopAddress(key: desktopKey)
+      syncDesktopAddress(key: desktopKey, taken: p != preferred ? preferred : nil)
     } catch {
       ForwardLog.write("转发没能启动：\(error.localizedDescription)")
+      withAnimation(.snappy) { forwardState = .failed(error.localizedDescription) }
       if !again {
         config.forward = false
         config.swapKeys = false
         saveConfig()
+        // Off now: Desktop, if it was on the forwarder's address, goes back to the model API.
+        syncDesktopAddress(key: desktopKey, failed: true)
       }
-      withAnimation(.snappy) { forwardState = .failed(error.localizedDescription) }
     }
   }
 
@@ -441,8 +444,10 @@ final class Store {
   }
 
   /// Desktop is on one of our addresses, not the one it is to use (the forwarder moved, was
-  /// turned on or off): put it right without asking.
-  private func syncDesktopAddress(key: String? = nil) {
+  /// turned on or off): put right, and said why (and asked about the restart Desktop needs).
+  /// `taken`: the port the forwarder wanted, held by another program. `failed`: the forwarder
+  /// couldn't start, so is off.
+  private func syncDesktopAddress(key: String? = nil, taken: UInt16? = nil, failed: Bool = false) {
     guard case .gateway(_, let current) = ClaudeDesktop.status(dir: config.desktopLibrary) else { return }
     let want = desktopWant
     let move = DesktopURL.change(current: current, want: want, ours: config.ours + [config.baseURL]) == .replace
@@ -454,12 +459,57 @@ final class Store {
         desktopAddressChangedAt = Date()
       }
       saveConfig()
-      notice = Notice(text: (move ? "Desktop 已改用 \(want)" : "Desktop 的 key 已更新") + (desktopRunning ? "，重启后生效" : ""))
-      if desktopRunning { afterDesktopChanged() }
+      readDesktop()
+      var why: [String] = []
+      if move {
+        let short = want.replacingOccurrences(of: "http://", with: "")
+        if case .on = forwardState {
+          if let taken { why.append("端口 \(taken) 被其他程序占用，本地转发改用 \(short)") }
+          else if current.map({ $0.contains("127.0.0.1") }) ?? false { why.append("本地转发的地址改为 \(short)") }
+          else { why.append("Desktop 改为经本地转发（\(short)）访问模型接口") }
+        } else {
+          why.append((failed ? "本地转发没能启动" : "本地转发已关闭") + "，Desktop 改回直连模型接口（\(want)）")
+        }
+      }
+      if let key {
+        let name = people.first { $0.key == key }.map { "「\($0.label)」的" } ?? ""
+        why.append("免重启切换已关闭，Desktop 改用配置里\(name) key")
+      }
+      changedDesktop(why.joined(separator: "；"))
     } catch {
       notice = Notice(text: "Desktop 地址未改：" + error.localizedDescription, bad: true)
     }
   }
+
+  /// Desktop is on the gateway but not on the running forwarder's address (one set elsewhere):
+  /// the settings offer to put it there.
+  var desktopOffForwarder: String? {
+    guard case .on(let u) = forwardState, case .gateway(let cur) = desktopMode, !ClaudeSettings.sameURL(cur, u) else { return nil }
+    return cur ?? "未设置"
+  }
+
+  /// Puts Desktop on the forwarder's address (asked for in the settings).
+  func pointDesktopAtForwarder() {
+    guard case .on(let u) = forwardState else { return }
+    do {
+      guard try ClaudeDesktop.switchKey(nil, baseURL: u, dir: config.desktopLibrary) == .written else { return readDesktop() }
+      remember(u)
+      desktopAddressChangedAt = Date()
+      saveConfig()
+      readDesktop()
+      changedDesktop("Desktop 改为经本地转发（\(u.replacingOccurrences(of: "http://", with: ""))）访问模型接口")
+    } catch {
+      notice = Notice(text: "Desktop 地址未改：" + error.localizedDescription, bad: true)
+    }
+  }
+
+  /// Says what changed in Desktop's configuration and why; if Desktop runs, it needs a restart
+  /// for it (asked, done or offered, as set).
+  private func changedDesktop(_ why: String) {
+    notice = Notice(text: why + (desktopRunning ? "，重启 Desktop 后生效" : ""))
+    if desktopRunning { afterDesktopChanged(why) }
+  }
+
 
   /// How Desktop starts: on the gateway, at the Anthropic sign-in, or as the company set it.
   private(set) var desktopMode = ClaudeDesktop.Mode.signIn
@@ -493,8 +543,7 @@ final class Store {
       }
       saveConfig()
       withAnimation(.snappy) { readDesktop() }
-      notice = Notice(text: text + (desktopRunning ? "，重启后生效" : ""))
-      if desktopRunning { afterDesktopChanged() }
+      changedDesktop(text)
     } catch {
       readDesktop()
       notice = Notice(text: "Desktop 未改：" + error.localizedDescription, bad: true)
@@ -622,6 +671,7 @@ final class Store {
   func refresh() async {
     await checkForwarder()
     readSettings()
+    readDesktop()
     adoptClaudeKey()
     guard !refreshing, let url = usageURL else { return }
     let targets = people.filter { !$0.key.isEmpty }.map { ($0.id, $0.key) }
@@ -712,7 +762,7 @@ final class Store {
     }
     notice = Notice(text: "「\(name)」换了新 key，已同步" + (desktopChanged ? "，Desktop 重启后生效" : ""),
                     restartDesktop: desktopChanged && desktopRunning && config.desktopRestart != .never)
-    if desktopChanged && config.desktopRestart == .always && desktopRunning { restartDesktop() }
+    if desktopChanged && config.desktopRestart == .always && desktopRunning { restartDesktop(why: "「\(name)」换了新 key") }
   }
 
   // MARK: - Cookie sync
@@ -882,18 +932,19 @@ final class Store {
     }
     readDesktop()
     notice = Notice(text: "已切换到「\(p.label)」：" + parts.joined(separator: "，"))
-    if desktopChanged && desktopRunning { afterDesktopChanged() }
+    if desktopChanged && desktopRunning { afterDesktopChanged("Desktop 改用「\(p.label)」的 key") }
   }
 
-  /// Desktop got a new key while running: relaunch it, or not, as chosen (or ask).
-  private func afterDesktopChanged() {
+  /// Desktop's configuration changed (`why`) while it runs: relaunch it, or not, as chosen (or
+  /// ask, saying why).
+  private func afterDesktopChanged(_ why: String) {
     var choice = config.desktopRestart
     if choice == .ask {
-      let (now, remember) = Dialogs.restartDesktop()
+      let (now, remember) = Dialogs.restartDesktop(why: why)
       choice = now ? .always : .never
       if remember { setDesktopRestart(choice) }
     }
-    if choice == .always { restartDesktop() }
+    if choice == .always { restartDesktop(why: why) }
     else { notice?.restartDesktop = true }
   }
 
@@ -906,10 +957,10 @@ final class Store {
   var desktopRunning: Bool { !desktopApps.isEmpty }
 
   /// Quits Claude Desktop and opens it again, so that it reads its new key.
-  func restartDesktop() {
+  func restartDesktop(why: String? = nil) {
     let apps = desktopApps
     let url = apps.first?.bundleURL ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: ClaudeDesktop.bundleID)
-    notice = Notice(text: "正在重启 Desktop…")
+    notice = Notice(text: "正在重启 Desktop" + (why.map { "：" + $0 } ?? "…"))
     apps.forEach { $0.terminate() }
     Task {
       for _ in 0..<60 where apps.contains(where: { !$0.isTerminated }) {
