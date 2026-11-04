@@ -21,7 +21,6 @@ struct SettingsView: View {
         Section {
           TextField(text: $baseURL, prompt: Text(Config.defaultBaseURL)) { label("模型接口") }
             .font(.mono(12.5))
-          ForwardRow(needed: LocalForwarder.needed(for: baseURL.isEmpty ? Config.defaultBaseURL : baseURL))
           TextField(text: $url, prompt: Text(Config.defaultURL)) { label("用量接口") }
             .font(.mono(12.5))
           // In a row of its own (label, value, arrows), so that all three sit in the middle.
@@ -36,8 +35,6 @@ struct SettingsView: View {
           }
         } header: {
           header("接口")
-        } footer: {
-          footer("切换 key 时，Claude Code 或 Desktop 用的不是「模型接口」会先问你。")
         }
         Section {
           ForEach(store.people) { p in
@@ -46,25 +43,20 @@ struct SettingsView: View {
           AddKeyField()
         } header: {
           header("人员")
-        } footer: {
-          footer("粘贴 key 自动识别是谁；同一人的新 key 替换旧的。")
         }
         Section {
           CookieSyncRows()
         } header: {
           header("自动获取 key")
-        } footer: {
-          footer("从浏览器 cookie 调用门户的 proxy-usage，按昵称更新这个人的 key，省去 key 轮换后手动替换。首次读取钥匙串，macOS 会问一次，点「始终允许」。")
         }
         Section {
           DesktopRows()
+          ForwardRow(needed: LocalForwarder.needed(for: baseURL.isEmpty ? Config.defaultBaseURL : baseURL))
           Picker(selection: Binding(get: { store.config.desktopRestart }, set: { store.setDesktopRestart($0) })) {
             ForEach(DesktopRestart.allCases, id: \.self) { Text($0.label).font(.ui(13)) }
           } label: { label("改动后重启 Desktop") }
         } header: {
           header("Desktop")
-        } footer: {
-          footer("第三方网关：用「模型接口」和 Claude Code 的 key，打开不用登录。官方登录：登录 Anthropic 账号，网关配置留着。改过的文件留 .bak。")
         }
         Section {
           LoginItemRow()
@@ -191,46 +183,45 @@ private struct ForwardRow: View {
     VStack(alignment: .leading, spacing: 5) {
       if needed {
         Toggle(isOn: Binding(get: { on }, set: { store.setForward($0) })) {
-          HStack(spacing: 6) {
-            Text("本地转发").font(.ui(13))
-            if store.forwardState == .starting { ProgressView().controlSize(.mini) }
-          }
+          title("本地转发", info: "Desktop 只接受 HTTPS 或本机的 HTTP 地址，连不上 http 的模型接口。\n开启后 QuotaBar 在本机转发请求，Desktop 改连 127.0.0.1。QuotaBar 需保持运行。")
         }
         .disabled(store.forwardState == .starting || store.config.swapKeys)
       }
       Toggle(isOn: Binding(get: { store.config.swapKeys && on }, set: { store.setSwapKeys($0) })) {
-        HStack(spacing: 6) {
-          Text("免重启切换").font(.ui(13))
-          if !needed && store.forwardState == .starting { ProgressView().controlSize(.mini) }
-        }
+        title("免重启切换", info: "Desktop 只在启动时读取 key，换 key 要重启。\n开启后 Desktop 经本地转发访问，转发给每个请求换上当前选中的 key，切换立即生效。开启时需重启 Desktop 一次。")
       }
       .disabled(store.forwardState == .starting || store.people.allSatisfy(\.key.isEmpty))
-      Group {
-        switch store.forwardState {
-        case .on(let u):
-          HStack(spacing: 8) {
-            Label { Text("已启用：Desktop 经 \(u) 访问，QuotaBar 需保持运行") } icon: { Icon(.checkFilled, size: 11) }
-              .foregroundStyle(.green)
-            Button("日志") { NSWorkspace.shared.open(ForwardLog.url) }
-              .buttonStyle(.link)
-              .help(ForwardLog.url.path)
-          }
-          if let p = store.desktopPersonNow {
-            Text("Desktop 用「\(p.label)」的 key，切换时在转发里换，不用重启").foregroundStyle(.secondary)
-          }
-        case .failed(let why):
-          Label { Text("启动失败：" + why + (store.forwardWanted ? "，会自动重试" : "")) } icon: { Icon(.warning, size: 11) }
-            .foregroundStyle(.orange)
-        case .starting:
-          Text("启动中…").foregroundStyle(.secondary)
-        case .off:
-          Text(needed ? "Desktop 只认 HTTPS 或本机 HTTP，不开可能用不了" : "免重启切换：Desktop 经本地转发，key 在转发里换").foregroundStyle(.secondary)
+      switch store.forwardState {
+      case .on(let u):
+        HStack(spacing: 8) {
+          Label { Text("已启用 · " + u.replacingOccurrences(of: "http://", with: "")) } icon: { Icon(.checkFilled, size: 11) }
+            .foregroundStyle(.green)
+          Button("日志") { NSWorkspace.shared.open(ForwardLog.url) }
+            .buttonStyle(.link)
+            .help(ForwardLog.url.path)
         }
+        .font(.ui(11))
+      case .failed(let why):
+        Label { Text("启动失败：" + why + (store.forwardWanted ? "，会自动重试" : "")) } icon: { Icon(.warning, size: 11) }
+          .foregroundStyle(.orange)
+          .font(.ui(11))
+          .textSelection(.enabled)
+      case .starting, .off:
+        EmptyView()
       }
-      .font(.ui(11))
-      .textSelection(.enabled)
     }
     .animation(.snappy, value: store.forwardState)
+  }
+
+  /// The name, an ⓘ that explains it on hover, and a spinner while the forwarder starts.
+  private func title(_ name: String, info: String) -> some View {
+    HStack(spacing: 5) {
+      Text(name).font(.ui(13))
+      Icon(.info, size: 12)
+        .foregroundStyle(.secondary)
+        .help(info)
+      if store.forwardState == .starting && (name == "本地转发" || !needed) { ProgressView().controlSize(.mini) }
+    }
   }
 
   private var on: Bool {
