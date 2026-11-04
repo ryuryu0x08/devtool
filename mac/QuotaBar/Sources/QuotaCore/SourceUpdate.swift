@@ -26,11 +26,44 @@ public struct SourceUpdate: Sendable {
   /// Fetches the stable branch; how many of its commits change the app (this folder) since
   /// `commit`, and the newest one's subject.
   public func newer(than commit: String) throws -> (count: Int, subject: String?) {
-    try git(["fetch", "--quiet", "--no-tags", "origin", "+refs/heads/\(Self.branch):\(remoteRef)"], timeout: 90)
+    try fetch()
     let n = Int(try git(["rev-list", "--count", "\(commit)..\(remoteRef)", "--", "."]).trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
     guard n > 0 else { return (0, nil) }
     let s = try git(["log", "-1", "--format=%s", remoteRef, "--", "."]).trimmingCharacters(in: .whitespacesAndNewlines)
     return (n, s.isEmpty ? nil : s)
+  }
+
+  /// Fetches the stable branch from origin. A GitHub ssh address wants a key even for a public
+  /// repository: if that fails, the same repository over https (no key needed when public).
+  func fetch() throws {
+    let spec = "+refs/heads/\(Self.branch):\(remoteRef)"
+    do {
+      try git(["fetch", "--quiet", "--no-tags", "origin", spec], timeout: 90)
+    } catch {
+      let origin = (try? git(["remote", "get-url", "origin"]))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      guard let https = Self.https(for: origin) else { throw error }
+      do {
+        try git(["-c", "credential.interactive=never", "fetch", "--quiet", "--no-tags", https, spec], timeout: 90)
+      } catch let second {
+        throw Failed(message: error.localizedDescription + "；改用 \(https) 也失败：" + second.localizedDescription)
+      }
+    }
+  }
+
+  /// The https address of a GitHub ssh address (git@github.com:o/r.git, ssh://git@github.com/o/r);
+  /// nil for anything else.
+  public static func https(for remote: String) -> String? {
+    var path: Substring
+    if remote.hasPrefix("git@github.com:") {
+      path = remote.dropFirst("git@github.com:".count)
+    } else if let r = remote.range(of: "github.com/"), remote.hasPrefix("ssh://") {
+      path = remote[r.upperBound...]
+    } else {
+      return nil
+    }
+    while path.hasPrefix("/") { path = path.dropFirst() }
+    guard !path.isEmpty else { return nil }
+    return "https://github.com/" + path
   }
 
   /// Moves the checkout forward to the fetched stable branch (only forward: local commits or

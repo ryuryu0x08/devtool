@@ -91,6 +91,14 @@ final class SourceUpdateTests: XCTestCase {
     XCTAssertLessThan(Date().timeIntervalSince(start), 12)
   }
 
+  func testGitHubSshAddressesHaveAnHttpsOne() {
+    XCTAssertEqual(SourceUpdate.https(for: "git@github.com:ryuryu0x08/devtool.git"), "https://github.com/ryuryu0x08/devtool.git")
+    XCTAssertEqual(SourceUpdate.https(for: "ssh://git@github.com/ryuryu0x08/devtool"), "https://github.com/ryuryu0x08/devtool")
+    XCTAssertNil(SourceUpdate.https(for: "https://github.com/ryuryu0x08/devtool.git"))
+    XCTAssertNil(SourceUpdate.https(for: "git@gitlab.com:a/b.git"))
+    XCTAssertNil(SourceUpdate.https(for: "git@github.com:"))
+  }
+
   func testATimeoutStopsTheCommand() throws {
     let start = Date()
     XCTAssertThrowsError(try SourceUpdate.run(["sleep", "10"], in: dir, timeout: 0.5))
