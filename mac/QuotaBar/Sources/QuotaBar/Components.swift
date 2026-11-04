@@ -306,8 +306,7 @@ private struct SwitchKnob: View {
 /// so that passing over it doesn't flash one), or when clicked. `.help` tooltips don't show in a
 /// toggle's label, and are plain.
 struct InfoTip: View {
-  /// (label, text) lines: "问题", "做法".
-  let rows: [(String, String)]
+  let text: String
   /// Shown once it appears (for the CI screenshot).
   var showAtStart = false
   @State private var shown = false
@@ -331,17 +330,13 @@ struct InfoTip: View {
       }
       .onTapGesture { shown.toggle() }
       .popover(isPresented: $shown, arrowEdge: .bottom) {
-        Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
-          ForEach(rows.indices, id: \.self) { i in
-            GridRow(alignment: .firstTextBaseline) {
-              Text(rows[i].0).font(.ui(11.5, .semibold)).foregroundStyle(.secondary)
-              Text(rows[i].1).font(.ui(12)).fixedSize(horizontal: false, vertical: true)
-            }
-          }
-        }
-        .frame(width: 250, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
+        Text(text)
+          .font(.ui(12))
+          .lineSpacing(2)
+          .frame(maxWidth: 320, alignment: .leading)
+          .fixedSize(horizontal: false, vertical: true)
+          .padding(.horizontal, 12)
+          .padding(.vertical, 8)
       }
       .animation(.snappy(duration: 0.15), value: over)
       .task {
