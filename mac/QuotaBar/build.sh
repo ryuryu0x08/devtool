@@ -35,6 +35,11 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/QuotaBar"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+# Where it was built from, for the app's update check (it updates this clone and builds again).
+if COMMIT="$(git rev-parse HEAD 2>/dev/null)"; then
+  /usr/libexec/PlistBuddy -c "Add :QBCommit string $COMMIT" -c "Add :QBSourceDir string $PWD" \
+    -c "Add :QBBuilt string $(date -u +%Y-%m-%dT%H:%M:%SZ)" "$APP/Contents/Info.plist"
+fi
 # The icon, at the sizes macOS asks for.
 ICONSET="$(mktemp -d)/AppIcon.iconset"
 mkdir -p "$ICONSET"

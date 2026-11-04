@@ -26,8 +26,12 @@ struct SettingsView: View {
           }
           TextField(text: $url, prompt: Text(Config.defaultURL)) { label("用量接口") }
             .font(.mono(12.5))
-          Stepper(value: $interval, in: 10...3600, step: 10) {
-            LabeledContent { Text("\(interval) 秒").font(.ui(13)).monospacedDigit() } label: { label("刷新间隔") }
+          // In a row of its own (label, value, arrows), so that all three sit in the middle.
+          HStack {
+            label("刷新间隔")
+            Spacer()
+            Text("\(interval) 秒").font(.ui(13)).monospacedDigit().foregroundStyle(.secondary)
+            Stepper("刷新间隔", value: $interval, in: 10...3600, step: 10).labelsHidden()
           }
           if !url.isEmpty && !valid(url) || !baseURL.isEmpty && !valid(baseURL) {
             Text("地址需以 http:// 或 https:// 开头").foregroundStyle(.orange).font(.ui(11.5))
@@ -48,22 +52,27 @@ struct SettingsView: View {
           footer("粘贴 key 自动识别是谁；同一人的新 key 替换旧的。")
         }
         Section {
+          DesktopRows()
           Picker(selection: Binding(get: { store.config.desktopRestart }, set: { store.setDesktopRestart($0) })) {
             ForEach(DesktopRestart.allCases, id: \.self) { Text($0.label).font(.ui(13)) }
-          } label: { label("换 key 后重启 Desktop") }
+          } label: { label("改动后重启 Desktop") }
         } header: {
-          header("切换")
+          header("Desktop")
         } footer: {
-          footer("改 Claude Code 的 env.ANTHROPIC_AUTH_TOKEN 和 Desktop 网关的 key，原文件留 .bak。")
+          footer("改用网关：用「模型接口」和 Claude Code 的 key，Desktop 打开不用登录。改过的文件留 .bak。")
         }
         Section {
           LoginItemRow()
+          UpdateRows()
         } header: {
           header("通用")
         }
         Section {
-          Stepper(value: $text.bump, in: TextSize.range, step: 0.5) {
-            LabeledContent { Text(text.label).font(.ui(13)).monospacedDigit() } label: { label("字号") }
+          HStack {
+            label("字号")
+            Spacer()
+            Text(text.label).font(.ui(13)).monospacedDigit().foregroundStyle(.secondary)
+            Stepper("字号", value: $text.bump, in: TextSize.range, step: 0.5).labelsHidden()
           }
         } header: {
           header("显示")
@@ -80,6 +89,7 @@ struct SettingsView: View {
         }
       }
       .formStyle(.grouped)
+      .toggleStyle(BlueSwitch())
       .animation(.snappy, value: store.people.map(\.id))
       Divider()
       HStack {
@@ -94,6 +104,7 @@ struct SettingsView: View {
     }
     .frame(width: 600, height: 640)
     .onAppear {
+      store.readDesktop()
       url = store.config.url
       baseURL = store.config.baseURL
       interval = store.config.interval
@@ -231,3 +242,95 @@ private struct LoginItemRow: View {
     on = SMAppService.mainApp.status == .enabled
   }
 }
+
+/// Claude Desktop: on the gateway or signing in, and developer mode.
+private struct DesktopRows: View {
+  @Environment(Store.self) private var store
+
+  var body: some View {
+    HStack {
+      Text("模式").font(.ui(13))
+      Spacer()
+      switch store.desktopStatus {
+      case .gateway(_, let url):
+        Label { Text("第三方网关" + (url.map { "：" + $0 } ?? "")) } icon: { Icon(.checkFilled, size: 11) }
+          .font(.ui(12))
+          .foregroundStyle(.green)
+          .lineLimit(1)
+          .truncationMode(.middle)
+      case .notGateway:
+        Text("登录 Anthropic 账号").font(.ui(12)).foregroundStyle(.secondary)
+        Button { store.desktopUseGateway() } label: { Text("改用网关").font(.ui(12)) }
+          .disabled(store.desktopKeyPerson == nil)
+          .help(store.desktopKeyPerson.map { "用「模型接口」和 \($0.label) 的 key" } ?? "先添加 key")
+      case .managed:
+        Text("由公司管理").font(.ui(12)).foregroundStyle(.secondary)
+      }
+    }
+    HStack {
+      Text("开发者模式").font(.ui(13))
+      Spacer()
+      if store.desktopDeveloper {
+        Text("已开启").font(.ui(12)).foregroundStyle(.secondary)
+      } else {
+        Button { store.desktopEnableDeveloper() } label: { Text("开启").font(.ui(12)) }
+          .help("等于 Desktop 的 Help → Troubleshooting → Enable Developer Mode")
+      }
+    }
+  }
+}
+
+/// The version, the update check, and installing updates by themselves.
+private struct UpdateRows: View {
+  @Bindable private var u = Updater.shared
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      HStack {
+        Text("版本").font(.ui(13))
+        Text(u.version).font(.mono(11.5)).foregroundStyle(.secondary).textSelection(.enabled)
+        Spacer()
+        switch u.state {
+        case .checking, .installing:
+          ProgressView().controlSize(.small)
+        case .available:
+          Button { Task { await u.install() } } label: { Text("更新").font(.ui(12)) }
+            .buttonStyle(.borderedProminent)
+        case .unavailable:
+          EmptyView()
+        default:
+          Button { Task { await u.check() } } label: { Text("检查更新").font(.ui(12)) }
+        }
+      }
+      Group {
+        switch u.state {
+        case .idle:
+          EmptyView()
+        case .checking:
+          Text("检查中…").foregroundStyle(.secondary)
+        case .upToDate:
+          Text("已是最新").foregroundStyle(.secondary)
+        case .available(let n, let subject):
+          Text("有 \(n) 处新改动" + (subject.map { "：" + $0 } ?? "")).foregroundStyle(.blue).lineLimit(2)
+        case .installing:
+          Text("正在编译安装，约 1 分钟，完成后自动重开").foregroundStyle(.secondary)
+        case .failed(let why):
+          HStack(spacing: 8) {
+            Text(why).foregroundStyle(.orange)
+            if FileManager.default.fileExists(atPath: Updater.log.path) {
+              Button("日志") { NSWorkspace.shared.open(Updater.log) }.buttonStyle(.link)
+            }
+          }
+        case .unavailable:
+          Text("不是用 build.sh 从 git 目录编译的，不能自动更新").foregroundStyle(.secondary)
+        }
+      }
+      .font(.ui(11))
+    }
+    .animation(.snappy, value: u.state)
+    if u.state != .unavailable {
+      Toggle(isOn: $u.auto) { Text("自动更新").font(.ui(13)) }
+    }
+  }
+}
+

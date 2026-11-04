@@ -166,9 +166,14 @@ public enum ClaudeSettings {
   /// `text` (a JSON object) with its top-level string `key` set to `value`, in place where it is
   /// (or added at the end); everything else byte for byte as it was, checked like setToken.
   static func setTopLevel(_ key: String, to value: String, in text: String) throws -> String {
+    try setTopLevel(key, json: jsonString(value), value: value, in: text)
+  }
+
+  /// The same for any value: `json` is how it is written, `value` what it reads back as.
+  static func setTopLevel(_ key: String, json: String, value: Any, in text: String) throws -> String {
     let old = try parse(text)
     var b = Array(text.utf8)
-    let v = Array(jsonString(value).utf8)
+    let v = Array(json.utf8)
     let root = try Scanner(b).root()
     let hits = root.members.filter { $0.key == key }
     if hits.isEmpty {

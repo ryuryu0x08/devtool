@@ -1,0 +1,99 @@
+// Updates come from the git clone the app was built from: the repository is private, and the
+// clone already has the access (the user's own git credentials). The app follows the
+// quotabar-stable branch, which CI moves only after a version built and passed its tests on a Mac.
+import Foundation
+
+public struct SourceUpdate: Sendable {
+  public static let branch = "quotabar-stable"
+  /// The folder build.sh is in (mac/QuotaBar inside the clone).
+  public let dir: URL
+
+  public init(dir: URL) { self.dir = dir }
+
+  public struct Failed: Error, LocalizedError, Equatable {
+    public let message: String
+    public var errorDescription: String? { message }
+  }
+
+  private var remoteRef: String { "refs/remotes/origin/\(Self.branch)" }
+
+  /// Fetches the stable branch; how many of its commits change the app (this folder) since
+  /// `commit`, and the newest one's subject.
+  public func newer(than commit: String) throws -> (count: Int, subject: String?) {
+    try git(["fetch", "--quiet", "--no-tags", "origin", "+refs/heads/\(Self.branch):\(remoteRef)"], timeout: 90)
+    let n = Int(try git(["rev-list", "--count", "\(commit)..\(remoteRef)", "--", "."]).trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+    guard n > 0 else { return (0, nil) }
+    let s = try git(["log", "-1", "--format=%s", remoteRef, "--", "."]).trimmingCharacters(in: .whitespacesAndNewlines)
+    return (n, s.isEmpty ? nil : s)
+  }
+
+  /// Moves the checkout forward to the fetched stable branch (only forward: local commits or
+  /// changes in the way stop it, with git's reason).
+  public func fastForward() throws {
+    try git(["merge", "--ff-only", "--quiet", remoteRef], timeout: 60)
+  }
+
+  @discardableResult
+  public func git(_ args: [String], timeout: TimeInterval = 30) throws -> String {
+    try Self.run(["git"] + args, in: dir, timeout: timeout)
+  }
+
+  /// Runs a command (found on the usual paths; an app opened from Finder has a short PATH),
+  /// without prompts: git fails rather than wait for a password nobody can type.
+  @discardableResult
+  public static func run(_ cmd: [String], in dir: URL, timeout: TimeInterval, log: URL? = nil) throws -> String {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    p.arguments = cmd
+    p.currentDirectoryURL = dir
+    var env = ProcessInfo.processInfo.environment
+    env["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin" + (env["PATH"].map { ":" + $0 } ?? "")
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    env["GIT_SSH_COMMAND"] = env["GIT_SSH_COMMAND"] ?? "ssh -o BatchMode=yes"
+    p.environment = env
+    let out = Pipe()
+    let file: FileHandle?
+    if let log {
+      try? FileManager.default.createDirectory(at: log.deletingLastPathComponent(), withIntermediateDirectories: true)
+      FileManager.default.createFile(atPath: log.path, contents: nil)
+      file = try FileHandle(forWritingTo: log)
+    } else {
+      file = nil
+    }
+    p.standardOutput = file ?? out
+    p.standardError = file ?? out
+    p.standardInput = FileHandle.nullDevice
+    // Read as it comes (a full pipe would stop the command).
+    let box = Box()
+    if file == nil {
+      out.fileHandleForReading.readabilityHandler = { h in box.append(h.availableData) }
+    }
+    try p.run()
+    let deadline = Date().addingTimeInterval(timeout)
+    while p.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.05) }
+    if p.isRunning {
+      p.terminate()
+      p.waitUntilExit()
+      out.fileHandleForReading.readabilityHandler = nil
+      throw Failed(message: "\(cmd.first ?? "") 超时")
+    }
+    p.waitUntilExit()
+    out.fileHandleForReading.readabilityHandler = nil
+    if file == nil { box.append(out.fileHandleForReading.readDataToEndOfFile()) }
+    try? file?.close()
+    var text = String(decoding: box.data, as: UTF8.self)
+    if let log, file != nil { text = (try? String(contentsOf: log, encoding: .utf8)) ?? "" }
+    guard p.terminationStatus == 0 else {
+      let why = text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.prefix(3).joined(separator: " ")
+      throw Failed(message: why.isEmpty ? "\(cmd.joined(separator: " ")) 失败（\(p.terminationStatus)）" : why)
+    }
+    return text
+  }
+
+  private final class Box: @unchecked Sendable {
+    private let lock = NSLock()
+    private var d = Data()
+    func append(_ x: Data) { lock.lock(); d.append(x); lock.unlock() }
+    var data: Data { lock.lock(); defer { lock.unlock() }; return d }
+  }
+}

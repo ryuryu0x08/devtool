@@ -51,6 +51,7 @@ struct Config: Codable, Equatable {
   static let detectedDesktopDir = "~/Library/Application Support/Claude-3p"
 
   var settingsPath: String { ((claudeDir.isEmpty ? Config.detectedClaudeDir : claudeDir) as NSString).appendingPathComponent("settings.json") }
+  var desktopRoot: String { desktopDir.isEmpty ? Config.detectedDesktopDir : desktopDir }
   var desktopLibrary: String { ((desktopDir.isEmpty ? Config.detectedDesktopDir : desktopDir) as NSString).appendingPathComponent("configLibrary") }
 
   init() {}
@@ -220,6 +221,7 @@ final class Store {
     config.desktopDir = desktopDir.trimmingCharacters(in: .whitespaces)
     saveConfig()
     readSettings()
+    readDesktop()
     restart()
     if baseChanged { Task { await startForwarder() } }
   }
@@ -287,6 +289,48 @@ final class Store {
       if desktopRunning { afterDesktopChanged() }
     } catch {
       notice = Notice(text: "Desktop 地址未改：" + error.localizedDescription, bad: true)
+    }
+  }
+
+  /// Desktop as it is set: on a gateway, signing in, or managed; developer mode on.
+  private(set) var desktopStatus = ClaudeDesktop.Status.notGateway
+  private(set) var desktopDeveloper = false
+
+  func readDesktop() {
+    desktopStatus = ClaudeDesktop.status(dir: config.desktopLibrary)
+    desktopDeveloper = ClaudeDesktop.developerMode(root: config.desktopRoot)
+  }
+
+  /// The key to give Desktop: Claude Code's, else the first one there is.
+  var desktopKeyPerson: Person? { active ?? people.first { !$0.key.isEmpty } }
+
+  /// Puts Desktop on the gateway (the model API, through the forwarder if it is on) with
+  /// Claude Code's key, so it opens without an Anthropic sign-in.
+  func desktopUseGateway() {
+    guard let p = desktopKeyPerson else { return }
+    let want = desktopWant
+    do {
+      let changed = try ClaudeDesktop.useGateway(key: p.key, baseURL: want, root: config.desktopRoot)
+      remember(want)
+      saveConfig()
+      readDesktop()
+      var text = "Desktop 已改用网关（\(p.label) 的 key）"
+      if LocalForwarder.needed(for: want) { text += "，需开本地转发" }
+      notice = Notice(text: text + (changed && desktopRunning ? "，重启后生效" : ""))
+      if changed && desktopRunning { afterDesktopChanged() }
+    } catch {
+      notice = Notice(text: "Desktop 未改：" + error.localizedDescription, bad: true)
+    }
+  }
+
+  func desktopEnableDeveloper() {
+    do {
+      let changed = try ClaudeDesktop.enableDeveloperMode(root: config.desktopRoot)
+      readDesktop()
+      notice = Notice(text: "Desktop 开发者模式已开" + (changed && desktopRunning ? "，重启后生效" : ""))
+      if changed && desktopRunning { afterDesktopChanged() }
+    } catch {
+      notice = Notice(text: "未能开启：" + error.localizedDescription, bad: true)
     }
   }
 
@@ -545,6 +589,7 @@ final class Store {
       notice = Notice(text: "切换到「\(p.label)」未完成：" + problems.joined(separator: "；"), bad: true)
       return
     }
+    readDesktop()
     notice = Notice(text: "已切换到「\(p.label)」：" + parts.joined(separator: "，"))
     if desktopChanged && desktopRunning { afterDesktopChanged() }
   }
@@ -587,7 +632,7 @@ final class Store {
       let c = NSWorkspace.OpenConfiguration()
       c.activates = false
       _ = try? await NSWorkspace.shared.openApplication(at: url, configuration: c)
-      notice = Notice(text: "Desktop 已重启，新 key 生效")
+      notice = Notice(text: "Desktop 已重启，改动已生效")
     }
   }
 }

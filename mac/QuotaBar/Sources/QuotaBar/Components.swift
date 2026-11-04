@@ -264,3 +264,40 @@ extension Shown {
     return true
   }
 }
+
+/// A switch that keeps its colour while the window is in the background (the system's turns
+/// grey then, which reads as "off").
+struct BlueSwitch: ToggleStyle {
+  func makeBody(configuration c: Configuration) -> some View {
+    HStack {
+      c.label
+      Spacer()
+      SwitchKnob(on: c.$isOn)
+    }
+  }
+}
+
+private struct SwitchKnob: View {
+  @Binding var on: Bool
+  @Environment(\.isEnabled) private var enabled
+
+  var body: some View {
+    Capsule()
+      .fill(on ? Color.accentColor : Color.secondary.opacity(0.25))
+      .frame(width: 34, height: 20)
+      .overlay(alignment: on ? .trailing : .leading) {
+        Circle()
+          .fill(.white)
+          .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
+          .padding(2)
+      }
+      .opacity(enabled ? 1 : 0.45)
+      .contentShape(Capsule())
+      .onTapGesture { if enabled { withAnimation(.snappy(duration: 0.2)) { on.toggle() } } }
+      .accessibilityElement()
+      .accessibilityAddTraits(.isButton)
+      .accessibilityValue(on ? "开" : "关")
+      .accessibilityAction { on.toggle() }
+  }
+}
+

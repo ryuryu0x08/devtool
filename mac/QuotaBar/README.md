@@ -35,9 +35,12 @@ cd devtool/mac/QuotaBar
   - **Claude Code**：`~/.claude/settings.json` 存在才改，不存在不创建。改 `env.ANTHROPIC_AUTH_TOKEN`（需要时连同 `env.ANTHROPIC_BASE_URL`），删除 `env.ANTHROPIC_API_KEY`，其余逐字节保留。正在运行的会话保存即生效（据 Claude Code 文档）。
   - **Claude Desktop**：用「第三方推理」连网关时（`~/Library/Application Support/Claude-3p/configLibrary/` 里生效的配置，`inferenceProvider` 为 `gateway`），改其中的 `inferenceGatewayApiKey`（需要时连同 `inferenceGatewayBaseUrl`）。Desktop 自己存的 key 是加密的（`__sealed__:`），写明文它也能读，已实测。公司 MDM 管理时不改。
   - **本地转发**：Desktop 只接受 HTTPS，或本机（127.0.0.1）的 HTTP。模型接口是其他机器的 `http://` 地址时，设置里「模型接口」下面会出现「本地转发」：打开后 QuotaBar 在 `127.0.0.1:47831`（被占用就用下一个）起一个转发，把请求原样转给模型接口（含流式回复），切换时 Desktop 填这个地址。端口记下来下次照用；Desktop 的地址是 QuotaBar 自己设过的（以前的转发端口、模型接口本身）时直接替换，不再询问。QuotaBar 需保持运行，可打开设置「通用 → 登录时打开」。
-  - **重启 Desktop**：Desktop 只在启动时读配置。key 真的变了且 Desktop 开着时，问「重启」「稍后」，可勾「记住我的选择」；之后在设置「换 key 后重启 Desktop」里改（每次询问 / 自动重启 / 不重启）。
+  - **Desktop 不登录、走网关**（设置 → Desktop →「改用网关」）：Desktop 还在用 Anthropic 账号时，把「模型接口」（开了本地转发就用转发地址）和 Claude Code 的 key 写进第三方配置：已生效的配置是网关的就改它，否则新增一份名为「QuotaBar」的配置并设为生效（`_meta.json` 的 `appliedId`）；Desktop 记着的 `"deploymentMode": "1p"`（`claude_desktop_config.json`）改成 `"3p"`。之后 Desktop 打开直接用网关。
+  - **开发者模式**（设置 → Desktop →「开启」）：在 `Claude-3p` 和 `Claude` 两个目录的 `developer_settings.json` 里设 `"allowDevTools": true`，等于 Help → Troubleshooting → Enable Developer Mode。
+  - **重启 Desktop**：Desktop 只在启动时读配置。配置真的变了且 Desktop 开着时，问「重启」「稍后」，可勾「记住我的选择」；之后在设置「改动后重启 Desktop」里改（每次询问 / 自动重启 / 不重启）。
   - 改动前的文件都留一份同目录的 `.bak`；写入前校验除改动项外内容不变，否则不写。
 - **字号**：设置「显示 → 字号」，所有文字一起加大或减小。
+- **更新**（设置 → 通用）：`build.sh` 把源码目录和 commit 记进 app。QuotaBar 启动后和每 6 小时在这个 git 目录里 `git fetch` 一次 `quotabar-stable` 分支（CI 在 Mac 上编译、测试都通过后才移动它），有改到 app 的新提交就快进并运行 `./build.sh --install`，约 1 分钟后自动重开；编译失败则原来的版本照用，日志在 `~/Library/Logs/QuotaBar/update.log`。用的是这个 git 目录自己的登录凭据，仓库私有也可以。可关掉「自动更新」，改为手动点「更新」。源码目录有本地改动挡住时不更新。
 - **目录**：设置最下面可改 Claude Code 目录（默认 `~/.claude`，或 `CLAUDE_CONFIG_DIR`）和 Desktop 目录（默认 `~/Library/Application Support/Claude-3p`），留空即自动识别。
 
 ## 数据保存在哪里

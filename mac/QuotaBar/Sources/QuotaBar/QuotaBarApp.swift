@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       editShortcuts()
       let store = Store.shared
       StatusBar.shared.start(store)
+      Updater.shared.start(store)
       let args = CommandLine.arguments
       let empty = !store.hasURL || store.people.isEmpty
       if empty || args.contains("--dashboard") || args.contains("--settings") {

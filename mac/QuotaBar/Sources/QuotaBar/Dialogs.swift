@@ -24,7 +24,7 @@ enum Dialogs {
   static func restartDesktop() -> (now: Bool, remember: Bool) {
     let a = NSAlert()
     a.messageText = "重启 Claude Desktop？"
-    a.informativeText = "新 key 重启后生效。"
+    a.informativeText = "Desktop 的改动重启后生效。"
     a.addButton(withTitle: "重启")
     a.addButton(withTitle: "稍后")
     a.showsSuppressionButton = true
