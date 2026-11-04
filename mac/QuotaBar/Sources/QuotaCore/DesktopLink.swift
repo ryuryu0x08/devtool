@@ -126,3 +126,59 @@ public struct DesktopLink: Equatable, Sendable {
     return ["127.0.0.1", "localhost", "::1", "[::1]"].contains(h)
   }
 }
+
+/// Desktop's configuration as one Desktop read it (at its launch), or as it is now: what is
+/// compared to tell whether the running Desktop has what is configured.
+public struct DesktopSeen: Codable, Equatable, Sendable {
+  public enum Mode: String, Codable, Sendable { case gateway, signIn, managed }
+  public var mode: Mode
+  public var url: String?
+  /// nil: sealed (unreadable here) or none.
+  public var key: String?
+
+  public init(mode: Mode, url: String?, key: String?) {
+    self.mode = mode
+    self.url = url
+    self.key = key
+  }
+
+  public init(mode: ClaudeDesktop.Mode, status: ClaudeDesktop.Status) {
+    switch mode {
+    case .managed: self.init(mode: .managed, url: nil, key: nil)
+    case .signIn: self.init(mode: .signIn, url: nil, key: nil)
+    case .gateway(let u):
+      if case .gateway(let k, _) = status { self.init(mode: .gateway, url: u, key: k) } else { self.init(mode: .gateway, url: u, key: nil) }
+    }
+  }
+
+  /// What a Desktop that read `self` lacks of the configuration `now`, in a few words each;
+  /// empty: it has it all (it needs no restart). `forwarder`: the running forwarder's address:
+  /// a Desktop going through it gets the configured key from it, so the key doesn't count then.
+  /// `name`: whose a key is.
+  public func lacks(_ now: DesktopSeen, forwarder: String?, name: (String) -> String? = { _ in nil }) -> [String] {
+    if mode != now.mode {
+      switch now.mode {
+      case .gateway: return ["启动方式改为第三方网关"]
+      case .signIn: return ["启动方式改为官方登录"]
+      case .managed: return []
+      }
+    }
+    guard now.mode == .gateway else { return [] }
+    var out: [String] = []
+    let sameURL = (url ?? "").isEmpty && (now.url ?? "").isEmpty || ClaudeSettings.sameURL(url, now.url)
+    if !sameURL {
+      if let f = forwarder, ClaudeSettings.sameURL(now.url, f) {
+        out.append("改经本地转发 (\(DesktopLink.short(f)))")
+      } else if let u = now.url, !u.isEmpty {
+        out.append((DesktopLink.isLocal(url) ? "改回直连 " : "地址改为 ") + u)
+      } else {
+        out.append("地址已清空")
+      }
+    }
+    let viaForwarder = forwarder.map { ClaudeSettings.sameURL(url, $0) } ?? false
+    if !viaForwarder, let a = key, let b = now.key, a != b {
+      out.append("key 改为 " + (name(b).map { "\"\($0)\"" } ?? "新 key"))
+    }
+    return out
+  }
+}

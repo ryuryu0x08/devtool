@@ -306,7 +306,7 @@ private struct DesktopRows: View {
   @Environment(Store.self) private var store
 
   var body: some View {
-    if let p = store.desktopPending { PendingRow(pending: p) }
+    if !store.desktopLacks.isEmpty { PendingRow(lacks: store.desktopLacks) }
     if store.desktopMode == .managed {
       LabeledContent { Text("由公司管理").font(.ui(12)).foregroundStyle(.secondary) } label: { Text("启动方式").font(.ui(13)) }
     } else {
@@ -330,18 +330,18 @@ private struct DesktopRows: View {
   }
 }
 
-/// Changes the running Desktop hasn't read yet (a restart was put off): what they are, and the
-/// restart, until Desktop is restarted or quit.
+/// What the running Desktop lacks of its configuration now (it read it at launch): what, and the
+/// restart. Gone as soon as they match again (the change undone, Desktop restarted or quit).
 private struct PendingRow: View {
   @Environment(Store.self) private var store
-  let pending: Store.DesktopPending
+  let lacks: [String]
 
   var body: some View {
     HStack(alignment: .center, spacing: 10) {
       Circle().fill(.orange).frame(width: 7, height: 7)
       VStack(alignment: .leading, spacing: 2) {
         Text("有改动待 Desktop 重启后生效").font(.ui(12.5, .medium))
-        Text(pending.why.joined(separator: "; ")).font(.ui(11)).foregroundStyle(.secondary).lineLimit(2)
+        Text(lacks.joined(separator: "; ")).font(.ui(11)).foregroundStyle(.secondary).lineLimit(2)
       }
       Spacer(minLength: 8)
       if store.restartingDesktop {

@@ -34,9 +34,11 @@ final class Store {
   @ObservationIgnored private let forwarding = Forwarding()
   /// Counts startForwarder calls (see there).
   @ObservationIgnored private var forwardGen = 0
-  /// When this app last changed the address in Desktop's configuration: a Desktop opened before
-  /// then still uses the old one (it reads it at launch).
-  private(set) var desktopAddressChangedAt: Date?
+  /// What the running Desktop read at its launch (nil: Desktop doesn't run). Compared with the
+  /// configuration now, it tells what a restart would bring (`desktopLacks`).
+  private(set) var desktopSeen: DesktopSeen?
+  /// What the running Desktop lacks of its configuration now (empty: nothing to restart for).
+  private(set) var desktopLacks: [String] = []
 
   @ObservationIgnored private var loop: Task<Void, Never>?
   @ObservationIgnored private var cookieLoop: Task<Void, Never>?
@@ -61,6 +63,7 @@ final class Store {
   init() {
     forwarding.onStop = { [weak self] why in self?.forwarderStopped(why) }
     load()
+    findDesktop()
     readSettings()
     adoptClaudeKey()
     restart()
@@ -78,8 +81,10 @@ final class Store {
     // settings say so.
     // Desktop opened again (by hand too) or quit: what it hadn't read yet, it reads at launch.
     for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
-      NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-        Task { @MainActor in self?.desktopRelaunched() }
+      NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] n in
+        let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+        guard app?.bundleIdentifier == ClaudeDesktop.bundleID else { return }
+        Task { @MainActor in self?.desktopOpenedOrQuit() }
       }
     }
     network.pathUpdateHandler = { [weak self] path in
@@ -211,6 +216,8 @@ final class Store {
       if forwardState != .off { ForwardLog.write("转发已关") }
       forwardState = .off
       syncDesktopAddress(key: desktopKey)
+      // What the running Desktop lacks depends on the forwarder too (it sends the key).
+      readDesktop()
       return
     }
     forwardState = .starting
@@ -226,6 +233,7 @@ final class Store {
       // Its key again, now that it is on (Desktop's configured key is read with it running).
       forwarding.key = forwarderKey
       syncDesktopAddress(key: desktopKey, taken: p != preferred ? preferred : nil)
+      readDesktop()
     } catch is CancellationError {
       // Another start (or a stop) came meanwhile: that one says how it is.
       return
@@ -240,14 +248,15 @@ final class Store {
         // Off now: Desktop, if it was on the forwarder's address, goes back to the model API.
         syncDesktopAddress(key: desktopKey, failed: true)
       }
+      readDesktop()
     }
   }
 
   /// Desktop runs but was opened before its address was changed: it still uses the old one,
   /// and the forwarder is no use to it until it is restarted.
   var desktopOnOldAddress: Bool {
-    guard let t = desktopAddressChangedAt else { return false }
-    return DesktopApp.openedBefore(t)
+    guard let seen = desktopSeen, case .gateway(_, let now) = ClaudeDesktop.status(dir: config.desktopLibrary) else { return false }
+    return !((seen.url ?? "").isEmpty && (now ?? "").isEmpty) && !ClaudeSettings.sameURL(seen.url, now)
   }
 
   /// The forwarder stopped by itself (the system ended its listener): started again at once.
@@ -302,33 +311,28 @@ final class Store {
   private func writeDesktop(_ c: DesktopLink.Change) {
     do {
       guard try ClaudeDesktop.switchKey(c.key, baseURL: c.url, dir: config.desktopLibrary) == .written else { return readDesktop() }
-      if let u = c.url {
-        remember(u)
-        desktopAddressChangedAt = Date()
-      }
+      if let u = c.url { remember(u) }
       saveConfig()
       readDesktop()
-      announceDesktop(why: c.why, live: c.live)
+      announceDesktop(why: c.why)
     } catch {
       notice = Notice(text: "Desktop 未改: " + error.localizedDescription, bad: true)
     }
   }
 
   /// The one place a change to Desktop's configuration is told: what changed and why (`text`,
-  /// else `why`), and, when the running Desktop needs a restart for it, the restart as set
-  /// (done, asked with `why`, or offered by the message's button).
-  /// `live`: it reached Desktop at once (only the key, through the forwarder). `changed`: false
-  /// when nothing was written to Desktop (the message only).
-  private func announceDesktop(why: String, text: String? = nil, live: Bool = false, changed: Bool = true) {
-    let restart = changed && !live && desktopRunning
+  /// else `why`), and, when the running Desktop lacks something of it now (`desktopLacks`), the
+  /// restart as set (done, asked with `why`, or offered by the message's button). A change
+  /// that the running Desktop has anyway (undone before a restart, or a key the forwarder
+  /// sends) asks nothing. `changed`: false when nothing was written (the message only).
+  private func announceDesktop(why: String, text: String? = nil, changed: Bool = true) {
+    readDesktop()
+    let restart = changed && desktopRunning && !desktopLacks.isEmpty
     var t = text ?? why
-    if text == nil {
-      if live { t += ", 已生效, 无需重启" } else if restart { t += ", 重启 Desktop 后生效" }
-    }
+    if text == nil && changed && desktopRunning { t += restart ? ", 重启 Desktop 后生效" : ", 已生效, 无需重启" }
     let n = Notice(text: t)
     notice = n
     guard restart else { return }
-    addPending(why)
     // After this turn: a question asked in the middle of a refresh or an animation would hold
     // them up.
     Task { @MainActor in self.restartAsSet(why: why, notice: n.id) }
@@ -337,30 +341,49 @@ final class Store {
   /// A restart question is open.
   @ObservationIgnored private var askingRestart = false
 
-  /// Changes the running Desktop hasn't read yet (it was opened before them, and not restarted
-  /// since): shown in the settings, with a restart button, until it is restarted or quit.
-  struct DesktopPending: Equatable {
-    var since: Date
-    var why: [String]
-  }
-  private(set) var desktopPending: DesktopPending?
-
-  private func addPending(_ why: String) {
-    var p = desktopPending ?? DesktopPending(since: Date(), why: [])
-    if !p.why.contains(why) { p.why.append(why) }
-    withAnimation(.snappy) { desktopPending = p }
+  /// Desktop was opened (it reads its configuration now) or quit (it will at its next launch).
+  private func desktopOpenedOrQuit() {
+    if DesktopApp.running { sawDesktop() } else { forgetDesktop() }
+    readDesktop()
   }
 
-  /// Desktop was opened or quit: what it was waiting for is read now, or at its next launch.
-  private func desktopRelaunched() {
-    if let t = desktopAddressChangedAt, !DesktopApp.openedBefore(t) { desktopAddressChangedAt = nil }
-    if let p = desktopPending, !DesktopApp.openedBefore(p.since) { withAnimation(.snappy) { desktopPending = nil } }
+  /// The running Desktop read the configuration as it is now (just opened, or found running
+  /// with nothing known of what it read): kept, also for the next start of this app.
+  private func sawDesktop() {
+    let seen = DesktopSeen(mode: ClaudeDesktop.mode(root: config.desktopRoot), status: ClaudeDesktop.status(dir: config.desktopLibrary))
+    desktopSeen = seen
+    let launched = DesktopApp.apps.compactMap(\.launchDate).min()?.timeIntervalSince1970 ?? 0
+    if let d = try? JSONEncoder().encode(SeenSaved(launched: launched, seen: seen)) { UserDefaults.standard.set(d, forKey: "desktopSeen") }
+  }
+
+  private func forgetDesktop() {
+    desktopSeen = nil
+    UserDefaults.standard.removeObject(forKey: "desktopSeen")
+  }
+
+  /// What Desktop read, with its launch time (still the same Desktop when this app starts again).
+  private struct SeenSaved: Codable {
+    var launched: TimeInterval
+    var seen: DesktopSeen
+  }
+
+  /// At this app's start: what the running Desktop read, kept from before if it is the same
+  /// Desktop, else taken as it is now.
+  private func findDesktop() {
+    guard DesktopApp.running else { return forgetDesktop() }
+    let launched = DesktopApp.apps.compactMap(\.launchDate).min()?.timeIntervalSince1970 ?? 0
+    if let d = UserDefaults.standard.data(forKey: "desktopSeen"), let s = try? JSONDecoder().decode(SeenSaved.self, from: d), abs(s.launched - launched) < 1 {
+      desktopSeen = s.seen
+    } else {
+      sawDesktop()
+    }
   }
 
   /// Relaunches Desktop, asks first, or leaves a button for it in the message, as set.
   private func restartAsSet(why: String, notice id: UUID) {
-    // Quit meanwhile: nothing to restart (it reads the change when opened).
-    guard desktopRunning else { return }
+    // Quit meanwhile (it reads the change when opened), or the change undone: nothing to do.
+    readDesktop()
+    guard desktopRunning, !desktopLacks.isEmpty else { return }
     var choice = config.desktopRestart
     if choice == .ask && (askingRestart || Dialogs.isOpen) {
       // A question is open already (its restart covers this change too): the button only.
@@ -390,6 +413,11 @@ final class Store {
   func readDesktop() {
     desktopMode = ClaudeDesktop.mode(root: config.desktopRoot)
     forwarding.key = forwarderKey
+    if desktopSeen == nil && DesktopApp.running { sawDesktop() }
+    if desktopSeen != nil && !DesktopApp.running { forgetDesktop() }
+    let now = DesktopSeen(mode: desktopMode, status: ClaudeDesktop.status(dir: config.desktopLibrary))
+    let lacks = desktopSeen?.lacks(now, forwarder: forwarderURL) { k in self.people.first { $0.key == k }?.label } ?? []
+    if lacks != desktopLacks { withAnimation(.snappy) { desktopLacks = lacks } }
   }
 
   /// The key to give Desktop: Claude Code's, else the first one there is.
@@ -640,18 +668,14 @@ final class Store {
     if desktop {
       do { desktopChanged = try ClaudeDesktop.switchKey(new, dir: config.desktopLibrary) == .written }
       catch { problems.append("Desktop: " + error.localizedDescription) }
-      // Through the forwarder, which now sends the new key: nothing to restart.
-      if desktopChanged && link.keyChangeIsLive {
-        readDesktop()
-        desktopChanged = false
-      }
     }
+    readDesktop()
     if !problems.isEmpty {
       notice = Notice(text: "\"\(name)\" 换了新 key, 未能同步: " + problems.joined(separator: "; "), bad: true)
       return
     }
     announceDesktop(why: "\"\(name)\" 换了新 key, Desktop 改用新 key",
-                    text: "\"\(name)\" 换了新 key, 已同步" + (desktopChanged && desktopRunning ? ", Desktop 重启后生效" : ""),
+                    text: "\"\(name)\" 换了新 key, 已同步" + (desktopChanged && desktopRunning && !desktopLacks.isEmpty ? ", Desktop 重启后生效" : ""),
                     changed: desktopChanged)
   }
 
@@ -798,11 +822,9 @@ final class Store {
         let wantURL = desktopChange == .replace || desktopChange == .ask && setURL ? desktopWant : nil
         desktopChanged = try ClaudeDesktop.switchKey(p.key, baseURL: wantURL, dir: config.desktopLibrary) == .written
         if let wantURL { remember(wantURL); saveConfig() }
-        // Desktop goes through the forwarder, which now sends this key: nothing to restart.
-        let live = desktopChanged && wantURL == nil && link.keyChangeIsLive
-        if live { readDesktop() }
-        parts.append(live ? "Desktop 已生效, 无需重启" : !desktopChanged ? "Desktop 已在用" : desktopRunning ? "Desktop 重启后生效" : "Desktop 下次打开生效")
-        if live { desktopChanged = false }
+        // What the running Desktop has of it (through the forwarder a key is there at once).
+        readDesktop()
+        parts.append(!desktopChanged ? "Desktop 已在用" : !desktopRunning ? "Desktop 下次打开生效" : desktopLacks.isEmpty ? "Desktop 已生效, 无需重启" : "Desktop 重启后生效")
         if LocalForwarder.needed(for: wantURL ?? desktopURL ?? "") { parts.append("Desktop 需开本地转发 (设置 → Desktop)") }
       } catch { problems.append("Desktop: " + error.localizedDescription) }
     case .managed:
@@ -839,8 +861,8 @@ final class Store {
       case .notFound:
         notice = Notice(text: "Desktop 已退出, 但找不到它, 请手动打开", bad: true)
       case .done:
-        desktopAddressChangedAt = nil
-        withAnimation(.snappy) { desktopPending = nil }
+        sawDesktop()
+        readDesktop()
         notice = Notice(text: "Desktop 已重启, 改动已生效")
       }
     }
