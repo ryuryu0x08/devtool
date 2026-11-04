@@ -8,161 +8,6 @@ import Network
 import QuotaCore
 import SwiftUI
 
-/// After Claude Desktop got a new key: whether to relaunch it (it reads its key at launch only).
-enum DesktopRestart: String, Codable, CaseIterable {
-  case ask, always, never
-
-  var label: String {
-    switch self {
-    case .ask: return "每次询问"
-    case .always: return "自动重启"
-    case .never: return "不重启"
-    }
-  }
-}
-
-struct Config: Codable, Equatable {
-  static let defaultURL = "http://api-ai-coding.bilibili.co/api/v1/billing/usage"
-  static let defaultBaseURL = "http://api-ai-coding.bilibili.co/api"
-
-  /// The usage API.
-  var url = Config.defaultURL
-  /// Seconds between refreshes.
-  var interval = 60
-  var people: [Person] = []
-  /// Keys that were replaced by a newer one (not added back from Claude Code's settings).
-  var retired: [String] = []
-  /// Claude Code's folder (its settings.json is in it); empty: found by itself.
-  var claudeDir = ""
-  /// Claude Desktop's third-party folder (configLibrary is in it); empty: found by itself.
-  var desktopDir = ""
-  /// The model API Claude Code and Claude Desktop are to use (ANTHROPIC_BASE_URL).
-  var baseURL = Config.defaultBaseURL
-  var desktopRestart = DesktopRestart.ask
-  /// Forward Desktop to an http model API through 127.0.0.1 (Desktop takes http only there).
-  var forward = false
-  /// The forwarder's port, kept so that Desktop's address stays the same.
-  var forwardPort = Int(LocalForwarder.defaultPort)
-  /// Addresses this app gave Desktop (its forwarders, its model APIs): replaced without asking.
-  var ours: [String] = []
-  /// Desktop's configuration that was applied before the sign-in was chosen: applied again on
-  /// the way back to the gateway.
-  var desktopPrevious: String?
-  /// Desktop goes through the forwarder, which sends the key of `desktopPerson`: switching
-  /// changes it there, with no restart of Desktop.
-  var swapKeys = false
-  var desktopPerson: String?
-  /// Read the rotating key from the browser's cookies (the portal's proxy-usage endpoint).
-  var cookieSync = false
-  /// Which browser to read the cookies from (a ChromeCookies.Browser name).
-  var cookieBrowser = ChromeCookies.chrome.name
-  /// The portal endpoint reached with the cookies.
-  var cookieURL = ProxyUsageAPI.defaultURL
-
-  static var detectedClaudeDir: String {
-    ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"].flatMap { $0.isEmpty ? nil : $0 } ?? "~/.claude"
-  }
-  static let detectedDesktopDir = "~/Library/Application Support/Claude-3p"
-
-  var settingsPath: String { ((claudeDir.isEmpty ? Config.detectedClaudeDir : claudeDir) as NSString).appendingPathComponent("settings.json") }
-  var desktopRoot: String { desktopDir.isEmpty ? Config.detectedDesktopDir : desktopDir }
-  var desktopLibrary: String { ((desktopDir.isEmpty ? Config.detectedDesktopDir : desktopDir) as NSString).appendingPathComponent("configLibrary") }
-
-  init() {}
-
-  private enum CodingKeys: String, CodingKey {
-    case url, interval, people, retired, settingsPath, claudeDir, desktopDir, baseURL, desktopRestart, forward, forwardPort, ours, desktopPrevious, swapKeys, desktopPerson, cookieSync, cookieBrowser, cookieURL, keys
-  }
-  private struct OldKey: Decodable { var id: String; var key: String }
-
-  init(from d: Decoder) throws {
-    let c = try d.container(keyedBy: CodingKeys.self)
-    let u = try c.decodeIfPresent(String.self, forKey: .url) ?? ""
-    url = u.isEmpty ? Config.defaultURL : u
-    interval = try c.decodeIfPresent(Int.self, forKey: .interval) ?? 60
-    retired = try c.decodeIfPresent([String].self, forKey: .retired) ?? []
-    if let d = try c.decodeIfPresent(String.self, forKey: .claudeDir) {
-      claudeDir = d
-    } else if let old = try c.decodeIfPresent(String.self, forKey: .settingsPath), old != ClaudeSettings.defaultPath {
-      // Earlier versions kept the settings file's path.
-      claudeDir = (old as NSString).deletingLastPathComponent
-    }
-    desktopDir = try c.decodeIfPresent(String.self, forKey: .desktopDir) ?? ""
-    forward = try c.decodeIfPresent(Bool.self, forKey: .forward) ?? false
-    forwardPort = try c.decodeIfPresent(Int.self, forKey: .forwardPort) ?? Int(LocalForwarder.defaultPort)
-    ours = try c.decodeIfPresent([String].self, forKey: .ours) ?? []
-    desktopPrevious = try c.decodeIfPresent(String.self, forKey: .desktopPrevious)
-    swapKeys = try c.decodeIfPresent(Bool.self, forKey: .swapKeys) ?? false
-    desktopPerson = try c.decodeIfPresent(String.self, forKey: .desktopPerson)
-    cookieSync = try c.decodeIfPresent(Bool.self, forKey: .cookieSync) ?? false
-    cookieBrowser = try c.decodeIfPresent(String.self, forKey: .cookieBrowser) ?? ChromeCookies.chrome.name
-    let cu = try c.decodeIfPresent(String.self, forKey: .cookieURL) ?? ""
-    cookieURL = cu.isEmpty ? ProxyUsageAPI.defaultURL : cu
-    let b = try c.decodeIfPresent(String.self, forKey: .baseURL) ?? ""
-    baseURL = b.isEmpty ? Config.defaultBaseURL : b
-    desktopRestart = (try? c.decodeIfPresent(DesktopRestart.self, forKey: .desktopRestart)) ?? .ask
-    if let ps = try c.decodeIfPresent([Person].self, forKey: .people) {
-      people = ps
-    } else {
-      // The first version kept a list of keys (with names typed in); names now come from the API.
-      people = (try c.decodeIfPresent([OldKey].self, forKey: .keys) ?? []).map { Person(id: $0.id, key: $0.key) }
-    }
-  }
-
-  func encode(to e: Encoder) throws {
-    var c = e.container(keyedBy: CodingKeys.self)
-    try c.encode(url, forKey: .url)
-    try c.encode(interval, forKey: .interval)
-    try c.encode(people, forKey: .people)
-    try c.encode(retired, forKey: .retired)
-    try c.encode(claudeDir, forKey: .claudeDir)
-    try c.encode(desktopDir, forKey: .desktopDir)
-    try c.encode(forward, forKey: .forward)
-    try c.encode(forwardPort, forKey: .forwardPort)
-    try c.encode(ours, forKey: .ours)
-    try c.encodeIfPresent(desktopPrevious, forKey: .desktopPrevious)
-    try c.encode(swapKeys, forKey: .swapKeys)
-    try c.encodeIfPresent(desktopPerson, forKey: .desktopPerson)
-    try c.encode(cookieSync, forKey: .cookieSync)
-    try c.encode(cookieBrowser, forKey: .cookieBrowser)
-    try c.encode(cookieURL, forKey: .cookieURL)
-    try c.encode(baseURL, forKey: .baseURL)
-    try c.encode(desktopRestart, forKey: .desktopRestart)
-  }
-}
-
-/// A short message after an action: shown for a while, red when something went wrong.
-struct Notice: Equatable {
-  var text: String
-  var bad = false
-  /// Offer to relaunch Claude Desktop, which reads its key at launch only.
-  var restartDesktop = false
-  var id = UUID()
-}
-
-/// What a person's card shows.
-enum Shown: Equatable {
-  /// Not read yet.
-  case waiting
-  /// The newest reading.
-  case ok(GoodReading)
-  /// The last reading failed; the one before it (if any) is still shown.
-  case failing(Failure, last: GoodReading?)
-  /// The person's key went to someone else: a new one is needed.
-  case noKey(last: GoodReading?)
-}
-
-extension Failure {
-  /// What it means, in a few words; `detail` has the rest.
-  var friendly: String {
-    switch kind {
-    case .keyRejected: return "key 失效（可能已轮换），粘贴新 key 即可"
-    case .server: return "接口出错，稍后重试"
-    case .network: return "连不上接口，稍后重试"
-    }
-  }
-}
-
 @MainActor @Observable
 final class Store {
   private(set) var config = Config()
@@ -186,7 +31,7 @@ final class Store {
   /// The local forwarder for Desktop: off, starting, on (its address), or why it couldn't start.
   enum ForwardState: Equatable { case off, starting, on(String), failed(String) }
   private(set) var forwardState = ForwardState.off
-  @ObservationIgnored private var forwarder: LocalForwarder?
+  @ObservationIgnored private let forwarding = Forwarding()
   /// When this app last changed the address in Desktop's configuration: a Desktop opened before
   /// then still uses the old one (it reads it at launch).
   private(set) var desktopAddressChangedAt: Date?
@@ -212,6 +57,7 @@ final class Store {
   private var historyFile: URL { Self.dir.appendingPathComponent("history.json") }
 
   init() {
+    forwarding.onStop = { [weak self] why in self?.forwarderStopped(why) }
     load()
     readSettings()
     adoptClaudeKey()
@@ -346,8 +192,7 @@ final class Store {
   /// `again`: a restart of a forwarder that stopped by itself; if it fails, the settings stay on
   /// (it is tried again at the next refresh) instead of being turned off.
   func startForwarder(desktopKey: String? = nil, again: Bool = false) async {
-    forwarder?.stop()
-    forwarder = nil
+    forwarding.stop()
     guard forwardWanted, let target = URL(string: config.baseURL.trimmingCharacters(in: .whitespaces)) else {
       if forwardState != .off { ForwardLog.write("转发已关") }
       forwardState = .off
@@ -356,29 +201,15 @@ final class Store {
     }
     forwardState = .starting
     do {
-      let f = try LocalForwarder(target: target)
-      f.log = { ForwardLog.write($0) }
-      f.key = forwarderKey
-      f.onStop = { [weak self, weak f] why in
-        Task { @MainActor in
-          guard let self, let f, self.forwarder === f else { return }
-          self.forwarderStopped(why)
-        }
-      }
       let preferred = UInt16(clamping: config.forwardPort)
-      await reclaimPort(preferred)
-      let p = try await f.start(preferred: preferred)
-      // Shown as on only once it really answers there.
-      guard await Task.detached(operation: { LocalForwarder.accepting(p) }).value else {
-        f.stop()
-        throw LocalForwarder.Failure.notAnswering(p)
-      }
-      forwarder = f
+      let p = try await forwarding.start(target: target, preferred: preferred, key: forwarderKey)
       config.forwardPort = Int(p)
       remember(LocalForwarder.url(port: p))
       saveConfig()
       ForwardLog.write("转发已开：\(LocalForwarder.url(port: p)) → \(target.absoluteString)")
       withAnimation(.snappy) { forwardState = .on(LocalForwarder.url(port: p)) }
+      // Its key again, now that it is on (Desktop's configured key is read with it running).
+      forwarding.key = forwarderKey
       syncDesktopAddress(key: desktopKey, taken: p != preferred ? preferred : nil)
     } catch {
       ForwardLog.write("转发没能启动：\(error.localizedDescription)")
@@ -397,25 +228,7 @@ final class Store {
   /// and the forwarder is no use to it until it is restarted.
   var desktopOnOldAddress: Bool {
     guard let t = desktopAddressChangedAt else { return false }
-    return desktopApps.contains { ($0.launchDate ?? .distantPast) < t }
-  }
-
-  /// The forwarder's port is held by another QuotaBar (an older one an update left running):
-  /// that one is ended, so that the port, the one Desktop uses, stays the same.
-  private func reclaimPort(_ p: UInt16) async {
-    guard !LocalForwarder.free(p) else { return }
-    let out = (try? await Task.detached { try SourceUpdate.run(["lsof", "-nP", "-t", "-iTCP:\(p)", "-sTCP:LISTEN"], in: URL(fileURLWithPath: "/"), timeout: 5) }.value) ?? ""
-    let mine = ProcessInfo.processInfo.processIdentifier
-    let others = out.split(separator: "\n").compactMap { pid_t($0.trimmingCharacters(in: .whitespaces)) }
-      .filter { $0 != mine }
-      .compactMap { NSRunningApplication(processIdentifier: $0) }
-      .filter { $0.bundleIdentifier == Bundle.main.bundleIdentifier }
-    guard !others.isEmpty else { return }
-    ForwardLog.write("端口 \(p) 被另一个 QuotaBar（\(others.map { String($0.processIdentifier) }.joined(separator: ", "))）占着，结束它")
-    others.forEach { $0.terminate() }
-    for _ in 0..<30 where others.contains(where: { !$0.isTerminated }) { try? await Task.sleep(for: .milliseconds(100)) }
-    others.filter { !$0.isTerminated }.forEach { $0.forceTerminate() }
-    for _ in 0..<20 where !LocalForwarder.free(p) { try? await Task.sleep(for: .milliseconds(100)) }
+    return DesktopApp.openedBefore(t)
   }
 
   /// The forwarder stopped by itself (the system ended its listener): started again at once.
@@ -429,10 +242,10 @@ final class Store {
   func checkForwarder() async {
     switch forwardState {
     case .on:
-      guard let p = forwarder?.port else { return forwarderStopped("没有在运行") }
-      if !(await Task.detached(operation: { LocalForwarder.accepting(p) }).value) {
+      guard let p = forwarding.port else { return forwarderStopped("没有在运行") }
+      if !(await Forwarding.answers(p)) {
         // Still the same one, and still on (nothing restarted it meanwhile).
-        guard case .on = forwardState, forwarder?.port == p else { return }
+        guard case .on = forwardState, forwarding.port == p else { return }
         forwarderStopped("端口 \(p) 连不上")
       }
     case .failed where forwardWanted:
@@ -500,7 +313,7 @@ final class Store {
 
   func readDesktop() {
     desktopMode = ClaudeDesktop.mode(root: config.desktopRoot)
-    forwarder?.key = forwarderKey
+    forwarding.key = forwarderKey
   }
 
   /// The key to give Desktop: Claude Code's, else the first one there is.
@@ -558,7 +371,7 @@ final class Store {
 
   private func saveConfig() {
     write(config, to: configFile)
-    forwarder?.key = forwarderKey
+    forwarding.key = forwarderKey
   }
   private func writeHistory() { write(history, to: historyFile) }
 
@@ -798,17 +611,7 @@ final class Store {
     cookieSyncing = true
     defer { cookieSyncing = false }
     let browser = cookieBrowser
-    let result: Result<ProxyUsage, Failure> = await Task.detached { () async -> Result<ProxyUsage, Failure> in
-      do {
-        let cookie = try ChromeCookies.header(domain: url.host ?? "ai-coding.bilibili.co", browser: browser)
-        let (data, resp) = try await URLSession(configuration: .ephemeral).data(for: ProxyUsageAPI.request(url: url, cookie: cookie))
-        return ProxyUsageAPI.parse(status: (resp as? HTTPURLResponse)?.statusCode ?? 0, body: data)
-      } catch let e as ChromeCookies.CookieError {
-        return .failure(Failure(.network, e.errorDescription ?? "读取 cookie 失败"))
-      } catch {
-        return .failure(Failure(.network, error.localizedDescription))
-      }
-    }.value
+    let result = await CookieSync.fetch(url: url, browser: browser)
 
     switch result {
     case .failure(let f):
@@ -944,86 +747,21 @@ final class Store {
 
   // MARK: - Claude Desktop
 
-  private var desktopApps: [NSRunningApplication] {
-    NSRunningApplication.runningApplications(withBundleIdentifier: ClaudeDesktop.bundleID)
-  }
+  var desktopRunning: Bool { DesktopApp.running }
 
-  var desktopRunning: Bool { !desktopApps.isEmpty }
-
-  /// Quits Claude Desktop and opens it again, so that it reads its new key.
+  /// Quits Claude Desktop and opens it again, so that it reads its new configuration.
   func restartDesktop(why: String? = nil) {
-    let apps = desktopApps
-    let url = apps.first?.bundleURL ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: ClaudeDesktop.bundleID)
     notice = Notice(text: "正在重启 Desktop" + (why.map { "：" + $0 } ?? "…"))
-    apps.forEach { $0.terminate() }
     Task {
-      for _ in 0..<60 where apps.contains(where: { !$0.isTerminated }) {
-        try? await Task.sleep(for: .milliseconds(250))
-      }
-      guard apps.allSatisfy(\.isTerminated) else {
+      switch await DesktopApp.relaunch() {
+      case .didNotQuit:
         notice = Notice(text: "Desktop 未退出（可能在等确认），手动重开即可", bad: true)
-        return
+      case .notFound:
+        notice = Notice(text: "Desktop 已退出，但没找到它的位置，手动打开即可", bad: true)
+      case .done:
+        desktopAddressChangedAt = nil
+        notice = Notice(text: "Desktop 已重启，改动已生效")
       }
-      guard let url else { return }
-      let c = NSWorkspace.OpenConfiguration()
-      c.activates = false
-      _ = try? await NSWorkspace.shared.openApplication(at: url, configuration: c)
-      desktopAddressChangedAt = nil
-      notice = Notice(text: "Desktop 已重启，改动已生效")
     }
   }
-}
-
-/// A log under ~/Library/Logs/QuotaBar, kept under 1 MB.
-struct LogFile: Sendable {
-  let url: URL
-  private static let queue = DispatchQueue(label: "QuotaBar.Log")
-
-  /// "2026-11-04 20:15:03.123 +0800": this Mac's clock and time zone (not UTC).
-  static func stamp(_ d: Date) -> String {
-    let f = DateFormatter()
-    f.locale = Locale(identifier: "en_US_POSIX")
-    f.timeZone = .current
-    f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS Z"
-    return f.string(from: d)
-  }
-
-  init(_ name: String) {
-    url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/QuotaBar/" + name)
-  }
-
-  func write(_ line: String) {
-    let text = Self.stamp(Date()) + " " + line + "\n"
-    let url = self.url
-    Self.queue.async {
-      let fm = FileManager.default
-      try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-      if let size = try? fm.attributesOfItem(atPath: url.path)[.size] as? Int, size > 1_000_000 { try? fm.removeItem(at: url) }
-      if !fm.fileExists(atPath: url.path) { fm.createFile(atPath: url.path, contents: nil) }
-      guard let h = try? FileHandle(forWritingTo: url) else { return }
-      defer { try? h.close() }
-      _ = try? h.seekToEnd()
-      try? h.write(contentsOf: Data(text.utf8))
-    }
-  }
-}
-
-/// The forwarder's log: ~/Library/Logs/QuotaBar/forwarder.log (request lines, the names of the
-/// headers left out, reply statuses; no header values, so no keys).
-enum ForwardLog {
-  static let file = LogFile("forwarder.log")
-  static var url: URL { file.url }
-
-  static func write(_ line: String) {
-    FileHandle.standardError.write(Data(("QuotaBar forwarder: " + line + "\n").utf8))
-    file.write(line)
-  }
-}
-
-/// Failed readings and when they pass again: ~/Library/Logs/QuotaBar/refresh.log (the person's
-/// name and why; no keys).
-enum RefreshLog {
-  static let file = LogFile("refresh.log")
-  static var url: URL { file.url }
-  static func write(_ line: String) { file.write(line) }
 }
