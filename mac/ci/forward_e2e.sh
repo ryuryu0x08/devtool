@@ -20,8 +20,36 @@ printf '{"inferenceGatewayBaseUrl":"http://%s:9931/api","inferenceGatewayApiKey"
 python3 ../ci/fake_usage.py &
 SERVER=$!
 BUSY=""
-trap 'kill $SERVER $BUSY 2>/dev/null || true; pkill -x QuotaBar || true' EXIT
+PROXY=""
+trap 'kill $SERVER $BUSY $PROXY 2>/dev/null || true; pkill -x QuotaBar || true; [[ -n "$PROXY" ]] && proxies off' EXIT
 until curl -s -o /dev/null "http://$IP:9931/"; do sleep 0.2; done
+
+# A system proxy, as Clash and the like set, that answers everything with an empty 400: the
+# forwarder must go straight to the model API, not through it.
+python3 -c '
+import http.server
+class P(http.server.BaseHTTPRequestHandler):
+    def handle_one_request(self):
+        self.raw_requestline = self.rfile.readline(65537)
+        self.wfile.write(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        self.close_connection = True
+    def log_message(self, *a): pass
+http.server.ThreadingHTTPServer(("127.0.0.1", 7890), P).serve_forever()' &
+PROXY=$!
+SERVICES="$(networksetup -listallnetworkservices | tail -n +2 | grep -v '^\*')"
+proxies() {
+  while IFS= read -r svc; do
+    if [[ $1 == on ]]; then
+      sudo networksetup -setwebproxy "$svc" 127.0.0.1 7890
+      sudo networksetup -setsocksfirewallproxy "$svc" 127.0.0.1 7890
+    else
+      sudo networksetup -setwebproxystate "$svc" off
+      sudo networksetup -setsocksfirewallproxystate "$svc" off
+    fi
+  done <<< "$SERVICES"
+}
+proxies on
+scutil --proxy | grep -E "HTTPEnable|HTTPPort|SOCKSEnable" || true
 
 python3 - "$DIR" "$TMP" "$IP" <<'PY'
 import json, sys

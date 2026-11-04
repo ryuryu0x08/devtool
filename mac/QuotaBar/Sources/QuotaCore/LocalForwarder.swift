@@ -263,7 +263,12 @@ public final class LocalForwarder: @unchecked Sendable {
   }
 
   private func forward(_ c: NWConnection, _ request: Data) {
-    let up = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: targetPort)!, using: .tcp)
+    // Straight to the API, as curl and the Python forwarder go: Network.framework would otherwise
+    // follow the system's proxy (Clash and the like set one), sending this plain-server request
+    // to a proxy, which answers it with an empty 400.
+    let params = NWParameters.tcp
+    params.preferNoProxies = true
+    let up = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: targetPort)!, using: params)
     // The state handler runs on `queue` only.
     let started = Once()
     up.stateUpdateHandler = { [weak self] s in
@@ -306,7 +311,8 @@ public final class LocalForwarder: @unchecked Sendable {
       if let data { buf.append(data) }
       if let r = buf.range(of: Data("\r\n\r\n".utf8)) {
         let head = Self.rewriteReply(String(decoding: buf[..<r.lowerBound], as: UTF8.self))
-        let status = String(head.prefix(while: { $0 != "\r" }))
+        // ("\r\n" is one Character in Swift: split on the string, not on "\r".)
+        let status = head.components(separatedBy: "\r\n").first ?? ""
         let code = Int(status.split(separator: " ").dropFirst().first ?? "") ?? 0
         self.log?(status + (code >= 400 ? " — " + String(decoding: buf[r.upperBound...].prefix(300), as: UTF8.self) : ""))
         self.send(Data(head.utf8) + buf[r.upperBound...], to: c) { ok in
