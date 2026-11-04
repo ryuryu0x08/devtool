@@ -64,7 +64,7 @@ struct Config: Codable, Equatable {
   init() {}
 
   private enum CodingKeys: String, CodingKey {
-
+    case url, interval, people, retired, settingsPath, claudeDir, desktopDir, baseURL, desktopRestart, forward, forwardPort, ours, desktopPrevious, swapKeys, desktopPerson, keys
   }
   private struct OldKey: Decodable { var id: String; var key: String }
 
