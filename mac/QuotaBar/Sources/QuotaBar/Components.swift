@@ -301,3 +301,53 @@ private struct SwitchKnob: View {
   }
 }
 
+
+/// An ⓘ that shows a short explanation in a bubble while the pointer is on it (a moment after,
+/// so that passing over it doesn't flash one), or when clicked. `.help` tooltips don't show in a
+/// toggle's label, and are plain.
+struct InfoTip: View {
+  /// (label, text) lines: "问题", "做法".
+  let rows: [(String, String)]
+  /// Shown once it appears (for the CI screenshot).
+  var showAtStart = false
+  @State private var shown = false
+  @State private var over = false
+
+  var body: some View {
+    Icon(.info, size: 12)
+      .foregroundStyle(over || shown ? Color.accentColor : Color.secondary)
+      .frame(width: 16, height: 16)
+      .contentShape(Rectangle())
+      .onHover { on in
+        over = on
+        if on {
+          Task {
+            try? await Task.sleep(for: .milliseconds(250))
+            if over { shown = true }
+          }
+        } else {
+          shown = false
+        }
+      }
+      .onTapGesture { shown.toggle() }
+      .popover(isPresented: $shown, arrowEdge: .bottom) {
+        Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
+          ForEach(rows.indices, id: \.self) { i in
+            GridRow(alignment: .firstTextBaseline) {
+              Text(rows[i].0).font(.ui(11.5, .semibold)).foregroundStyle(.secondary)
+              Text(rows[i].1).font(.ui(12)).fixedSize(horizontal: false, vertical: true)
+            }
+          }
+        }
+        .frame(width: 250, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+      }
+      .animation(.snappy(duration: 0.15), value: over)
+      .task {
+        guard showAtStart else { return }
+        try? await Task.sleep(for: .seconds(1))
+        shown = true
+      }
+  }
+}

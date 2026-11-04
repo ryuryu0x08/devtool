@@ -63,6 +63,14 @@ dark() {
 shot panel-light --panel-window
 shot dashboard-light --dashboard
 shot settings-light --settings
+# The ⓘ of the forwarder rows (Desktop section, further down), its bubble shown.
+open build/QuotaBar.app --args --settings --show-tip
+sleep 6
+swift ../ci/scroll.swift || true
+sleep 4
+screencapture -x "$SHOTS/settings-tip.png"
+pkill -x QuotaBar || true
+sleep 1
 # ⌘A ⌘C ⌘V in a text field: the address field of the settings has the focus.
 open build/QuotaBar.app --args --settings
 sleep 6

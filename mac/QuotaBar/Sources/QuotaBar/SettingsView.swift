@@ -183,12 +183,12 @@ private struct ForwardRow: View {
     VStack(alignment: .leading, spacing: 5) {
       if needed {
         Toggle(isOn: Binding(get: { on }, set: { store.setForward($0) })) {
-          title("本地转发", info: "Desktop 只接受 HTTPS 或本机的 HTTP 地址，连不上 http 的模型接口。\n开启后 QuotaBar 在本机转发请求，Desktop 改连 127.0.0.1。QuotaBar 需保持运行。")
+          title("本地转发", problem: "Desktop 只接受 HTTPS 或本机地址，连不上 http 的模型接口。", fix: "QuotaBar 在本机转发请求，Desktop 改连 127.0.0.1。")
         }
         .disabled(store.forwardState == .starting || store.config.swapKeys)
       }
       Toggle(isOn: Binding(get: { store.config.swapKeys && on }, set: { store.setSwapKeys($0) })) {
-        title("免重启切换", info: "Desktop 只在启动时读取 key，换 key 要重启。\n开启后 Desktop 经本地转发访问，转发给每个请求换上当前选中的 key，切换立即生效。开启时需重启 Desktop 一次。")
+        title("免重启切换", problem: "Desktop 只在启动时读取 key，换人就要重启。", fix: "请求经本地转发，由转发换上选中的 key，切换立即生效。", show: CommandLine.arguments.contains("--show-tip"))
       }
       .disabled(store.forwardState == .starting || store.people.allSatisfy(\.key.isEmpty))
       switch store.forwardState {
@@ -230,12 +230,10 @@ private struct ForwardRow: View {
   }
 
   /// The name, an ⓘ that explains it on hover, and a spinner while the forwarder starts.
-  private func title(_ name: String, info: String) -> some View {
+  private func title(_ name: String, problem: String, fix: String, show: Bool = false) -> some View {
     HStack(spacing: 5) {
       Text(name).font(.ui(13))
-      Icon(.info, size: 12)
-        .foregroundStyle(.secondary)
-        .help(info)
+      InfoTip(rows: [("问题", problem), ("做法", fix)], showAtStart: show)
       if store.forwardState == .starting && (name == "本地转发" || !needed) { ProgressView().controlSize(.mini) }
     }
   }
