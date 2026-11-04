@@ -44,6 +44,15 @@ final class StatusBar: NSObject {
     if popover.isShown { popover.performClose(nil) }
   }
 
+  /// While a dialog asks something, the panel stays open (it would close as soon as the dialog
+  /// takes the focus, as if the app went away); afterwards it closes on a click outside again.
+  func holdPanel(_ hold: Bool) {
+    popover.behavior = hold ? .applicationDefined : .transient
+  }
+
+  /// The panel's window, while it is open (a dialog is placed by it).
+  var panelWindow: NSWindow? { popover.isShown ? popover.contentViewController?.view.window : nil }
+
   /// Redraws the item whenever what it shows changes.
   private func update(_ store: Store) {
     let (symbol, text) = withObservationTracking {

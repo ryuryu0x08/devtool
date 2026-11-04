@@ -55,7 +55,11 @@ enum Dialogs {
 
   /// Shows `a` and waits for a button (its index; Esc and closing give the cancel one's).
   private static func ask(_ a: Ask) -> (button: Int, remember: Bool) {
-    StatusBar.shared.closePanel()
+    // Over the window it is asked from (the panel, the dashboard), else in the middle of the screen;
+    // nothing else is closed or hidden for it.
+    let over = StatusBar.shared.panelWindow ?? NSApp.keyWindow ?? NSApp.windows.first { $0.isVisible && $0.canBecomeKey && !($0 is DialogPanel) }
+    StatusBar.shared.holdPanel(true)
+    defer { StatusBar.shared.holdPanel(false) }
     let cancel = a.buttons.firstIndex { $0.kind == .cancel } ?? 0
     var remember = false
     let panel = DialogPanel()
@@ -67,11 +71,24 @@ enum Dialogs {
     panel.contentView = host
     panel.setContentSize(host.fittingSize)
     panel.onCancel = { NSApp.stopModal(withCode: NSApplication.ModalResponse(rawValue: cancel)) }
-    panel.center()
+    if let over {
+      // Above it, the panel's level too.
+      panel.level = NSWindow.Level(rawValue: max(NSWindow.Level.modalPanel.rawValue, over.level.rawValue + 1))
+      let f = over.frame, size = panel.frame.size
+      var o = NSPoint(x: f.midX - size.width / 2, y: f.maxY - size.height - min(120, max(40, (f.height - size.height) / 3)))
+      if let screen = (over.screen ?? NSScreen.main)?.visibleFrame {
+        o.x = min(max(o.x, screen.minX + 8), screen.maxX - size.width - 8)
+        o.y = min(max(o.y, screen.minY + 8), screen.maxY - size.height - 8)
+      }
+      panel.setFrameOrigin(o)
+    } else {
+      panel.center()
+    }
     NSApp.activate(ignoringOtherApps: true)
     panel.makeKeyAndOrderFront(nil)
     let r = NSApp.runModal(for: panel).rawValue
     panel.orderOut(nil)
+    over?.makeKeyAndOrderFront(nil)
     return (a.buttons.indices.contains(r) ? r : cancel, remember)
   }
 }
