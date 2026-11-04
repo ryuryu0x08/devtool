@@ -236,7 +236,13 @@ struct Trouble: View {
 
   var body: some View {
     HStack(alignment: .firstTextBaseline, spacing: 6) {
-      Icon(.info, size: 11)
+      // The details (HTTP status, the API's message) in a bubble: the menu bar panel shows no
+      // tooltips.
+      if let detail, !detail.isEmpty {
+        InfoTip(text: detail, size: 11)
+      } else {
+        Icon(.info, size: 11)
+      }
       VStack(alignment: .leading, spacing: 1) {
         Text(text)
         if let age {
@@ -247,7 +253,6 @@ struct Trouble: View {
     .font(.ui(11))
     .foregroundStyle(.secondary)
     .fixedSize(horizontal: false, vertical: true)
-    .help(detail ?? "")
   }
 }
 
@@ -303,20 +308,23 @@ private struct SwitchKnob: View {
 }
 
 
-/// An ⓘ that shows a short explanation in a bubble while the pointer is on it (a moment after,
-/// so that passing over it doesn't flash one), or when clicked. `.help` tooltips don't show in a
-/// toggle's label, and are plain.
+/// An ⓘ that shows a text in a bubble while the pointer is on it (a moment after, so that
+/// passing over it doesn't flash one); a click keeps it open, to select and copy the text, until
+/// a click elsewhere. `.help` tooltips don't show in a toggle's label or in the menu bar panel.
 struct InfoTip: View {
   let text: String
+  var size: CGFloat = 12
   /// Shown once it appears (for the CI screenshot).
   var showAtStart = false
   @State private var shown = false
   @State private var over = false
+  /// Opened by a click: stays open (to select and copy the text) until a click elsewhere.
+  @State private var pinned = false
 
   var body: some View {
-    Icon(.info, size: 12)
+    Icon(.info, size: size)
       .foregroundStyle(over || shown ? Color.accentColor : Color.secondary)
-      .frame(width: 16, height: 16)
+      .frame(width: size + 4, height: size + 4)
       .contentShape(Rectangle())
       .onHover { on in
         over = on
@@ -325,17 +333,22 @@ struct InfoTip: View {
             try? await Task.sleep(for: .milliseconds(250))
             if over { shown = true }
           }
-        } else {
+        } else if !pinned {
           shown = false
         }
       }
-      .onTapGesture { shown.toggle() }
+      .onTapGesture {
+        pinned = !(shown && pinned)
+        shown = pinned
+      }
+      .onChange(of: shown) { _, now in if !now { pinned = false } }
       .popover(isPresented: $shown, arrowEdge: .bottom) {
         // A set width the text is wrapped to (a "most" width lets it wrap narrower than the
         // bubble, leaving its right side empty).
         Text(text)
           .font(.ui(12))
           .lineSpacing(2)
+          .textSelection(.enabled)
           .fixedSize(horizontal: false, vertical: true)
           .frame(width: 300, alignment: .leading)
           .padding(.horizontal, 12)
