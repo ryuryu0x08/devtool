@@ -304,10 +304,22 @@ final class Store {
   /// The forwarder runs: Desktop needs it for an http model API, or it swaps the keys.
   var forwardWanted: Bool { config.swapKeys || config.forward && forwardNeeded }
 
-  /// The key the forwarder sends (swapping keys only).
+  /// The key the forwarder sends in place of Desktop's: the chosen person's when swapping keys;
+  /// otherwise the one in Desktop's configuration, which a Desktop opened earlier may not have
+  /// read yet (so a key written there works at once, with no restart).
   var forwarderKey: String? {
-    guard config.swapKeys else { return nil }
+    guard config.swapKeys else {
+      if case .gateway(let k?, _) = ClaudeDesktop.status(dir: config.desktopLibrary) { return k }
+      return nil
+    }
     return people.first { $0.id == config.desktopPerson && !$0.key.isEmpty }?.key
+  }
+
+  /// The running Desktop goes through the running forwarder (it was opened on its address): the
+  /// key the forwarder sends reaches it at once.
+  var desktopOnForwarder: Bool {
+    guard case .on(let u) = forwardState, case .gateway(_, let cur) = ClaudeDesktop.status(dir: config.desktopLibrary) else { return false }
+    return ClaudeSettings.sameURL(cur, u) && !desktopOnOldAddress
   }
 
   /// The person whose key Desktop uses through the forwarder.
@@ -475,7 +487,7 @@ final class Store {
         let name = people.first { $0.key == key }.map { "「\($0.label)」的" } ?? ""
         why.append("免重启切换已关闭，Desktop 改用配置里\(name) key")
       }
-      changedDesktop(why.joined(separator: "；"))
+      changedDesktop(why.joined(separator: "；"), live: !move && desktopOnForwarder)
     } catch {
       notice = Notice(text: "Desktop 地址未改：" + error.localizedDescription, bad: true)
     }
@@ -505,7 +517,12 @@ final class Store {
 
   /// Says what changed in Desktop's configuration and why; if Desktop runs, it needs a restart
   /// for it (asked, done or offered, as set).
-  private func changedDesktop(_ why: String) {
+  /// `live`: only the key changed and Desktop goes through the forwarder, which sends it now.
+  private func changedDesktop(_ why: String, live: Bool = false) {
+    if live {
+      notice = Notice(text: why + "，已生效，无需重启")
+      return
+    }
     notice = Notice(text: why + (desktopRunning ? "，重启 Desktop 后生效" : ""))
     if desktopRunning { afterDesktopChanged(why) }
   }
@@ -516,6 +533,7 @@ final class Store {
 
   func readDesktop() {
     desktopMode = ClaudeDesktop.mode(root: config.desktopRoot)
+    forwarder?.key = forwarderKey
   }
 
   /// The key to give Desktop: Claude Code's, else the first one there is.
@@ -755,6 +773,11 @@ final class Store {
     if desktop {
       do { desktopChanged = try ClaudeDesktop.switchKey(new, dir: config.desktopLibrary) == .written }
       catch { problems.append("Desktop：" + error.localizedDescription) }
+      // Through the forwarder, which now sends the new key: nothing to restart.
+      if desktopChanged && desktopOnForwarder {
+        readDesktop()
+        desktopChanged = false
+      }
     }
     if !problems.isEmpty {
       notice = Notice(text: "「\(name)」换了新 key，未能同步：" + problems.joined(separator: "；"), bad: true)
@@ -918,7 +941,11 @@ final class Store {
         let wantURL = desktopChange == .replace || desktopChange == .ask && setURL ? desktopWant : nil
         desktopChanged = try ClaudeDesktop.switchKey(p.key, baseURL: wantURL, dir: config.desktopLibrary) == .written
         if let wantURL { remember(wantURL); saveConfig() }
-        parts.append(!desktopChanged ? "Desktop 已在用" : desktopRunning ? "Desktop 重启后生效" : "Desktop 下次打开生效")
+        // Desktop goes through the forwarder, which now sends this key: nothing to restart.
+        let live = desktopChanged && wantURL == nil && desktopOnForwarder
+        if live { readDesktop() }
+        parts.append(live ? "Desktop 已生效，无需重启" : !desktopChanged ? "Desktop 已在用" : desktopRunning ? "Desktop 重启后生效" : "Desktop 下次打开生效")
+        if live { desktopChanged = false }
         if LocalForwarder.needed(for: wantURL ?? desktopURL ?? "") { parts.append("Desktop 需开本地转发（设置 → 接口）") }
       } catch { problems.append("Desktop：" + error.localizedDescription) }
     case .managed:

@@ -130,6 +130,29 @@ echo "with swapping: $out"
 out="$(curl -sS -m 10 "http://127.0.0.1:47831/v1/billing/usage")"
 [[ "$out" == *'"nick_name": "yy"'* ]] || { echo "a request without a key did not get the chosen one: $out"; exit 1; }
 echo "OK: swapping keys, the forwarder sends the chosen person's key"
+quit
+
+# Not swapping: the forwarder sends the key in Desktop's configuration (yy), not the one the
+# running Desktop read at launch (ye): a key written there works with no restart.
+python3 - "$DIR" "$TMP" "$IP" "$TMP/desktop/configLibrary/$ID.json" <<'PY'
+import json, sys
+d, tmp, ip, entry = sys.argv[1:]
+json.dump({"url": "http://127.0.0.1:9931/api/v1/billing/usage", "baseURL": f"http://{ip}:9931/api", "forward": True,
+           "forwardPort": 47831,
+           "people": [{"id": "a", "name": "ye", "key": "sk-demo-ye"}, {"id": "b", "name": "yy", "key": "sk-demo-yy"}],
+           "claudeDir": tmp + "/claude", "desktopDir": tmp + "/desktop"},
+          open(d + "/config.json", "w"))
+e = json.load(open(entry))
+e["inferenceGatewayApiKey"] = "sk-demo-yy"
+json.dump(e, open(entry, "w"))
+PY
+launch
+sleep 2
+for _ in $(seq 40); do curl -s -o /dev/null "http://127.0.0.1:47831/" && break; sleep 0.5; done
+out="$(curl -sS -m 10 -H 'Authorization: Bearer sk-demo-ye' "http://127.0.0.1:47831/v1/billing/usage")"
+echo "Desktop's configured key: $out"
+[[ "$out" == *'"nick_name": "yy"'* ]] || { echo "the forwarder did not send Desktop's configured key"; cat "$TMP/app.log"; exit 1; }
+echo "OK: not swapping, the forwarder sends the key in Desktop's configuration"
 
 # The update's last step, as the app does it: the build put in place of the running app (here a
 # copy in a folder of its own), opened, the old one quitting; the new one keeps the port.

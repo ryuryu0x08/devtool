@@ -183,7 +183,7 @@ private struct ForwardRow: View {
     VStack(alignment: .leading, spacing: 5) {
       if needed {
         Toggle(isOn: Binding(get: { on }, set: { store.setForward($0) })) {
-          title("本地转发", info: "Desktop 连不上 http 的模型接口，由 QuotaBar 在本机转发即可。")
+          title("本地转发", info: "Desktop 不支持非本机的 HTTP 接口，开启后经本地代理转发。")
         }
         .disabled(store.forwardState == .starting || store.config.swapKeys)
       }
