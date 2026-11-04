@@ -40,7 +40,12 @@ jobs:
         run: |
           git fetch --quiet origin quotabar-stable || true
           if git merge-base --is-ancestor FETCH_HEAD HEAD 2>/dev/null || ! git rev-parse -q --verify FETCH_HEAD >/dev/null; then
-            git push origin HEAD:refs/heads/quotabar-stable
+            # GitHub now and then answers a push with a server error: tried again, waiting longer each time.
+            for wait in 2 4 8 16 0; do
+              git push origin HEAD:refs/heads/quotabar-stable && exit 0
+              [ "$wait" = 0 ] && exit 1
+              sleep "$wait"
+            done
           else
             echo "quotabar-stable is ahead (a newer run); left as it is"
           fi
