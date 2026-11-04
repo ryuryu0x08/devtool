@@ -330,11 +330,13 @@ struct InfoTip: View {
       }
       .onTapGesture { shown.toggle() }
       .popover(isPresented: $shown, arrowEdge: .bottom) {
+        // A set width the text is wrapped to (a "most" width lets it wrap narrower than the
+        // bubble, leaving its right side empty).
         Text(text)
           .font(.ui(12))
           .lineSpacing(2)
-          .frame(maxWidth: 320, alignment: .leading)
           .fixedSize(horizontal: false, vertical: true)
+          .frame(width: 300, alignment: .leading)
           .padding(.horizontal, 12)
           .padding(.vertical, 8)
       }
