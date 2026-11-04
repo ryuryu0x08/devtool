@@ -106,7 +106,7 @@ public final class LocalForwarder: @unchecked Sendable {
   /// Nothing else listens on 127.0.0.1:`p`. (A listener of Network.framework can share a port
   /// another program holds, so this asks the system with a plain socket first.) Connections that
   /// just ended (TIME_WAIT, after requests passed through) don't count: the port is still ours.
-  static func free(_ p: UInt16) -> Bool {
+  public static func free(_ p: UInt16) -> Bool {
     let s = socket(AF_INET, SOCK_STREAM, 0)
     guard s >= 0 else { return false }
     defer { Darwin.close(s) }
