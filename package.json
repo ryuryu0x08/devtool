@@ -3,7 +3,8 @@
   "private": true,
   "description": "Monorepo: apps/toolbox (web), apps/quotabar (macOS), apps/relay (desktop). The scripts below are the toolbox's, as they were before the move.",
   "workspaces": [
-    "apps/toolbox"
+    "apps/toolbox",
+    "packages/ui"
   ],
   "scripts": {
     "dev": "npm run dev -w @devtool/toolbox",
