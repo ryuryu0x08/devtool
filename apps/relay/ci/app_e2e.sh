@@ -3,8 +3,9 @@
 # request with a token to the upstream with the upstream's key, saves what the window changes,
 # and a second launch leaves the first one serving. Usage: ci/app_e2e.sh <path to the app binary>
 set -euo pipefail
-cd "$(dirname "$0")/.."
+# The path as given, from where the script was started (before moving to apps/relay).
 APP="$(realpath "$1")"
+cd "$(dirname "$0")/.."
 TMP="$(mktemp -d)"
 export XDG_CONFIG_HOME="$TMP/config"
 DIR="$XDG_CONFIG_HOME/com.devtool.relay"
