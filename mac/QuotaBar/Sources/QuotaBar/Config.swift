@@ -15,6 +15,20 @@ enum DesktopRestart: String, Codable, CaseIterable {
   }
 }
 
+/// What the menu bar item shows besides its icon: narrower when the menu bar is crowded (macOS
+/// hides the items that don't fit, from the left).
+enum BarStyle: String, Codable, CaseIterable {
+  case full, amount, icon
+
+  var label: String {
+    switch self {
+    case .full: return "名字和额度"
+    case .amount: return "只显示额度"
+    case .icon: return "只显示图标"
+    }
+  }
+}
+
 struct Config: Codable, Equatable {
   static let defaultURL = "http://api-ai-coding.bilibili.co/api/v1/billing/usage"
   static let defaultBaseURL = "http://api-ai-coding.bilibili.co/api"
@@ -52,6 +66,7 @@ struct Config: Codable, Equatable {
   var cookieBrowser = ChromeCookies.chrome.name
   /// The portal endpoint reached with the cookies.
   var cookieURL = ProxyUsageAPI.defaultURL
+  var barStyle = BarStyle.full
 
   static var detectedClaudeDir: String {
     ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"].flatMap { $0.isEmpty ? nil : $0 } ?? "~/.claude"
@@ -65,7 +80,7 @@ struct Config: Codable, Equatable {
   init() {}
 
   private enum CodingKeys: String, CodingKey {
-    case url, interval, people, retired, settingsPath, claudeDir, desktopDir, baseURL, desktopRestart, forward, forwardPort, ours, desktopPrevious, swapKeys, desktopPerson, cookieSync, cookieBrowser, cookieURL, keys
+    case url, interval, people, retired, settingsPath, claudeDir, desktopDir, baseURL, desktopRestart, forward, forwardPort, ours, desktopPrevious, swapKeys, desktopPerson, cookieSync, cookieBrowser, cookieURL, barStyle, keys
   }
   private struct OldKey: Decodable { var id: String; var key: String }
 
@@ -92,6 +107,7 @@ struct Config: Codable, Equatable {
     cookieBrowser = try c.decodeIfPresent(String.self, forKey: .cookieBrowser) ?? ChromeCookies.chrome.name
     let cu = try c.decodeIfPresent(String.self, forKey: .cookieURL) ?? ""
     cookieURL = cu.isEmpty ? ProxyUsageAPI.defaultURL : cu
+    barStyle = (try? c.decodeIfPresent(BarStyle.self, forKey: .barStyle)) ?? .full
     let b = try c.decodeIfPresent(String.self, forKey: .baseURL) ?? ""
     baseURL = b.isEmpty ? Config.defaultBaseURL : b
     desktopRestart = (try? c.decodeIfPresent(DesktopRestart.self, forKey: .desktopRestart)) ?? .ask
@@ -120,6 +136,7 @@ struct Config: Codable, Equatable {
     try c.encode(cookieSync, forKey: .cookieSync)
     try c.encode(cookieBrowser, forKey: .cookieBrowser)
     try c.encode(cookieURL, forKey: .cookieURL)
+    try c.encode(barStyle, forKey: .barStyle)
     try c.encode(baseURL, forKey: .baseURL)
     try c.encode(desktopRestart, forKey: .desktopRestart)
   }

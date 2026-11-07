@@ -69,31 +69,46 @@ final class StatusBar: NSObject {
     ])
   }
 
+  /// The icon and the text beside it, as the menu bar display setting says.
   static func content(_ store: Store) -> (String, String?) {
-    guard let p = store.active else { return ("gauge.with.dots.needle.50percent", nil) }
+    let (symbol, name, amount) = parts(store)
+    switch store.config.barStyle {
+    case .full: return (symbol, [name, amount].compactMap { $0 }.joined(separator: " ").nilIfEmpty)
+    case .amount: return (symbol, amount)
+    case .icon: return (symbol, nil)
+    }
+  }
+
+  /// The icon, the active person's name, and what they can still use today (nil while there is
+  /// no reading to show).
+  private static func parts(_ store: Store) -> (String, String?, String?) {
+    guard let p = store.active else { return ("gauge.with.dots.needle.50percent", nil, nil) }
     let g: GoodReading
     switch store.shown(p) {
     case .noKey:
-      return ("exclamationmark.triangle", p.label)
+      return ("exclamationmark.triangle", p.label, nil)
     case .failing(_, let last):
       // A failed reading among good ones shows the last good one until it goes on (the panel
       // and the dashboard say what failed).
-      guard let last, !store.troubleInBar(p) else { return ("exclamationmark.triangle", p.label) }
+      guard let last, !store.troubleInBar(p) else { return ("exclamationmark.triangle", p.label, nil) }
       g = last
     case .waiting:
-      return ("gauge.with.dots.needle.50percent", p.label)
+      return ("gauge.with.dots.needle.50percent", p.label, nil)
     case .ok(let r):
       g = r
     }
-    do {
-      let s = KeyState(g.usage)
-      let symbol: String
-      switch s.kind {
-      case .withinDaily: symbol = "gauge.with.dots.needle.33percent"
-      case .onOverflow: symbol = "gauge.with.dots.needle.67percent"
-      case .out: symbol = "gauge.with.dots.needle.100percent"
-      }
-      return (symbol, p.label + " " + Fmt.num(s.left))
+    let s = KeyState(g.usage)
+    let symbol: String
+    switch s.kind {
+    case .withinDaily: symbol = "gauge.with.dots.needle.33percent"
+    case .onOverflow: symbol = "gauge.with.dots.needle.67percent"
+    case .out: symbol = "gauge.with.dots.needle.100percent"
     }
+    return (symbol, p.label, Fmt.num(s.left))
   }
+
+}
+
+private extension String {
+  var nilIfEmpty: String? { isEmpty ? nil : self }
 }

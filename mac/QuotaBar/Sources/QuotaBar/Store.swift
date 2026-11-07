@@ -476,6 +476,11 @@ final class Store {
     saveConfig()
   }
 
+  func setBarStyle(_ s: BarStyle) {
+    config.barStyle = s
+    saveConfig()
+  }
+
   func remove(_ p: Person) {
     config.people.removeAll { $0.id == p.id }
     failures[p.id] = nil

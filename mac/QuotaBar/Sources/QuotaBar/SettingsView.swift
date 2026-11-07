@@ -74,6 +74,12 @@ struct SettingsView: View {
             Text(text.label).font(.ui(13)).monospacedDigit().foregroundStyle(.secondary)
             Stepper("字号", value: $text.bump, in: TextSize.range, step: 0.5).labelsHidden()
           }
+          HStack {
+            label("菜单栏")
+            Spacer()
+            Segmented(selection: Binding(get: { store.config.barStyle }, set: { store.setBarStyle($0) }),
+                      options: BarStyle.allCases.map { ($0, $0.label) })
+          }
         } header: {
           header("显示")
         }

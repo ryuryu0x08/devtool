@@ -40,6 +40,13 @@ struct QuotaBarApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+  /// Opened again (Spotlight, Launchpad, Finder) while it runs: the dashboard, so the app is
+  /// there even when macOS hid its menu bar item for want of room.
+  func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+    MainActor.assumeIsolated { Windows.showDashboard(Store.shared) }
+    return false
+  }
+
   func applicationDidFinishLaunching(_ n: Notification) {
     MainActor.assumeIsolated {
       editShortcuts()
