@@ -98,6 +98,21 @@ test('after switching tools the main input gets focus, but never steals it from 
   await expect(page.locator('textarea').nth(0)).not.toHaveValue(/MARK-7Q/);
 });
 
+test('a button in the tool chosen right after switching keeps the focus: a key pressed on it works there', async ({ page }) => {
+  await open(page);
+  await nav(page, 'JSON 格式化');
+  // Switch, and go to the result's handle before the delayed autofocus runs.
+  await page.locator('.nav-item', { hasText: 'YAML 格式化' }).evaluate((b) => {
+    (b as HTMLElement).click();
+    requestAnimationFrame(() => document.querySelector<HTMLElement>('.split-grip')!.focus());
+  });
+  await page.waitForTimeout(200);
+  await expect(page.locator('.split-grip')).toBeFocused();
+  const before = await page.locator('.split').getAttribute('data-layout');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.split')).not.toHaveAttribute('data-layout', before!);
+});
+
 test('the app mark replaces "TB" everywhere; the tab icon and touch icon load', async ({ page }) => {
   await open(page);
   await expect(page.locator('.logo svg')).toHaveCount(1);

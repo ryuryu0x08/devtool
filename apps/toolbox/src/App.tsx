@@ -491,14 +491,17 @@ export function App() {
   }, INPUT_KEYS.map((k) => S[k]));
 
   // On desktop, focus the tool's main input after switching tools, unless the user is already
-  // typing elsewhere (moving focus then would send their keystrokes or paste to the wrong field).
+  // typing elsewhere (moving focus then would send their keystrokes or paste to the wrong field),
+  // or has already gone to something in the tool (a button clicked or tabbed to in the meantime:
+  // a key pressed on it would land in the input instead).
   useEffect(() => {
     if (!ref.current.wide) return;
     const t = setTimeout(() => {
       const el = document.querySelector<HTMLElement>('[data-autofocus]');
       const a = document.activeElement;
       const typing = a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement || a instanceof HTMLSelectElement || (a instanceof HTMLElement && a.isContentEditable);
-      if (el && !typing && !ref.current.palette) el.focus();
+      const inTool = a instanceof HTMLElement && a !== el && a.closest('.content') !== null;
+      if (el && !typing && !inTool && !ref.current.palette) el.focus();
     }, 40);
     return () => clearTimeout(t);
   }, [S.tool]);
