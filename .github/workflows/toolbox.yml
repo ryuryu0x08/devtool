@@ -3,7 +3,7 @@
 name: toolbox
 on:
   push:
-    paths: ['apps/toolbox/**', 'package.json', 'package-lock.json', '.github/workflows/toolbox.yml']
+    paths: ['apps/toolbox/**', 'packages/**', 'package.json', 'package-lock.json', '.github/workflows/toolbox.yml']
   workflow_dispatch:
 jobs:
   check:
