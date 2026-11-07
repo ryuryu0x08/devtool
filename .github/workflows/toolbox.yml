@@ -1,0 +1,29 @@
+# Checks the toolbox (apps/toolbox): types, unit tests, the build, and the end-to-end tests in
+# Chromium against the build.
+name: toolbox
+on:
+  push:
+    paths: ['apps/toolbox/**', 'package.json', 'package-lock.json', '.github/workflows/toolbox.yml']
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+        working-directory: apps/toolbox
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-results
+          path: apps/toolbox/test-results

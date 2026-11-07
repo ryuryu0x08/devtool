@@ -1,7 +1,7 @@
 #!/bin/bash
 # Screenshots of QuotaBar against a stand-in usage API (CI only: it replaces the app's config).
 set -euo pipefail
-cd "$(dirname "$0")/../QuotaBar"
+cd "$(dirname "$0")/.."
 SHOTS="$PWD/build/shots"
 mkdir -p "$SHOTS"
 DIR="$HOME/Library/Application Support/QuotaBar"
@@ -10,7 +10,7 @@ TMP="$(mktemp -d)"
 # Claude Code still uses ye's old key, which was rotated.
 printf '{\n  "model": "opus",\n  "env": {\n    "ANTHROPIC_AUTH_TOKEN": "sk-demo-ye-old"\n  }\n}\n' > "$TMP/settings.json"
 
-python3 ../ci/fake_usage.py &
+python3 ci/fake_usage.py &
 SERVER=$!
 until curl -s -o /dev/null http://127.0.0.1:9931/; do sleep 0.2; done
 trap 'kill $SERVER 2>/dev/null || true; pkill -x QuotaBar || true' EXIT
@@ -51,7 +51,7 @@ shot() {
   sleep 8
   screencapture -x "$SHOTS/$1.png"
   if [[ "$2" == --dashboard ]]; then
-    swift ../ci/scroll.swift && sleep 1 && screencapture -x "$SHOTS/$1-end.png"
+    swift ci/scroll.swift && sleep 1 && screencapture -x "$SHOTS/$1-end.png"
   fi
   pkill -x QuotaBar || true
   sleep 1
@@ -66,7 +66,7 @@ shot settings-light --settings
 # The ⓘ of the forwarder rows (Desktop section, further down), its bubble shown.
 open build/QuotaBar.app --args --settings --show-tip
 sleep 6
-swift ../ci/scroll.swift || true
+swift ci/scroll.swift || true
 sleep 4
 screencapture -x "$SHOTS/settings-tip.png"
 pkill -x QuotaBar || true

@@ -51,11 +51,12 @@ test('the result is dragged below: both panes take the full width; each tool rem
 
 test('a click on the handle switches; so does Enter on it', async ({ page }) => {
   await open(page, 'YAML 格式化');
+  // Waited for: under load the page may draw the change a moment after the click.
   await page.locator('.split-grip').click();
-  expect(await layout(page)).toBe('col');
+  await expect(page.locator('.split')).toHaveAttribute('data-layout', 'col');
   await page.locator('.split-grip').focus();
   await page.keyboard.press('Enter');
-  expect(await layout(page)).toBe('row');
+  await expect(page.locator('.split')).toHaveAttribute('data-layout', 'row');
 });
 
 test('the gap is dragged to share the width, remembered; a double-click shares it equally', async ({ page }) => {

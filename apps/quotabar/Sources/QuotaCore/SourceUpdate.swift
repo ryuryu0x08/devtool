@@ -5,7 +5,7 @@ import Foundation
 
 public struct SourceUpdate: Sendable {
   public static let branch = "quotabar-stable"
-  /// The folder build.sh is in (mac/QuotaBar inside the clone).
+  /// The folder build.sh is in (apps/quotabar inside the clone).
   public let dir: URL
   /// git runs with what the user's shell sets (its ssh agent, proxy, PATH): an app opened from
   /// Finder doesn't have them, and git over ssh then has no key ("Permission denied (publickey)").

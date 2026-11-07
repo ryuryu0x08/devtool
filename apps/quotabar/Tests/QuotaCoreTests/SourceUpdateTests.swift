@@ -25,15 +25,15 @@ final class SourceUpdateTests: XCTestCase {
   func testFollowsTheStableBranchForTheAppFolderOnly() throws {
     try sh("git init -q --bare -b main remote.git && git clone -q remote.git ci 2>/dev/null")
     let ci = dir.appendingPathComponent("ci")
-    let c1 = try commit("mac/QuotaBar/a.swift", "1", in: ci)
+    let c1 = try commit("apps/quotabar/a.swift", "1", in: ci)
     try sh("git push -q origin main main:\(SourceUpdate.branch)", in: ci)
     try sh("git clone -q remote.git user 2>/dev/null")
-    let app = SourceUpdate(dir: dir.appendingPathComponent("user/mac/QuotaBar"))
+    let app = SourceUpdate(dir: dir.appendingPathComponent("user/apps/quotabar"))
 
     XCTAssertEqual(try app.newer(than: c1).count, 0)
 
     // On main only (CI hasn't passed it yet): nothing.
-    _ = try commit("mac/QuotaBar/a.swift", "2", in: ci)
+    _ = try commit("apps/quotabar/a.swift", "2", in: ci)
     try sh("git push -q origin main", in: ci)
     XCTAssertEqual(try app.newer(than: c1).count, 0)
 
@@ -42,10 +42,10 @@ final class SourceUpdateTests: XCTestCase {
     try sh("git push -q origin main main:\(SourceUpdate.branch)", in: ci)
     let n = try app.newer(than: c1)
     XCTAssertEqual(n.count, 1)
-    XCTAssertEqual(n.subject, "change mac/QuotaBar/a.swift")
+    XCTAssertEqual(n.subject, "change apps/quotabar/a.swift")
 
     try app.fastForward()
-    XCTAssertEqual(try sh("cat mac/QuotaBar/a.swift", in: dir.appendingPathComponent("user")), "2")
+    XCTAssertEqual(try sh("cat apps/quotabar/a.swift", in: dir.appendingPathComponent("user")), "2")
     let head = try app.git(["rev-parse", "HEAD"]).trimmingCharacters(in: .whitespacesAndNewlines)
     XCTAssertEqual(try app.newer(than: head).count, 0)
   }
@@ -53,17 +53,17 @@ final class SourceUpdateTests: XCTestCase {
   func testLocalChangesInTheWayStopIt() throws {
     try sh("git init -q --bare -b main remote.git && git clone -q remote.git ci 2>/dev/null")
     let ci = dir.appendingPathComponent("ci")
-    let c1 = try commit("mac/QuotaBar/a.swift", "1", in: ci)
+    let c1 = try commit("apps/quotabar/a.swift", "1", in: ci)
     try sh("git push -q origin main main:\(SourceUpdate.branch)", in: ci)
     try sh("git clone -q remote.git user 2>/dev/null")
     let user = dir.appendingPathComponent("user")
-    let app = SourceUpdate(dir: user.appendingPathComponent("mac/QuotaBar"))
-    _ = try commit("mac/QuotaBar/a.swift", "2", in: ci)
+    let app = SourceUpdate(dir: user.appendingPathComponent("apps/quotabar"))
+    _ = try commit("apps/quotabar/a.swift", "2", in: ci)
     try sh("git push -q origin main:\(SourceUpdate.branch)", in: ci)
-    try sh("printf mine > mac/QuotaBar/a.swift", in: user)
+    try sh("printf mine > apps/quotabar/a.swift", in: user)
     XCTAssertEqual(try app.newer(than: c1).count, 1)
     XCTAssertThrowsError(try app.fastForward())
-    XCTAssertEqual(try sh("cat mac/QuotaBar/a.swift", in: user), "mine")
+    XCTAssertEqual(try sh("cat apps/quotabar/a.swift", in: user), "mine")
   }
 
   func testNoRemoteIsAnError() throws {

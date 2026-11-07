@@ -1,8 +1,8 @@
-# Builds and tests the macOS app (mac/QuotaBar) on a Mac. The built app is attached to the run.
-name: mac
+# Builds and tests QuotaBar (apps/quotabar) on a Mac. The built app is attached to the run.
+name: quotabar
 on:
   push:
-    paths: ['mac/**', '.github/workflows/mac.yml']
+    paths: ['apps/quotabar/**', 'mac/**', '.github/workflows/quotabar.yml']
   workflow_dispatch:
 jobs:
   build:
@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 30
     defaults:
       run:
-        working-directory: mac/QuotaBar
+        working-directory: apps/quotabar
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,18 +21,30 @@ jobs:
           fetch-depth: 0
       - run: swift --version
       - run: swift test
-      - run: ./build.sh
       - name: Can Core Text read .woff2?
         run: |
           curl -sSL https://registry.npmjs.org/@fontsource-variable/inter/-/inter-5.1.0.tgz | tar xz -C "$RUNNER_TEMP"
-          swift ../ci/fontcheck.swift "$RUNNER_TEMP"/package/files/inter-latin-wght-normal.woff2 "$RUNNER_TEMP"/package/files/inter-latin-wght-normal.woff2
+          swift ci/fontcheck.swift "$RUNNER_TEMP"/package/files/inter-latin-wght-normal.woff2 "$RUNNER_TEMP"/package/files/inter-latin-wght-normal.woff2
+      # As an app installed before the move to apps/quotabar updates: it runs mac/QuotaBar/build.sh
+      # and takes the app from mac/QuotaBar/build; the fonts kept there come along.
+      - name: Build the way an app from before the move does
+        run: |
+          mkdir -p ../../mac/QuotaBar/Fonts
+          cp "$RUNNER_TEMP"/package/files/inter-latin-wght-normal.woff2 ../../mac/QuotaBar/Fonts/
+          bash ../../mac/QuotaBar/build.sh
+          OLD=../../mac/QuotaBar/build/QuotaBar.app
+          test -x "$OLD/Contents/MacOS/QuotaBar" || { echo "no app where the old updater takes it"; exit 1; }
+          SRC="$(/usr/libexec/PlistBuddy -c 'Print :QBSourceDir' "$OLD/Contents/Info.plist")"
+          [[ "$SRC" == */apps/quotabar ]] || { echo "the app would update from $SRC"; exit 1; }
+          test -f build/QuotaBar.app/Contents/Resources/Fonts/inter-latin-wght-normal.woff2 || { echo "the fonts were not taken along"; exit 1; }
+          echo "OK: built through the old path, updates from $SRC, fonts taken along"
       # A look at the app against a stand-in usage API: the dashboard, light and dark.
       - name: Local forwarder, end to end
         timeout-minutes: 5
-        run: ../ci/forward_e2e.sh
+        run: ci/forward_e2e.sh
       - name: Screenshots
         timeout-minutes: 8
-        run: ../ci/screenshots.sh
+        run: ci/screenshots.sh
       - run: ditto -c -k --keepParent build/QuotaBar.app build/QuotaBar.zip
       # Built and tested: the app's update check may install this version now.
       - name: Mark as stable
@@ -52,9 +64,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: QuotaBar
-          path: mac/QuotaBar/build/QuotaBar.zip
+          path: apps/quotabar/build/QuotaBar.zip
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: screenshots
-          path: mac/QuotaBar/build/shots
+          path: apps/quotabar/build/shots

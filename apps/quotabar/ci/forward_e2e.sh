@@ -3,7 +3,7 @@
 # The model API is the stand-in API under a name of its own (http and not 127.0.0.1 by name, so
 # Desktop would need the forwarder); Desktop's configuration is a stand-in in a temporary folder.
 set -euo pipefail
-cd "$(dirname "$0")/../QuotaBar"
+cd "$(dirname "$0")/.."
 DIR="$HOME/Library/Application Support/QuotaBar"
 mkdir -p "$DIR"
 IP=model-api.quotabar.test
@@ -17,7 +17,7 @@ ID=00000000-0000-4000-8000-000000000001
 printf '{"entries":[{"id":"%s","name":"t"}],"appliedId":"%s"}' $ID $ID > "$TMP/desktop/configLibrary/_meta.json"
 printf '{"inferenceGatewayBaseUrl":"http://%s:9931/api","inferenceGatewayApiKey":"__sealed__:v1:x","inferenceProvider":"gateway","inferenceCredentialKind":"static"}' "$IP" > "$TMP/desktop/configLibrary/$ID.json"
 
-python3 ../ci/fake_usage.py &
+python3 ci/fake_usage.py &
 SERVER=$!
 BUSY=""
 PROXY=""
@@ -85,7 +85,7 @@ launch
 check 47831
 echo "OK: forwarder on 47831, Desktop moved to it without asking, requests pass"
 # As Claude Desktop does: Node's fetch, connections kept and reused, a stream among them.
-node ../ci/desktop_like.mjs http://127.0.0.1:47831
+node ci/desktop_like.mjs http://127.0.0.1:47831
 echo "OK: a Desktop-like client works through the forwarder"
 quit() { pkill -x QuotaBar; while pgrep -x QuotaBar >/dev/null; do sleep 0.2; done; }
 
