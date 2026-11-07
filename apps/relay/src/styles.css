@@ -1,0 +1,107 @@
+/* The relay's window, on @devtool/ui's colours and controls. */
+html, body, #root { height: 100%; }
+body { color: var(--ink); font-size: 14px; overflow: hidden; }
+.loading { padding: 40px; color: var(--mut); }
+
+.app { display: flex; height: 100%; }
+.side {
+  width: 250px; flex: none; display: flex; flex-direction: column; gap: 14px; padding: 18px 14px;
+  background: var(--side); border-right: 1px solid var(--line); overflow: auto;
+}
+.main { flex: 1; min-width: 0; overflow: auto; padding: 22px 26px 40px; }
+.brand { font-weight: 650; font-size: 16px; padding: 0 6px; }
+.faint { color: var(--faint); }
+.spacer { flex: 1; }
+
+.server { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.state { display: flex; align-items: center; gap: 6px; font-size: 12.5px; flex-wrap: wrap; }
+.state .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
+.state.ok .dot { background: var(--add); }
+.state.bad { color: var(--del); }
+.state.bad .dot { background: var(--del); }
+.port { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.port input { width: 70px; height: 26px; padding: 0 8px; border: 1px solid var(--line2); border-radius: 6px; background: var(--bg); outline: none; }
+
+.routes { display: flex; flex-direction: column; gap: 2px; }
+.route-item {
+  display: flex; justify-content: space-between; gap: 8px; padding: 8px 10px; border: 0; border-radius: 8px;
+  background: transparent; text-align: left; cursor: pointer; font-size: 13.5px;
+}
+.route-item:hover { background: var(--sel); }
+.route-item.on { background: var(--accSoft); color: var(--acc); }
+.route-item .faint { font-size: 11.5px; }
+
+.new-route { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12.5px; }
+
+input:not([type]), input[type='password'] {
+  height: 30px; padding: 0 10px; border: 1px solid var(--line2); border-radius: 7px; background: var(--bg); outline: none; min-width: 0;
+}
+input:focus { border-color: var(--acc); box-shadow: 0 0 0 3px var(--accRing); background: var(--card); }
+
+.route { display: flex; flex-direction: column; gap: 16px; max-width: 1080px; }
+.route-head { display: flex; align-items: center; gap: 10px; }
+.route-head .title { margin: 0; font-size: 20px; font-weight: 650; }
+.rename { display: flex; gap: 6px; }
+.rename input { width: 220px; }
+.chip { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: var(--seg); color: var(--mut); }
+
+.card-head .sub { margin-left: 8px; font-size: 12px; color: var(--faint); font-weight: 400; }
+.card-head { font-weight: 600; justify-content: flex-start; }
+.rows { display: flex; flex-direction: column; padding: 6px 8px; }
+.row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; min-height: 38px; border-radius: 8px; font-size: 13px; }
+.row + .row { border-top: 1px solid var(--line); border-radius: 0; }
+.row .k { width: 96px; flex: none; color: var(--mut); font-size: 12.5px; }
+.row .name { font-weight: 550; }
+.row .hint { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: var(--mut); }
+.row.off { opacity: 0.55; }
+.row .order { width: 18px; color: var(--faint); font: 12px 'Geist Mono', monospace; }
+.row .url { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row.add input { flex: 1; max-width: 280px; }
+
+.copy {
+  padding: 3px 6px; margin: -3px -6px; border: 0; border-radius: 6px; background: transparent; cursor: pointer;
+  color: inherit; text-align: left; font-size: 13px; word-break: break-all;
+}
+.copy:hover { background: var(--accSoft); }
+.copy.big { font-size: 14px; }
+
+.reveal {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 10px 14px 0; padding: 10px 12px;
+  border-radius: 10px; background: var(--chgBg); color: var(--ink); font-size: 13px;
+}
+
+.upstream-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px; }
+.upstream-form .f-name { width: 120px; }
+.upstream-form .f-url { flex: 1; min-width: 220px; }
+.upstream-form .f-key { width: 220px; }
+.check { display: flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--mut); cursor: pointer; }
+
+.switch {
+  position: relative; width: 34px; height: 20px; flex: none; padding: 0; border: 0; border-radius: 999px;
+  background: var(--line2); cursor: pointer; transition: background 0.15s;
+}
+.switch span {
+  position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); transition: transform 0.15s;
+}
+.switch.on { background: var(--acc); }
+.switch.on span { transform: translateX(14px); }
+.btn.danger { border-color: var(--del); color: var(--del); }
+
+.recent { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.recent td { padding: 6px 10px; border-top: 1px solid var(--line); white-space: nowrap; }
+.recent tr:first-child td { border-top: 0; }
+.recent .note { white-space: normal; }
+.status.s2 { color: var(--add); }
+.status.s4, .status.s5 { color: var(--del); }
+.empty { padding: 18px; color: var(--faint); font-size: 13px; }
+.empty.big { padding: 80px 20px; text-align: center; font-size: 14px; }
+
+.banner { margin-bottom: 14px; padding: 10px 14px; border-radius: 10px; font-size: 13px; }
+.banner.bad { background: var(--delBg); color: var(--del); }
+
+.toast {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); padding: 8px 14px; border-radius: 9px;
+  background: var(--inv); color: var(--invInk); font-size: 13px; box-shadow: 0 6px 20px var(--shadow); z-index: 10;
+}
+.toast.bad { background: var(--del); color: #fff; }

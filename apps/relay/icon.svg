@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- 接口中继: a request comes in on the left, goes out on the right with another key. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4f6bff"/>
+      <stop offset="1" stop-color="#2f43c9"/>
+    </linearGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#bg)"/>
+  <g fill="none" stroke="#ffffff" stroke-width="64" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M232 400 H700"/>
+    <path d="M600 300 L700 400 L600 500"/>
+    <path d="M792 624 H324"/>
+    <path d="M424 524 L324 624 L424 724"/>
+  </g>
+</svg>

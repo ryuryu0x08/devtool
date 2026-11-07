@@ -6,7 +6,7 @@
 |---|---|---|---|
 | 工具箱 | [`apps/toolbox`](apps/toolbox) | 网页工具箱：格式化、编解码、时间戳、对比、二维码等，PC 和手机都能用 | React + Vite |
 | QuotaBar | [`apps/quotabar`](apps/quotabar) | macOS 菜单栏 App：多个 key 的用量，一键切换 Claude Code / Desktop 用的 key | SwiftUI |
-| 接口中继 | `apps/relay`（开发中） | 桌面 App：给使用者发 token，把 Anthropic / OpenAI 请求转到配置好的上游接口和 key | Tauri（Rust + React） |
+| 接口中继 | [`apps/relay`](apps/relay) | 桌面 App（macOS、Windows、Linux）：给使用者发 token，把 Anthropic / OpenAI 请求转到配置好的上游接口和 key | Tauri（Rust + React） |
 
 ## 目录
 
@@ -15,10 +15,14 @@ apps/
   toolbox/          工具箱（说明、产品原则、开发命令见它的 README）
   quotabar/         QuotaBar（安装、功能、代码结构见它的 README）
     ci/             它的端到端测试和截图脚本
+  relay/            接口中继（core/ 中继本身, src-tauri/ 桌面 App, src/ 窗口, e2e/ 和 ci/ 测试）
+packages/
+  ui/               工具箱和接口中继的窗口共用的外观：颜色、字体、按钮、分段控件、卡片
 mac/QuotaBar/       只剩一个 build.sh：移动前装的 QuotaBar 自动更新时用它，编译转到 apps/quotabar
 .github/workflows/  每个产品一个，只在自己的目录变动时运行
   toolbox.yml       类型检查、单元测试、构建、端到端测试（Linux + Chromium）
   quotabar.yml      编译、测试、端到端、截图，通过后把 quotabar-stable 移到这个提交（Mac）
+  relay.yml         测试（Linux），再出 macOS / Windows / Linux 安装包
 package.json        npm workspaces；根目录的 dev / build / test 等命令转给工具箱
 ```
 
@@ -37,4 +41,5 @@ npm run build        # 工具箱构建到根目录 dist/（和移动前相同，
 npm run test:all     # 工具箱全部测试
 
 cd apps/quotabar && ./build.sh --install   # QuotaBar（需要 Xcode 命令行工具）
+npm run build -w @devtool/relay            # 接口中继安装包（需要 Rust）
 ```
