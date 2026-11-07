@@ -270,6 +270,12 @@ macro_rules! commands {
     };
 }
 
+/// The app's config and permissions (tauri.conf.json, capabilities/), made once: on macOS it
+/// embeds the Info.plist, which can be done only once per binary (the app and its tests use this).
+fn context<R: tauri::Runtime>() -> tauri::Context<R> {
+    tauri::generate_context!()
+}
+
 fn show_window(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.unminimize();
@@ -328,7 +334,7 @@ pub fn run() {
             }
         })
         .invoke_handler(commands!())
-        .build(tauri::generate_context!())
+        .build(context())
         .expect("the app starts")
         .run(|app, e| {
             // macOS: the Dock icon clicked while the window is hidden.
@@ -383,7 +389,7 @@ mod tests {
         let app = mock_builder()
             .invoke_handler(commands!())
             .manage(state)
-            .build(tauri::generate_context!())
+            .build(context())
             .unwrap();
         let w = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
             .build()

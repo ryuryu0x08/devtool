@@ -69,11 +69,14 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
       - run: npm ci
       # The core and the commands on this system too (paths, permissions, the app's page origin).
+      # On Windows only the core: a test program of the app doesn't start there (it lacks the
+      # system manifest Tauri attaches to the app itself); the commands are tested on the others.
       - name: Tests on this system
         working-directory: apps/relay
+        shell: bash
         run: |
           npm run build:web
-          cargo test --workspace
+          if [[ "$RUNNER_OS" == Windows ]]; then cargo test -p relay-core; else cargo test --workspace; fi
       - run: npm run build -w @devtool/relay
       - uses: actions/upload-artifact@v4
         with:

@@ -62,7 +62,7 @@ icon.svg         图标源文件（npm run icons -w @devtool/relay 生成各尺�
 ```
 
 ```bash
-cargo test --workspace                 # 在 apps/relay：核心 + 命令（Linux 需要上面的系统库）
+cargo test --workspace                 # 在 apps/relay：核心 + 命令（Linux 需要上面的系统库；Windows 上命令的测试程序起不来，只跑 cargo test -p relay-core）
 npm run test:e2e -w @devtool/relay     # 窗口
 apps/relay/ci/app_e2e.sh apps/relay/target/release/relay-app   # 编译好的 App（Linux，需要 xvfb、dbus）
 ```
