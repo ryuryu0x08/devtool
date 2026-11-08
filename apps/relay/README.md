@@ -2,6 +2,19 @@
 
 桌面 App（macOS、Windows、Linux）：给使用者发 token，把他们的 Anthropic / OpenAI 请求转到你配置的上游接口和 key。使用者拿不到上游的 key；换 key、换上游、停用某个人，都只在这里改。
 
+## 启动
+
+在 Mac 上（第一次要几分钟，之后不到一分钟）：
+
+```bash
+cd devtool/apps/relay
+./build.sh --install     # 编译，放进「应用程序」并打开；已经开着的会先退出
+```
+
+需要 Node 18+ 和 Xcode 命令行工具（`xcode-select --install`）。没有 Rust 时脚本会问你是否用官方的 rustup 安装。只编译不安装：`./build.sh`，App 在 `target/release/bundle/macos/Relay.app`。Linux 同样用 `./build.sh`（出 `.deb`，`--install` 用 sudo 安装）；Windows 在仓库根目录运行 `npm install && npm run build -w @devtool/relay`。
+
+不想自己编译：CI 每次都出三个平台的安装包，见下面的「安装」。
+
 ## 怎么用
 
 1. **新建入口**：起个名字，选 Anthropic 或 OpenAI。
@@ -36,7 +49,7 @@
 | Windows | `.msi` 或 `-setup.exe` | 没有代码签名：SmartScreen 提示时选「仍要运行」 |
 | Linux | `.deb`、`.rpm`、`.AppImage` | |
 
-自己编译：需要 Node 22 和 Rust（[rustup](https://rustup.rs)）；Linux 另需 `libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev`。
+自己编译见上面的「启动」。用 npm 直接编译：需要 Node 18+ 和 Rust（[rustup](https://rustup.rs)）；Linux 另需 `libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev`。
 
 ```bash
 npm install                          # 仓库根目录

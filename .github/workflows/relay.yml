@@ -77,6 +77,25 @@ jobs:
         run: |
           npm run build:web
           if [[ "$RUNNER_OS" == Windows ]]; then cargo test -p relay-core; else cargo test --workspace; fi
+      # As on a Mac: build.sh --install builds, installs and opens it; the relay answers. Again over
+      # the running one: that one quits, the new one serves, only one runs.
+      - name: The build script (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          answers() {
+            for _ in $(seq 60); do curl -s -o /dev/null http://127.0.0.1:8790/ && break; sleep 0.5; done
+            [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8790/v1/messages)" = 401 ] || { echo "the installed app's relay does not answer"; exit 1; }
+          }
+          apps/relay/build.sh --install
+          answers
+          OLD="$(pgrep -f /Applications/Relay.app/ | head -1)"
+          apps/relay/build.sh --install
+          answers
+          NEW="$(pgrep -f /Applications/Relay.app/ | head -1)"
+          [ "$OLD" != "$NEW" ] || { echo "the running app was not replaced"; exit 1; }
+          [ "$(pgrep -f /Applications/Relay.app/ | wc -l | tr -d ' ')" = 1 ] || { echo "more than one is running"; exit 1; }
+          echo "OK: build.sh --install, twice"
+          osascript -e 'tell application "Relay" to quit' || pkill -f /Applications/Relay.app/
       - run: npm run build -w @devtool/relay
       - uses: actions/upload-artifact@v4
         with:
