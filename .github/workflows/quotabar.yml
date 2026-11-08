@@ -25,6 +25,12 @@ jobs:
         run: |
           curl -sSL https://registry.npmjs.org/@fontsource-variable/inter/-/inter-5.1.0.tgz | tar xz -C "$RUNNER_TEMP"
           swift ci/fontcheck.swift "$RUNNER_TEMP"/package/files/inter-latin-wght-normal.woff2 "$RUNNER_TEMP"/package/files/inter-latin-wght-normal.woff2
+      - name: Build, with a font
+        run: |
+          mkdir -p "$RUNNER_TEMP/fonts"
+          cp "$RUNNER_TEMP"/package/files/inter-latin-wght-normal.woff2 "$RUNNER_TEMP/fonts/"
+          ./build.sh --fonts "$RUNNER_TEMP/fonts"
+          test -f build/QuotaBar.app/Contents/Resources/Fonts/inter-latin-wght-normal.woff2 || { echo "the font is not in the app"; exit 1; }
       # A look at the app against a stand-in usage API: the dashboard, light and dark.
       - name: Local forwarder, end to end
         timeout-minutes: 5
