@@ -316,6 +316,20 @@ async fn upstreams_turned_off_are_skipped_and_none_left_is_503() {
     );
     assert_eq!(seen.lock().unwrap().len(), 1);
     relay.config.write().await.routes[0].upstreams[1].enabled = false;
+    let r = client()
+        .get(format!("{url}/v1/models"))
+        .header("x-api-key", &token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 503);
+    let body: serde_json::Value = r.json().await.unwrap();
+    assert_eq!(body["error"]["message"], "接口中继的入口 \"主线\" 没有可用的上游 (上游都已停用): 在接口中继里添加上游, 或打开已有上游的开关");
+    assert_eq!(
+        relay.log.lock().unwrap().recent()[0].note,
+        "没有可用的上游: 上游都已停用"
+    );
+    relay.config.write().await.routes[0].upstreams.clear();
     assert_eq!(
         client()
             .get(format!("{url}/v1/models"))
@@ -325,6 +339,10 @@ async fn upstreams_turned_off_are_skipped_and_none_left_is_503() {
             .unwrap()
             .status(),
         503
+    );
+    assert_eq!(
+        relay.log.lock().unwrap().recent()[0].note,
+        "没有可用的上游: 还没有添加上游"
     );
 }
 

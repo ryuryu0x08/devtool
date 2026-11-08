@@ -134,6 +134,11 @@ function Upstreams({ route, apply }: { route: RouteView; apply: Apply }) {
       <div className="card-head">
         上游 <span className="sub">按顺序尝试; 连不上, 429 或 5xx 时换下一个</span>
       </div>
+      {!route.upstreams.some((u) => u.enabled) && (
+        <div className="warn" role="alert">
+          {route.upstreams.length === 0 ? '还没有上游' : '上游都已停用'}: 这个入口的请求会返回 503. {route.upstreams.length === 0 ? '在下面添加一个, 填完点「添加上游」.' : '打开一个上游的开关.'}
+        </div>
+      )}
       <div className="rows">
         {route.upstreams.map((u, i) =>
           editing === u.id ? (

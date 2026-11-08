@@ -51,7 +51,14 @@ export function App() {
         <nav className="routes" aria-label="入口">
           {view.routes.map((r) => (
             <button key={r.id} type="button" className={'route-item' + (r.id === route?.id ? ' on' : '')} onClick={() => setChosen(r.id)}>
-              <span>{r.name}</span>
+              <span>
+                {r.name}
+                {!r.upstreams.some((u) => u.enabled) && (
+                  <span className="mark" title="没有可用的上游">
+                    !
+                  </span>
+                )}
+              </span>
               <span className="faint">{r.protocol === 'anthropic' ? 'Anthropic' : 'OpenAI'}</span>
             </button>
           ))}

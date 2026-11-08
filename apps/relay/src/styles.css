@@ -65,6 +65,12 @@ input:focus { border-color: var(--acc); box-shadow: 0 0 0 3px var(--accRing); ba
 .copy:hover { background: var(--accSoft); }
 .copy.big { font-size: 14px; }
 
+.warn { margin: 10px 14px 0; padding: 9px 12px; border-radius: 10px; background: var(--delBg); color: var(--del); font-size: 13px; }
+.route-item .mark {
+  display: inline-grid; place-items: center; width: 15px; height: 15px; margin-left: 6px; border-radius: 50%;
+  background: var(--del); color: #fff; font-size: 10.5px; font-weight: 700; vertical-align: 1px;
+}
+
 .reveal {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 10px 14px 0; padding: 10px 12px;
   border-radius: 10px; background: var(--chgBg); color: var(--ink); font-size: 13px;

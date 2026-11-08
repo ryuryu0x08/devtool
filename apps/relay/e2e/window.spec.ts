@@ -100,6 +100,19 @@ test('upstreams: a wrong address is refused with the reason; the key shows only 
   expect(last.args.upstream).not.toHaveProperty('key');
 });
 
+test('a route with no usable upstream says so, there and in the list, until one is on', async ({ page }) => {
+  await open(page);
+  await newRoute(page, '主线');
+  await expect(page.getByRole('alert')).toContainText('还没有上游: 这个入口的请求会返回 503');
+  await expect(page.locator('.route-item.on .mark')).toBeVisible();
+  await addUpstream(page, 'A', 'https://a.example', 'key-a-000000000');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.locator('.route-item.on .mark')).toHaveCount(0);
+  await upRow(page, 'A').getByRole('switch').click();
+  await expect(page.getByRole('alert')).toContainText('上游都已停用');
+  await expect(page.locator('.route-item.on .mark')).toBeVisible();
+});
+
 test('upstreams are tried in order: moved up and down, turned off, deleted after a second click', async ({ page }) => {
   await open(page);
   await newRoute(page, '主线');

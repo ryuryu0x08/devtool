@@ -248,11 +248,17 @@ async fn send(
 ) -> Response {
     let ups: Vec<_> = route.upstreams.iter().filter(|u| u.enabled).collect();
     if ups.is_empty() {
-        entry.note = "没有可用的上游".into();
+        // Said so that whoever sees it (the client's error, the window's log) knows what to do.
+        let why = if route.upstreams.is_empty() {
+            "还没有添加上游"
+        } else {
+            "上游都已停用"
+        };
+        entry.note = format!("没有可用的上游: {why}");
         return error(
             StatusCode::SERVICE_UNAVAILABLE,
             "api_error",
-            "这个入口没有可用的上游",
+            &format!("接口中继的入口 \"{}\" 没有可用的上游 ({why}): 在接口中继里添加上游, 或打开已有上游的开关", route.name),
         );
     }
     let mut tried: Vec<String> = Vec::new();
