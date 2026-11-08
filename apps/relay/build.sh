@@ -53,6 +53,15 @@ if ! command -v cargo >/dev/null; then
     exit 1
   fi
 fi
+# rustup there but no toolchain chosen (installed some other way, or never set): cargo then
+# refuses to run ("rustup could not choose a version of cargo"). The stable one is set.
+if ! cargo --version >/dev/null 2>&1; then
+  if command -v rustup >/dev/null; then
+    echo "==> Rust 还没有默认版本, 设为 stable (第一次要下载, 约 1 分钟)"
+    rustup default stable
+  fi
+  cargo --version >/dev/null 2>&1 || { echo "cargo 不能运行: $(cargo --version 2>&1 | head -1)" >&2; exit 1; }
+fi
 
 # --- Build ------------------------------------------------------------------------------------
 echo "==> 安装 JS 依赖 (仓库根目录)"
