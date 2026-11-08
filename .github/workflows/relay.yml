@@ -31,6 +31,9 @@ jobs:
         run: cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings
       - name: The core and the commands
         working-directory: apps/relay
+        # The local-network tests must run here (this machine has a private address).
+        env:
+          RELAY_TEST_LAN: '1'
         run: cargo test --workspace
       - run: npx playwright install --with-deps chromium
         working-directory: apps/relay

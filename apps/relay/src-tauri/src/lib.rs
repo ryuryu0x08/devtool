@@ -66,11 +66,18 @@ impl App {
         }
         Ok(self.view().await)
     }
+
+    /// (Re)starts the server where the config now says. Read while it is held: of changes made
+    /// one right after another, the start of the last one comes last (and that one stays).
+    async fn restart(self: &Arc<Self>) {
+        let c = self.relay.config.read().await;
+        start_server(self.clone(), c.port, c.lan);
+    }
 }
 
-/// (Re)starts the server on `port`. The port isn't changed by itself when it is taken: the
-/// clients are set up with it, so the window says so instead.
-fn start_server(app: Arc<App>, port: u16) {
+/// (Re)starts the server on `port` (with `lan`, on the local network too). The port isn't changed
+/// by itself when it is taken: the clients are set up with it, so the window says so instead.
+fn start_server(app: Arc<App>, port: u16, lan: bool) {
     let n = app.starts.fetch_add(1, Ordering::SeqCst) + 1;
     if let Some(stop) = app.stop.lock().expect("lock").take() {
         let _ = stop.send(());
@@ -80,7 +87,7 @@ fn start_server(app: Arc<App>, port: u16) {
         // The one just stopped may take a moment to let go of the port.
         let mut tries = 0;
         let bound = loop {
-            match proxy::bind(port).await {
+            match proxy::bind(port, lan).await {
                 Ok(l) => break Ok(l),
                 Err(_) if tries < 10 => {
                     tries += 1;
@@ -96,8 +103,10 @@ fn start_server(app: Arc<App>, port: u16) {
             Ok(listener) => {
                 let (tx, rx) = oneshot::channel();
                 *app.stop.lock().expect("lock") = Some(tx);
+                // The address for this machine's clients, on 0.0.0.0 too.
+                let at = listener.local_addr().map_or(port, |a| a.port());
                 *app.server.lock().expect("lock") = Server::Running {
-                    address: format!("http://127.0.0.1:{port}"),
+                    address: format!("http://127.0.0.1:{at}"),
                 };
                 let result = proxy::serve(listener, app.relay.clone(), async {
                     let _ = rx.await;
@@ -246,7 +255,19 @@ async fn delete_token(app: Shared<'_>, route: String, id: String) -> Result<View
 #[tauri::command]
 async fn set_port(app: Shared<'_>, port: u16) -> Result<View, String> {
     app.change(|c| c.set_port(port)).await?;
-    start_server(app.inner().clone(), port);
+    app.restart().await;
+    Ok(app.view().await)
+}
+
+/// On: listens on 0.0.0.0, for devices on the local network too. Off: on 127.0.0.1 only.
+#[tauri::command]
+async fn set_lan(app: Shared<'_>, on: bool) -> Result<View, String> {
+    app.change(|c| {
+        c.lan = on;
+        Ok(())
+    })
+    .await?;
+    app.restart().await;
     Ok(app.view().await)
 }
 
@@ -265,7 +286,8 @@ macro_rules! commands {
             add_token,
             set_token_enabled,
             delete_token,
-            set_port
+            set_port,
+            set_lan
         ]
     };
 }
@@ -293,10 +315,10 @@ pub fn run() {
         .setup(|app| {
             let path = app.path().app_config_dir()?.join("config.json");
             let (config, error) = config::load(&path);
-            let port = config.port;
+            let (port, lan) = (config.port, config.lan);
             let state = App::new(path, config, error.map(|e| e.to_string()));
             app.manage(state.clone());
-            start_server(state, port);
+            start_server(state, port, lan);
 
             let show = MenuItem::with_id(app, "show", "打开接口中继", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
@@ -384,7 +406,15 @@ mod tests {
     fn the_windows_calls_reach_the_commands_and_are_saved() {
         let dir = std::env::temp_dir().join(format!("relay-app-test-{}", std::process::id()));
         let path = dir.join("config.json");
-        let state = App::new(path.clone(), Config::default(), None);
+        // Port 0: the server started by set_lan below takes any free port.
+        let state = App::new(
+            path.clone(),
+            Config {
+                port: 0,
+                ..Config::default()
+            },
+            None,
+        );
         // The app's own context: its config and permissions (capabilities/default.json), as shipped.
         let app = mock_builder()
             .invoke_handler(commands!())
@@ -450,8 +480,25 @@ mod tests {
             Err(json!("端口需在 1024 到 65535 之间"))
         );
 
+        // On the local network: saved, and the server starts again on 0.0.0.0.
+        let v = call(&w, "set_lan", json!({ "on": true })).unwrap();
+        assert_eq!(v["lan"], true);
+        assert!(v["lanAddresses"].is_array());
+        let running = |w| {
+            (0..50).any(|_| {
+                let v = call(w, "state", json!({})).unwrap();
+                let up = v["server"]["state"] == "running";
+                if !up {
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+                up
+            })
+        };
+        assert!(running(&w), "the server didn't start on 0.0.0.0");
+
         let (saved, err) = config::load(&path);
         assert!(err.is_none());
+        assert!(saved.lan);
         let r = &saved.routes[0];
         assert_eq!(r.name, "备线");
         assert_eq!(
@@ -484,6 +531,13 @@ mod tests {
         .unwrap();
         let v = call(&w, "delete_route", json!({ "id": route })).unwrap();
         assert_eq!(v["routes"], json!([]));
+        let v = call(&w, "set_lan", json!({ "on": false })).unwrap();
+        assert_eq!(
+            (v["lan"].as_bool(), v["lanAddresses"].clone()),
+            (Some(false), json!([]))
+        );
+        assert!(running(&w), "the server didn't start again on 127.0.0.1");
+        assert!(!config::load(&path).0.lan);
         let _ = std::fs::remove_dir_all(dir);
     }
 }

@@ -5,6 +5,8 @@
 export interface FakeStart {
   server?: { state: 'running'; address: string } | { state: 'failed'; port: number; error: string };
   recent?: unknown[];
+  /** This machine's addresses on the local network (default: 192.168.1.5). */
+  lanAddresses?: string[];
 }
 
 /** Runs in the page (addInitScript): defines window.__TAURI_INTERNALS__.invoke. */
@@ -12,7 +14,7 @@ export function installFake(start: FakeStart) {
   type Up = { id: string; name: string; baseUrl: string; key: string; auth: string; enabled: boolean; systemProxy: boolean };
   type Tok = { id: string; name: string; text: string; enabled: boolean; created: number };
   type Route = { id: string; name: string; protocol: string; upstreams: Up[]; tokens: Tok[] };
-  const s = { port: 8790, server: start.server ?? { state: 'running', address: 'http://127.0.0.1:8790' }, routes: [] as Route[], recent: start.recent ?? [] };
+  const s = { port: 8790, lan: false, server: start.server ?? { state: 'running', address: 'http://127.0.0.1:8790' }, routes: [] as Route[], recent: start.recent ?? [] };
   let n = 0;
   const id = () => 'id' + ++n;
   const calls: { cmd: string; args: Record<string, unknown> }[] = [];
@@ -22,6 +24,8 @@ export function installFake(start: FakeStart) {
   const hint = (k: string) => (k.length <= 12 ? '…' + k.slice(-2) : k.slice(0, 4) + '…' + k.slice(-4));
   const view = () => ({
     port: s.port,
+    lan: s.lan,
+    lanAddresses: s.lan ? (start.lanAddresses ?? ['192.168.1.5']).map((ip) => `http://${ip}:${s.port}`) : [],
     server: s.server,
     configError: null,
     recent: s.recent,
@@ -102,6 +106,7 @@ export function installFake(start: FakeStart) {
       s.server = { state: 'running', address: 'http://127.0.0.1:' + a.port };
       return view();
     },
+    set_lan: (a) => ((s.lan = a.on), view()),
   };
 
   (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {

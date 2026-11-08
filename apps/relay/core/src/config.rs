@@ -1,4 +1,5 @@
-//! What the relay is set up with: the port it listens on, and routes. A route is one protocol
+//! What the relay is set up with: the port it listens on (on this machine only, or on the local
+//! network too), and routes. A route is one protocol
 //! (Anthropic or OpenAI), the tokens handed out for it, and the upstreams (real API address and
 //! key) its requests go to, tried in order.
 //!
@@ -16,6 +17,9 @@ pub const DEFAULT_PORT: u16 = 8790;
 pub struct Config {
     #[serde(default = "default_port")]
     pub port: u16,
+    /// Also on the local network: listens on 0.0.0.0 instead of 127.0.0.1 (see proxy).
+    #[serde(default)]
+    pub lan: bool,
     #[serde(default)]
     pub routes: Vec<Route>,
 }
@@ -28,6 +32,7 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             port: DEFAULT_PORT,
+            lan: false,
             routes: Vec::new(),
         }
     }
@@ -240,6 +245,7 @@ mod tests {
         let c = Config {
             port: 1,
             routes: vec![route(vec![t.clone()])],
+            ..Config::default()
         };
         assert_eq!(
             c.find_token(&text).map(|(_, t)| t.id.clone()),
@@ -255,6 +261,7 @@ mod tests {
         let c = Config {
             port: 1,
             routes: vec![route(vec![t])],
+            ..Config::default()
         };
         assert!(c.find_token(&text).is_none());
     }
@@ -276,6 +283,7 @@ mod tests {
         });
         let c = Config {
             port: 9000,
+            lan: true,
             routes: vec![r],
         };
         save(&path, &c).unwrap();
@@ -314,6 +322,7 @@ mod tests {
     fn older_files_fill_in_what_they_lack() {
         let c: Config = serde_json::from_str(r#"{"routes":[{"id":"r","name":"R","protocol":"openai","upstreams":[{"id":"u","name":"U","baseUrl":"https://api.openai.com","key":"k","auth":"bearer"}]}]}"#).unwrap();
         assert_eq!(c.port, DEFAULT_PORT);
+        assert!(!c.lan);
         assert_eq!(c.routes[0].protocol, Protocol::OpenAI);
         assert!(c.routes[0].upstreams[0].enabled);
         assert!(!c.routes[0].upstreams[0].system_proxy);

@@ -1,8 +1,10 @@
 //! What the window shows: the config without the secrets (an upstream's key as its ends only;
-//! tokens as their hint), with each token's use, the latest requests, and whether the server runs.
+//! tokens as their hint), with each token's use, the latest requests, whether the server runs, and
+//! with `lan` on, the addresses other devices reach it at.
 
 use crate::config::{AuthStyle, Config, Protocol};
 use crate::log::{Entry, Log, TokenUse};
+use crate::net;
 use serde::Serialize;
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -26,6 +28,10 @@ pub enum Server {
 #[serde(rename_all = "camelCase")]
 pub struct View {
     pub port: u16,
+    /// Listens on the local network too.
+    pub lan: bool,
+    /// With `lan`: this machine's addresses there ("http://192.168.1.5:8790"), if it has any.
+    pub lan_addresses: Vec<String>,
     pub server: Server,
     pub routes: Vec<RouteView>,
     pub recent: Vec<Entry>,
@@ -115,8 +121,18 @@ pub fn view(config: &Config, log: &Log, server: Server, config_error: Option<Str
                 .collect(),
         })
         .collect();
+    let lan_addresses = if config.lan {
+        net::lan_addresses()
+            .iter()
+            .map(|ip| format!("http://{ip}:{}", config.port))
+            .collect()
+    } else {
+        Vec::new()
+    };
     View {
         port: config.port,
+        lan: config.lan,
+        lan_addresses,
         server,
         routes,
         recent: log.recent(),
@@ -135,6 +151,7 @@ mod tests {
         let (text, t) = new_token("ye", 1);
         let c = Config {
             port: 8790,
+            lan: false,
             routes: vec![Route {
                 id: "r".into(),
                 name: "R".into(),
@@ -169,6 +186,21 @@ mod tests {
         assert_eq!(v.routes[0].upstreams[0].key_hint, "sk-a…9f3c");
         assert_eq!(v.routes[0].tokens[0].used.requests, 1);
         assert!(json.contains(r#""state":"running""#));
+        assert!(!v.lan && v.lan_addresses.is_empty());
+    }
+
+    #[test]
+    fn on_the_local_network_its_addresses_there_with_the_port() {
+        let c = Config {
+            lan: true,
+            ..Config::default()
+        };
+        let v = view(&c, &Log::new(1), Server::Starting { port: 8790 }, None);
+        assert!(v.lan);
+        assert_eq!(v.lan_addresses.len(), net::lan_addresses().len());
+        for a in &v.lan_addresses {
+            assert!(a.starts_with("http://") && a.ends_with(":8790"), "{a}");
+        }
     }
 
     #[test]

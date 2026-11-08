@@ -4,5 +4,6 @@
 pub mod config;
 pub mod edit;
 pub mod log;
+pub mod net;
 pub mod proxy;
 pub mod view;

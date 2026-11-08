@@ -1,20 +1,26 @@
-//! The relay's server: on 127.0.0.1, it takes a request with a token it handed out, finds the
-//! route, and sends the request to the route's upstreams in order with the upstream's key in place
-//! of the token. A connection error, 429 or 5xx moves on to the next upstream; the answer that
-//! ends it is passed back as it comes (streamed replies stay streamed).
+//! The relay's server: it takes a request with a token it handed out, finds the route, and sends
+//! the request to the route's upstreams in order with the upstream's key in place of the token. A
+//! connection error, 429 or 5xx moves on to the next upstream; the answer that ends it is passed
+//! back as it comes (streamed replies stay streamed).
 //!
-//! Turned away: requests for another host name (a web page that pointed its own name here, DNS
-//! rebinding), and requests without a known token. Browser pages may call it (CORS), with a token.
+//! Where it listens: 127.0.0.1, or with `lan` on, 0.0.0.0 (every address of this machine).
+//! Turned away: requests without a known token, always. On 127.0.0.1 also requests for another
+//! host name (a web page that pointed its own name here, DNS rebinding). With `lan` on, requests
+//! from outside the local network instead (`net::nearby`): other devices reach it by this
+//! machine's IP or its name, so any host name is taken; the token is what lets a request in.
+//! Browser pages may call it (CORS), with a token.
 
 use crate::config::{AuthStyle, Config, Route};
 use crate::log::{Entry, Log};
+use crate::net::nearby;
 use axum::body::Body;
-use axum::extract::{Request, State};
+use axum::extract::{ConnectInfo, Request, State};
 use axum::http::{header, HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
 use axum::response::Response;
 use axum::Router;
 use bytes::Bytes;
 use std::future::Future;
+use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::net::TcpListener;
@@ -48,10 +54,16 @@ impl Relay {
     }
 }
 
-/// Listens on 127.0.0.1:`port`. An error (most often: the port is taken) is the caller's to show:
-/// the port is not changed by itself, since the clients are set up with it.
-pub async fn bind(port: u16) -> std::io::Result<TcpListener> {
-    TcpListener::bind(("127.0.0.1", port)).await
+/// Listens on 127.0.0.1:`port`, or with `lan`, 0.0.0.0:`port`. An error (most often: the port is
+/// taken) is the caller's to show: the port is not changed by itself, since the clients are set up
+/// with it.
+pub async fn bind(port: u16, lan: bool) -> std::io::Result<TcpListener> {
+    let ip = if lan {
+        Ipv4Addr::UNSPECIFIED
+    } else {
+        Ipv4Addr::LOCALHOST
+    };
+    TcpListener::bind((ip, port)).await
 }
 
 /// Serves until `shutdown` completes.
@@ -61,19 +73,31 @@ pub async fn serve(
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> std::io::Result<()> {
     let app = Router::new().fallback(handle).with_state(relay);
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown)
-        .await
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown)
+    .await
 }
 
-async fn handle(State(relay): State<Arc<Relay>>, req: Request) -> Response {
+async fn handle(
+    State(relay): State<Arc<Relay>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    req: Request,
+) -> Response {
     let origin = req.headers().get(header::ORIGIN).cloned();
-    let mut resp = if !from_this_machine(req.headers()) {
-        error(
-            StatusCode::FORBIDDEN,
-            "permission_error",
-            "接口中继只接受发给本机地址的请求",
-        )
+    // As the config says now: switched back to this machine only, a connection still open from
+    // another device is turned away too.
+    let lan = relay.config.read().await.lan;
+    let refused = if lan {
+        (!nearby(peer.ip())).then_some("接口中继只接受局域网内的请求")
+    } else {
+        (!peer.ip().is_loopback() || !from_this_machine(req.headers()))
+            .then_some("接口中继只接受发给本机地址的请求")
+    };
+    let mut resp = if let Some(why) = refused {
+        error(StatusCode::FORBIDDEN, "permission_error", why)
     } else if req.method() == Method::OPTIONS
         && origin.is_some()
         && req

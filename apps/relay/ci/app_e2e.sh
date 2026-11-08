@@ -1,7 +1,7 @@
 #!/bin/bash
 # The built app, for real (Linux, under a virtual display): it reads its saved config, relays a
-# request with a token to the upstream with the upstream's key, saves what the window changes,
-# and a second launch leaves the first one serving. Usage: ci/app_e2e.sh <path to the app binary>
+# request with a token to the upstream with the upstream's key, on this machine and from the local
+# network (the config has it on), and a second launch leaves the first one serving. Usage: ci/app_e2e.sh <path to the app binary>
 set -euo pipefail
 # The path as given, from where the script was started (before moving to apps/relay).
 APP="$(realpath "$1")"
@@ -14,7 +14,7 @@ PORT=18790 UP=18791
 TOKEN="rl-ci-token-0123456789"
 HASH="$(printf '%s' "$TOKEN" | sha256sum | cut -d' ' -f1)"
 cat > "$DIR/config.json" <<JSON
-{ "port": $PORT, "routes": [ { "id": "r1", "name": "主线", "protocol": "anthropic",
+{ "port": $PORT, "lan": true, "routes": [ { "id": "r1", "name": "主线", "protocol": "anthropic",
   "upstreams": [ { "id": "u1", "name": "stand-in", "baseUrl": "http://127.0.0.1:$UP/api", "key": "sk-upstream-key", "auth": "bearer" } ],
   "tokens": [ { "id": "t1", "name": "ci", "hash": "$HASH", "hint": "rl-ci…6789", "created": 1 } ] } ] }
 JSON
@@ -50,6 +50,13 @@ assert s["body"] == '{"model":"m"}', s
 assert sys.argv[2] not in json.dumps(s), "the token reached the upstream"
 print("OK: relayed with the upstream's key, the token kept back")
 PY
+
+# From the local network: this machine's private address reaches it too (it listens on 0.0.0.0).
+LAN="$(hostname -I | tr ' ' '\n' | grep -E '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)' | head -1 || true)"
+[[ -n "$LAN" ]] || { echo "no private address on this machine to test the local network with"; exit 1; }
+code="$(curl -s -o /dev/null -w '%{http_code}' --noproxy '*' -H "x-api-key: $TOKEN" -X POST "http://$LAN:$PORT/v1/messages")"
+[[ "$code" == 200 ]] || { echo "from the local network ($LAN): expected 200, got $code"; exit 1; }
+echo "OK: reached from the local network at $LAN:$PORT"
 
 # A second launch: it hands over to the first one and quits; the first keeps serving.
 start=$(date +%s)

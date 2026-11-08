@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api, type Protocol, type View } from './api';
 import { Route } from './Route';
-import { Copy, Seg, useToast } from './ui';
+import { Copy, Seg, Switch, useToast } from './ui';
 
 export function App() {
   const [view, setView] = useState<View | null>(null);
@@ -74,7 +74,7 @@ export function App() {
       <main className="main">
         {view.configError && <div className="banner bad">{view.configError}</div>}
         {route ? (
-          <Route key={route.id} route={route} address={address} recent={view.recent} apply={apply} />
+          <Route key={route.id} route={route} address={address} lan={view.lan ? view.lanAddresses : []} recent={view.recent} apply={apply} />
         ) : (
           <div className="empty big">
             <p>先在左边新建一个入口: 选 Anthropic 或 OpenAI, 再加上游和 token.</p>
@@ -112,6 +112,15 @@ function ServerState({ view, apply }: { view: View; apply: (p: Promise<View>) =>
         <input className="mono" value={port} inputMode="numeric" aria-label="端口" onChange={(e) => setPort(e.target.value.replace(/\D/g, ''))} />
         {port !== String(view.port) && <button className="btn sm">应用</button>}
       </form>
+      <div className="lan">
+        <span className="faint">局域网访问</span>
+        <Switch on={view.lan} label="局域网访问" title="开启后监听 0.0.0.0, 局域网内的设备凭 token 访问" onChange={(on) => void apply(api.setLan(on))} />
+      </div>
+      {view.lan && (
+        <div className="lan-addresses">
+          {view.lanAddresses.length ? view.lanAddresses.map((a) => <Copy key={a} text={a} shown={a.replace('http://', '')} className="mono" />) : <span className="faint">没找到局域网地址</span>}
+        </div>
+      )}
     </div>
   );
 }

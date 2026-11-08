@@ -51,6 +51,10 @@ export interface Entry {
 
 export interface View {
   port: number;
+  /** Listens on the local network too (0.0.0.0). */
+  lan: boolean;
+  /** With `lan`: this machine's addresses there ("http://192.168.1.5:8790"). */
+  lanAddresses: string[];
   server: Server;
   routes: RouteView[];
   recent: Entry[];
@@ -80,6 +84,7 @@ export const api = {
   setTokenEnabled: (route: string, id: string, enabled: boolean) => invoke<View>('set_token_enabled', { route, id, enabled }),
   deleteToken: (route: string, id: string) => invoke<View>('delete_token', { route, id }),
   setPort: (port: number) => invoke<View>('set_port', { port }),
+  setLan: (on: boolean) => invoke<View>('set_lan', { on }),
 };
 
 /** The default way an upstream of this protocol takes its key. */

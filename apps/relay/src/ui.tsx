@@ -27,9 +27,9 @@ export function Toasts({ children }: { children: ReactNode }) {
   );
 }
 
-export function Switch({ on, onChange, label, disabled }: { on: boolean; onChange: (on: boolean) => void; label: string; disabled?: boolean }) {
+export function Switch({ on, onChange, label, title, disabled }: { on: boolean; onChange: (on: boolean) => void; label: string; title?: string; disabled?: boolean }) {
   return (
-    <button type="button" role="switch" aria-checked={on} aria-label={label} title={label} className={'switch' + (on ? ' on' : '')} disabled={disabled} onClick={() => onChange(!on)}>
+    <button type="button" role="switch" aria-checked={on} aria-label={label} title={title ?? label} className={'switch' + (on ? ' on' : '')} disabled={disabled} onClick={() => onChange(!on)}>
       <span />
     </button>
   );

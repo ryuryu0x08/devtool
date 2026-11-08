@@ -163,6 +163,45 @@ test('the port taken: the window says so; another port is applied', async ({ pag
   await expect(page.getByRole('status')).toHaveText('端口需在 1024 到 65535 之间');
 });
 
+test('on the local network: the switch, the addresses other devices use, and off again', async ({ page }) => {
+  await open(page, { lanAddresses: ['192.168.1.5', '10.0.0.8'] });
+  const lan = page.getByRole('switch', { name: '局域网访问' });
+  await expect(lan).toHaveAttribute('aria-checked', 'false');
+  await expect(lan).toHaveAttribute('title', '开启后监听 0.0.0.0, 局域网内的设备凭 token 访问');
+  await expect(page.locator('.lan-addresses')).toHaveCount(0);
+  await newRoute(page, '主线');
+  await expect(page.locator('.row.lan-row')).toHaveCount(0);
+
+  await lan.click();
+  await expect(lan).toHaveAttribute('aria-checked', 'true');
+  expect((await calls(page)).filter((c) => c.cmd === 'set_lan')).toEqual([{ cmd: 'set_lan', args: { on: true } }]);
+  await expect(page.locator('.lan-addresses .copy')).toHaveText(['192.168.1.5:8790', '10.0.0.8:8790']);
+  // This machine's own address stays as it is; the route lists the others to hand out.
+  await expect(page.locator('.state.ok .copy')).toHaveText('127.0.0.1:8790');
+  await expect(page.locator('.row.lan-row .copy')).toHaveText(['http://192.168.1.5:8790', 'http://10.0.0.8:8790']);
+  await page.locator('.row.lan-row .copy').first().click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('http://192.168.1.5:8790');
+  await newRoute(page, '对话', 'OpenAI');
+  await expect(page.locator('.row.lan-row .copy')).toHaveText(['http://192.168.1.5:8790/v1', 'http://10.0.0.8:8790/v1']);
+  // Another port: the addresses follow.
+  await page.getByLabel('端口', { exact: true }).fill('8791');
+  await page.locator('.port').getByRole('button', { name: '应用' }).click();
+  await expect(page.locator('.lan-addresses .copy').first()).toHaveText('192.168.1.5:8791');
+
+  await lan.click();
+  await expect(lan).toHaveAttribute('aria-checked', 'false');
+  await expect(page.locator('.lan-addresses')).toHaveCount(0);
+  await expect(page.locator('.row.lan-row')).toHaveCount(0);
+});
+
+test('on the local network without an address there: it says so', async ({ page }) => {
+  await open(page, { lanAddresses: [] });
+  await page.getByRole('switch', { name: '局域网访问' }).click();
+  await expect(page.locator('.lan-addresses')).toHaveText('没找到局域网地址');
+  await newRoute(page, '主线');
+  await expect(page.locator('.row.lan-row')).toHaveCount(0);
+});
+
 test('the latest requests of the route, with what was tried before', async ({ page }) => {
   const at = Date.now();
   await open(page, {

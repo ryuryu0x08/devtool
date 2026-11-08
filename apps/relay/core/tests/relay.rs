@@ -1,5 +1,6 @@
 //! The relay between a client and stand-in upstreams, over real sockets: the key that reaches the
-//! upstream, the path, failing over, streaming, what is turned away, and what is logged.
+//! upstream, the path, failing over, streaming, what is turned away, what is logged, and the
+//! relay on the local network.
 
 use axum::body::Body;
 use axum::extract::Request;
@@ -7,6 +8,7 @@ use axum::http::StatusCode;
 use axum::response::Response;
 use axum::Router;
 use relay_core::config::{new_token, AuthStyle, Config, Protocol, Route, Upstream};
+use relay_core::net;
 use relay_core::proxy::{self, Relay};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -94,11 +96,21 @@ fn up(name: &str, base: &str, auth: AuthStyle) -> Upstream {
     }
 }
 
-/// A relay with one route over `ups`; its address and the token handed out.
+/// A relay with one route over `ups`, on this machine only; its address and the token handed out.
 async fn relay(protocol: Protocol, ups: Vec<Upstream>) -> (String, String, Arc<Relay>) {
+    relay_on(false, protocol, ups).await
+}
+
+/// The same, on the local network too with `lan`.
+async fn relay_on(
+    lan: bool,
+    protocol: Protocol,
+    ups: Vec<Upstream>,
+) -> (String, String, Arc<Relay>) {
     let (text, token) = new_token("ye", 1);
     let config = Config {
         port: 0,
+        lan,
         routes: vec![Route {
             id: "r".into(),
             name: "主线".into(),
@@ -108,7 +120,7 @@ async fn relay(protocol: Protocol, ups: Vec<Upstream>) -> (String, String, Arc<R
         }],
     };
     let r = Relay::new(config);
-    let l = proxy::bind(0).await.unwrap();
+    let l = proxy::bind(0, lan).await.unwrap();
     let url = format!("http://{}", l.local_addr().unwrap());
     let rr = r.clone();
     tokio::spawn(async move { proxy::serve(l, rr, std::future::pending()).await.unwrap() });
@@ -464,4 +476,92 @@ async fn the_log_has_the_path_without_the_query_and_counts_per_token() {
         .id
         .clone();
     assert_eq!(log.uses()[&id].requests, 2);
+}
+
+/// This machine's address on the local network, as another device there reaches it. None on a
+/// machine without one: the test says so and checks nothing, unless RELAY_TEST_LAN is set (the
+/// Linux CI job, whose machine has one), where that fails it.
+fn lan_address() -> Option<std::net::Ipv4Addr> {
+    let a = net::lan_addresses().first().copied();
+    if a.is_none() {
+        assert!(
+            std::env::var_os("RELAY_TEST_LAN").is_none(),
+            "RELAY_TEST_LAN is set, but this machine has no local-network address"
+        );
+        eprintln!("no local-network address here: the test checks nothing");
+    }
+    a
+}
+
+#[tokio::test]
+async fn on_the_local_network_other_devices_reach_it_with_a_token() {
+    let Some(ip) = lan_address() else { return };
+    let (base, seen) = upstream(200).await;
+    let (url, token, r) = relay_on(
+        true,
+        Protocol::Anthropic,
+        vec![up("a", &base, AuthStyle::XApiKey)],
+    )
+    .await;
+    let port = url.rsplit(':').next().unwrap();
+    let there = format!("http://{ip}:{port}");
+    let c = client();
+    // By its IP, or by a name of it (any host name: the token is what lets a request in).
+    for host in [None, Some("my-mac.local")] {
+        let mut rb = c
+            .post(format!("{there}/v1/messages"))
+            .header("x-api-key", &token)
+            .body("{}");
+        if let Some(h) = host {
+            rb = rb.header("host", h);
+        }
+        assert_eq!(rb.send().await.unwrap().status(), 200, "{host:?}");
+    }
+    assert_eq!(seen.lock().unwrap().len(), 2);
+    assert_eq!(seen.lock().unwrap()[0].header("x-api-key"), Some("sk-a"));
+    // Without a token: turned away as on this machine.
+    let r401 = c.post(format!("{there}/v1/messages")).send().await.unwrap();
+    assert_eq!(r401.status(), 401);
+    // On this machine it still answers as before.
+    let local = format!("http://127.0.0.1:{port}");
+    let ok = c
+        .post(format!("{local}/v1/messages"))
+        .header("x-api-key", &token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), 200);
+
+    // Switched back to this machine only: a connection from the network still open is turned
+    // away, even one that names this machine as 127.0.0.1.
+    r.config.write().await.lan = false;
+    for host in [None, Some("127.0.0.1")] {
+        let mut rb = c
+            .post(format!("{there}/v1/messages"))
+            .header("x-api-key", &token);
+        if let Some(h) = host {
+            rb = rb.header("host", h);
+        }
+        let r403 = rb.send().await.unwrap();
+        assert_eq!(r403.status(), 403, "{host:?}");
+        assert!(r403
+            .text()
+            .await
+            .unwrap()
+            .contains("只接受发给本机地址的请求"));
+    }
+    assert_eq!(seen.lock().unwrap().len(), 3);
+}
+
+#[tokio::test]
+async fn on_this_machine_only_the_network_cant_reach_it() {
+    let Some(ip) = lan_address() else { return };
+    let (url, _, _) = relay(Protocol::Anthropic, vec![]).await;
+    let port = url.rsplit(':').next().unwrap();
+    let e = client()
+        .get(format!("http://{ip}:{port}/v1/models"))
+        .send()
+        .await
+        .unwrap_err();
+    assert!(e.is_connect(), "{e}");
 }

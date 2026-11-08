@@ -20,6 +20,9 @@ body { color: var(--ink); font-size: 14px; overflow: hidden; }
 .state.bad { color: var(--del); }
 .state.bad .dot { background: var(--del); }
 .port { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.lan { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 12.5px; }
+.lan-addresses { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; font-size: 12.5px; }
+.lan-addresses .copy { font-size: 12.5px; }
 .port input { width: 70px; height: 26px; padding: 0 8px; border: 1px solid var(--line2); border-radius: 6px; background: var(--bg); outline: none; }
 
 .routes { display: flex; flex-direction: column; gap: 2px; }
@@ -53,6 +56,7 @@ input:focus { border-color: var(--acc); box-shadow: 0 0 0 3px var(--accRing); ba
 .row .k { width: 96px; flex: none; color: var(--mut); font-size: 12.5px; }
 .row .name { font-weight: 550; }
 .row .hint { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: var(--mut); }
+.row.lan-row .hint { column-gap: 18px; color: var(--ink); }
 .row.off { opacity: 0.55; }
 .row .order { width: 18px; color: var(--faint); font: 12px 'Geist Mono', monospace; }
 .row .url { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

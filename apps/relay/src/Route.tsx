@@ -6,11 +6,11 @@ import { Copy, DeleteButton, Seg, Switch, time, useToast } from './ui';
 
 type Apply = (p: Promise<View>) => Promise<boolean>;
 
-export function Route({ route, address, recent, apply }: { route: RouteView; address: string; recent: Entry[]; apply: Apply }) {
+export function Route({ route, address, lan, recent, apply }: { route: RouteView; address: string; lan: string[]; recent: Entry[]; apply: Apply }) {
   return (
     <div className="route">
       <Head route={route} apply={apply} />
-      <Connect route={route} address={address} />
+      <Connect route={route} address={address} lan={lan} />
       <Tokens route={route} apply={apply} />
       <Upstreams route={route} apply={apply} />
       <Recent entries={recent.filter((e) => e.route === route.name)} />
@@ -46,8 +46,10 @@ function Head({ route, apply }: { route: RouteView; apply: Apply }) {
   );
 }
 
-function Connect({ route, address }: { route: RouteView; address: string }) {
-  const base = route.protocol === 'openai' ? address + '/v1' : address;
+/** How clients connect; `lan`: the addresses other devices on the local network use, if it is on. */
+function Connect({ route, address, lan }: { route: RouteView; address: string; lan: string[] }) {
+  const at = (a: string) => (route.protocol === 'openai' ? a + '/v1' : a);
+  const base = at(address);
   return (
     <section className="card">
       <div className="card-head">客户端怎么连</div>
@@ -56,6 +58,16 @@ function Connect({ route, address }: { route: RouteView; address: string }) {
           <span className="k">地址</span>
           <Copy text={base} className="mono" />
         </div>
+        {lan.length > 0 && (
+          <div className="row lan-row">
+            <span className="k">局域网</span>
+            <span className="hint">
+              {lan.map((a) => (
+                <Copy key={a} text={at(a)} className="mono" />
+              ))}
+            </span>
+          </div>
+        )}
         {route.protocol === 'anthropic' ? (
           <div className="row">
             <span className="k">Claude Code</span>
