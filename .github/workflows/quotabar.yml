@@ -2,7 +2,7 @@
 name: quotabar
 on:
   push:
-    paths: ['apps/quotabar/**', 'mac/**', '.github/workflows/quotabar.yml']
+    paths: ['apps/quotabar/**', '.github/workflows/quotabar.yml']
   workflow_dispatch:
 jobs:
   build:
@@ -25,19 +25,6 @@ jobs:
         run: |
           curl -sSL https://registry.npmjs.org/@fontsource-variable/inter/-/inter-5.1.0.tgz | tar xz -C "$RUNNER_TEMP"
           swift ci/fontcheck.swift "$RUNNER_TEMP"/package/files/inter-latin-wght-normal.woff2 "$RUNNER_TEMP"/package/files/inter-latin-wght-normal.woff2
-      # As an app installed before the move to apps/quotabar updates: it runs mac/QuotaBar/build.sh
-      # and takes the app from mac/QuotaBar/build; the fonts kept there come along.
-      - name: Build the way an app from before the move does
-        run: |
-          mkdir -p ../../mac/QuotaBar/Fonts
-          cp "$RUNNER_TEMP"/package/files/inter-latin-wght-normal.woff2 ../../mac/QuotaBar/Fonts/
-          bash ../../mac/QuotaBar/build.sh
-          OLD=../../mac/QuotaBar/build/QuotaBar.app
-          test -x "$OLD/Contents/MacOS/QuotaBar" || { echo "no app where the old updater takes it"; exit 1; }
-          SRC="$(/usr/libexec/PlistBuddy -c 'Print :QBSourceDir' "$OLD/Contents/Info.plist")"
-          [[ "$SRC" == */apps/quotabar ]] || { echo "the app would update from $SRC"; exit 1; }
-          test -f build/QuotaBar.app/Contents/Resources/Fonts/inter-latin-wght-normal.woff2 || { echo "the fonts were not taken along"; exit 1; }
-          echo "OK: built through the old path, updates from $SRC, fonts taken along"
       # A look at the app against a stand-in usage API: the dashboard, light and dark.
       - name: Local forwarder, end to end
         timeout-minutes: 5

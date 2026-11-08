@@ -1,5 +1,0 @@
-# Left from builds before the move to apps/quotabar (the fonts are taken along from here).
-.build/
-build/
-.swiftpm/
-Fonts/

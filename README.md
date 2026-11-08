@@ -18,7 +18,6 @@ apps/
   relay/            接口中继（core/ 中继本身, src-tauri/ 桌面 App, src/ 窗口, e2e/ 和 ci/ 测试）
 packages/
   ui/               工具箱和接口中继的窗口共用的外观：颜色、字体、按钮、分段控件、卡片
-mac/QuotaBar/       只剩一个 build.sh：移动前装的 QuotaBar 自动更新时用它，编译转到 apps/quotabar
 .github/workflows/  每个产品一个，只在自己的目录变动时运行
   toolbox.yml       类型检查、单元测试、构建、端到端测试（Linux + Chromium）
   quotabar.yml      编译、测试、端到端、截图，通过后把 quotabar-stable 移到这个提交（Mac）

@@ -7,12 +7,6 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-# Fonts kept by builds from before the move (mac/QuotaBar/Fonts): taken along once.
-if [[ ! -d Fonts && -d ../../mac/QuotaBar/Fonts ]]; then
-  cp -R ../../mac/QuotaBar/Fonts Fonts
-  echo "Fonts: taken from mac/QuotaBar/Fonts"
-fi
-
 INSTALL=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
