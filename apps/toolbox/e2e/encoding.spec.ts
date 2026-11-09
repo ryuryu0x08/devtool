@@ -41,7 +41,7 @@ test.describe('Base64', () => {
     await open(page, 'Base64 编解码');
     await page.evaluate(() => navigator.clipboard.writeText('a\r\nb'));
     await input(page).focus();
-    await page.keyboard.press('Control+V');
+    await page.keyboard.press('ControlOrMeta+V');
     await expect(page.getByText(/粘贴的内容用的是 CRLF/)).toBeVisible();
     await expect(b64Out(page)).toHaveText(Buffer.from('a\nb').toString('base64'));
     await page.locator('.seg button', { hasText: /^CRLF$/ }).click();

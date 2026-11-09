@@ -18,7 +18,7 @@ const seg = (page: Page, label: string) => page.locator('.seg button', { hasText
 async function pasteInto(page: Page, el: Locator, text: string) {
   await page.evaluate((t) => navigator.clipboard.writeText(t), text);
   await el.focus();
-  await page.keyboard.press('Control+V');
+  await page.keyboard.press('ControlOrMeta+V');
 }
 
 const jwt = (payload: string, secret: string) => {

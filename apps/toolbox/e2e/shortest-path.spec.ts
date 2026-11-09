@@ -12,7 +12,7 @@ const sha256 = (b: string | Buffer) => createHash('sha256').update(b).digest('he
 async function pasteInto(page: Page, el: ReturnType<Page['locator']>, text: string) {
   await page.evaluate((t) => navigator.clipboard.writeText(t), text);
   await el.focus();
-  await page.keyboard.press('Control+V');
+  await page.keyboard.press('ControlOrMeta+V');
 }
 
 test.describe('the result itself copies', () => {
@@ -84,7 +84,7 @@ test.describe('one way to copy, not two', () => {
     expect(selected.length).toBeGreaterThan(0);
     expect(text.startsWith(selected)).toBe(true);
     expect(await clipboard(page)).toBe('unchanged');
-    await page.keyboard.press('Control+C');
+    await page.keyboard.press('ControlOrMeta+C');
     await expect.poll(() => clipboard(page)).toBe(selected);
     // The keyboard copies all of it too.
     await page.locator('.copy-block').focus();
