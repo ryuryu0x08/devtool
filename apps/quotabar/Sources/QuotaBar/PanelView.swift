@@ -9,6 +9,7 @@ struct PanelView: View {
     VStack(alignment: .leading, spacing: 10) {
       header
       NoticeBanner()
+      FallbackBanner()
       if !store.hasURL || store.people.isEmpty {
         empty
       } else {
@@ -32,6 +33,7 @@ struct PanelView: View {
     .padding(14)
     .frame(width: 384 + (TextSize.shared.bump - TextSize.standard) * 16)
     .animation(.snappy, value: store.notice)
+    .animation(.snappy, value: store.fallingBack)
     .animation(.snappy, value: store.people.map(\.id))
     .onAppear { store.readSettings() }
   }

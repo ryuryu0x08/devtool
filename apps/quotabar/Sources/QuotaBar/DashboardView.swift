@@ -11,6 +11,7 @@ struct DashboardView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 16) {
         NoticeBanner()
+        FallbackBanner()
         if !store.hasURL || store.people.isEmpty {
           ContentUnavailableView {
             Label { Text(store.hasURL ? "还没有 key" : "先填写用量接口地址").font(.serif(20, .semibold)) } icon: { Icon(.key, size: 30) }

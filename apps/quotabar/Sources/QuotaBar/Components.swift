@@ -197,6 +197,32 @@ struct AddKeyField: View {
 }
 
 /// The message after an action, fading out by itself.
+/// While requests fall back to the other gateway: why, and to which model. Stays as long as it
+/// lasts (under the notices, which come and go above it).
+struct FallbackBanner: View {
+  @Environment(Store.self) private var store
+
+  var body: some View {
+    if let why = store.fallingBack, let m = store.fallbackModelNow {
+      HStack(alignment: .firstTextBaseline, spacing: 8) {
+        Icon(.swap, size: 12).foregroundStyle(.purple)
+        VStack(alignment: .leading, spacing: 2) {
+          Text("降级中: \(why)").font(.ui(12, .medium))
+          Text("改用其他网关的 \(m), 额度恢复后自动切回").font(.ui(11)).foregroundStyle(.secondary)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        Spacer(minLength: 0)
+        Button { Windows.show(.requests, store) } label: { Text("请求记录").font(.ui(11.5)) }
+          .buttonStyle(.link)
+      }
+      .padding(.horizontal, 10)
+      .padding(.vertical, 8)
+      .background(Color.purple.opacity(0.1), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+      .transition(.opacity)
+    }
+  }
+}
+
 struct NoticeBanner: View {
   @Environment(Store.self) private var store
 
