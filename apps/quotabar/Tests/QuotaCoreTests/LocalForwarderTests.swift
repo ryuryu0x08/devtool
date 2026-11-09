@@ -59,7 +59,7 @@ private final class Upstream: @unchecked Sendable {
       if self.keepAlive {
         let body = "{\"ok\":true}"
         let close = head.lowercased().contains("\r\nconnection: close")
-        let reply = "HTTP/1.1 \(self.replyStatus) X\r\nContent-Type: application/json\r\nContent-Length: \(body.utf8.count)\r\nConnection: keep-alive\r\n\r\n" + body
+        let reply = "HTTP/1.1 \(self.replyStatus) \(self.replyStatus == 200 ? "OK" : "Forbidden")\r\nContent-Type: application/json\r\nContent-Length: \(body.utf8.count)\r\nConnection: keep-alive\r\n\r\n" + body
         c.send(content: Data(reply.utf8), completion: .contentProcessed { _ in
           if close { c.cancel() } else { self.read(c, Data(buf[(r.upperBound + length)...])) }
         })
