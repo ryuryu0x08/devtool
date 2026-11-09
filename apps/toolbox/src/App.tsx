@@ -29,6 +29,8 @@ import { MobileBar, Sidebar } from './components/Sidebar';
 import { Palette } from './components/Palette';
 import { Vis } from './components/Vis';
 import { ToolBoundary } from './components/ToolBoundary';
+import { Settings } from './components/Settings';
+import { tintTitleBar } from './lib/desktop';
 import { ZOOMS } from './components/Zoom';
 import { ErrLine } from './components/Panes';
 import { Timestamp } from './tools/Timestamp';
@@ -143,7 +145,7 @@ export function App() {
   }, []);
 
   const go = useCallback((id: ToolId) => {
-    set({ tool: id, palette: false, pq: '', pi: 0, tzOpen: false });
+    set({ tool: id, settings: false, palette: false, pq: '', pi: 0, tzOpen: false });
     if (!ref.current.wide) window.scrollTo(0, 0);
   }, []);
 
@@ -454,6 +456,7 @@ export function App() {
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+    tintTitleBar();
   }, [dark, lang]);
 
   // Persist the current tool, preferences and (debounced) inputs.
@@ -516,7 +519,8 @@ export function App() {
         <main className="main">
           {!S.wide && <MobileBar />}
           <div className="content" style={{ padding: S.wide ? '26px 36px 56px' : '14px 14px 40px', zoom: zoom / 100 }}>
-            <ToolBoundary key={S.tool} reset={(TOOL_INPUTS[S.tool] ?? []).map((k) => S[k])} fallback={(err, retry) => (
+            {S.settings && <Settings />}
+            {!S.settings && <ToolBoundary key={S.tool} reset={(TOOL_INPUTS[S.tool] ?? []).map((k) => S[k])} fallback={(err, retry) => (
               <section className="card tool-crash" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <ErrLine msg={f(T.ui.crashed, { m: err.message || String(err) })} />
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -557,8 +561,8 @@ export function App() {
             {S.tool === 'color' && <Color />}
             {S.tool === 'llm' && <Suspense fallback={null}><Llm /></Suspense>}
             {S.tool === 'local' && <Suspense fallback={null}><Local /></Suspense>}
-            </ToolBoundary>
-            {(framesOn || pluginOfTool(S.tool)) && <Suspense fallback={null}><PluginFrames active={pluginOfTool(S.tool)} /></Suspense>}
+            </ToolBoundary>}
+            {(framesOn || pluginOfTool(S.tool)) && <Suspense fallback={null}><PluginFrames active={S.settings ? null : pluginOfTool(S.tool)} /></Suspense>}
           </div>
         </main>
         {S.palette && <Palette />}

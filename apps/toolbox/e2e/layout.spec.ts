@@ -131,14 +131,20 @@ test('text size: the tool area scales as a whole, the sidebar stays; remembered;
   const headH = () => page.evaluate(() => document.querySelector('.card-head span')!.getBoundingClientRect().height);
   const navH = () => page.evaluate(() => document.querySelector('.nav-item')!.getBoundingClientRect().height);
   const [h0, n0] = [await headH(), await navH()];
+  // Set in the settings page (the bottom of the sidebar).
+  const settings = () => page.locator('.side-link').click();
+  await settings();
   await page.getByRole('button', { name: '放大右侧内容' }).click();
   await page.getByRole('button', { name: '放大右侧内容' }).click();
   await expect(page.locator('.zoom-btn.pct')).toHaveText('125%');
+  await nav(page, 'URL 编解码');
   // Within a pixel: a line's height is whole pixels with some system fonts (16 px → 20 or 21).
   expect(Math.abs((await headH()) - h0 * 1.25)).toBeLessThanOrEqual(1);
   expect(await navH()).toBe(n0);
   await page.reload();
+  await settings();
   await expect(page.locator('.zoom-btn.pct')).toHaveText('125%');
+  await nav(page, 'URL 编解码');
   // Carried at 125 %: the result's handle stays under the pointer.
   const g = (await page.locator('.split-grip').boundingBox())!;
   await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
@@ -153,15 +159,18 @@ test('text size: the tool area scales as a whole, the sidebar stays; remembered;
   await page.mouse.up();
   expect(await layout(page)).toBe('col');
   // A click on the percentage goes back to 100 %, the smallest size: A− is disabled there.
+  await settings();
   await page.locator('.zoom-btn.pct').click();
-  expect(Math.abs((await headH()) - h0)).toBeLessThan(0.5);
   await expect(page.locator('.zoom-btn.pct')).toHaveText('100%');
   await expect(page.getByRole('button', { name: '缩小右侧内容' })).toBeDisabled();
+  await nav(page, 'URL 编解码');
+  expect(Math.abs((await headH()) - h0)).toBeLessThan(0.5);
   // A size below 100 % stored earlier is not used.
   await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('tb.prefs') || '{}'); p.o = { ...p.o, 'ui.zoom': 80 }; localStorage.setItem('tb.prefs', JSON.stringify(p)); });
   await page.reload();
-  await expect(page.locator('.zoom-btn.pct')).toHaveText('100%');
   expect(Math.abs((await headH()) - h0)).toBeLessThan(0.5);
+  await settings();
+  await expect(page.locator('.zoom-btn.pct')).toHaveText('100%');
 });
 
 test.describe('a lower window', () => {
@@ -244,10 +253,11 @@ test('the bar below the result sets its height: its content fills it, remembered
   let p = await bar();
   await page.mouse.move(p.x, p.y);
   await page.mouse.down();
-  await page.mouse.move(p.x, p.y - 200, { steps: 6 });
+  // 180 px: not so far that it reaches the least height (160 px) in a shorter window.
+  await page.mouse.move(p.x, p.y - 180, { steps: 6 });
   await page.mouse.up();
   const h1 = (await box(page, 1)).height;
-  expect(Math.abs(h1 - (h0 - 200))).toBeLessThan(2);
+  expect(Math.abs(h1 - (h0 - 180))).toBeLessThan(2);
   expect(await scroller()).toBeLessThan(s0 - 150);
   await page.reload();
   expect(Math.abs((await box(page, 1)).height - h1)).toBeLessThan(2);

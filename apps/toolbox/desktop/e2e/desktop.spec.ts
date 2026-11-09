@@ -1,7 +1,7 @@
 // The desktop app as a user meets it: it opens the toolbox from its own origin and serves only
 // the build; storage and the window size stay between launches; other sites open in the system
 // browser and the window stays on the toolbox; a second launch shows the first one; only the
-// permissions the toolbox uses are granted.
+// permissions the toolbox uses are granted; the title bar is the page's own, in its theme.
 import { _electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
 import { spawn } from 'node:child_process';
 
@@ -42,12 +42,18 @@ test('storage and the window size stay between launches', async ({}, info) => {
   const dir = info.outputPath('data');
   let { app, page } = await launch(dir);
   await page.evaluate(() => localStorage.setItem('tb.kept', '1'));
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setBounds({ width: 1000, height: 700 }));
+  // As the system lets it be (a small screen keeps a window within it): that size comes back.
+  const size = () => app.evaluate(({ BrowserWindow }) => {
+    const b = BrowserWindow.getAllWindows()[0].getBounds();
+    return [b.width, b.height];
+  });
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setBounds({ width: 900, height: 600 }));
+  const set = await size();
+  expect(set[0]).toBeLessThan(1280);
   await app.close();
   ({ app, page } = await launch(dir));
   expect(await page.evaluate(() => localStorage.getItem('tb.kept'))).toBe('1');
-  const b = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getBounds());
-  expect([b.width, b.height]).toEqual([1000, 700]);
+  expect(await size()).toEqual(set);
   await app.close();
 });
 
@@ -105,5 +111,42 @@ test('copying works; permissions the toolbox doesn’t use are refused', async (
     return { geolocation: await q('geolocation'), notifications: await Notification.requestPermission(), camera: await q('camera') };
   });
   expect(states).toEqual({ geolocation: 'denied', notifications: 'denied', camera: 'denied' });
+  await app.close();
+});
+
+test('no system title bar: the page draws the strip at the top, in the theme’s colours', async ({}, info) => {
+  const { app, page } = await launch(info.outputPath('data'));
+  await expect(page.locator('html')).toHaveClass(new RegExp(`\\bdesktop\\b.*\\bdesktop-${process.platform}\\b`));
+  // The strip drags the window; what is below it starts under it.
+  const strip = await page.evaluate(() => {
+    const region = (sel: string) => getComputedStyle(document.querySelector(sel)!, '::before').getPropertyValue('-webkit-app-region') || getComputedStyle(document.querySelector(sel)!, '::before').getPropertyValue('app-region');
+    const top = (sel: string) => document.querySelector(sel)!.getBoundingClientRect().top;
+    return { side: region('.side'), main: region('.main'), content: top('.content'), search: top('.search-btn') };
+  });
+  expect(strip.side).toBe('drag');
+  expect(strip.main).toBe('drag');
+  expect(strip.content).toBeGreaterThanOrEqual(36);
+  expect(strip.search).toBeGreaterThanOrEqual(36);
+  if (process.platform === 'darwin') {
+    // The window buttons sit in the strip, over the sidebar.
+    const p = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getWindowButtonPosition());
+    expect(p).toEqual({ x: 14, y: 11 });
+  }
+  // The theme chosen in the settings: the title bar takes its colours.
+  const colors = () => app.evaluate(({ BrowserWindow }) => (BrowserWindow.getAllWindows()[0] as unknown as { titleBarColors?: object }).titleBarColors);
+  await page.locator('.side-link').click();
+  await page.locator('.settings .seg button', { hasText: /^(深色|Dark)$/ }).click();
+  await expect.poll(colors).toEqual({ bg: '#121211', fg: '#ededeb' });
+  await page.locator('.settings .seg button', { hasText: /^(浅色|Light)$/ }).click();
+  await expect.poll(colors).toEqual({ bg: '#f6f6f4', fg: '#1b1b1d' });
+  // The bridge is all the page gets, and it takes plain colours only.
+  const bridge = await page.evaluate(() => {
+    const d = (window as unknown as { toolboxDesktop: { titleBar(a: string, b: string): void } }).toolboxDesktop;
+    d.titleBar('red; background: url(x)', '#000000');
+    return { keys: Object.keys(d).sort(), node: typeof (window as unknown as { require?: unknown }).require };
+  });
+  expect(bridge).toEqual({ keys: ['platform', 'titleBar'], node: 'undefined' });
+  await page.waitForTimeout(300);
+  expect(await colors()).toEqual({ bg: '#f6f6f4', fg: '#1b1b1d' });
   await app.close();
 });

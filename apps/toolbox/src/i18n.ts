@@ -78,6 +78,7 @@ export const COMMON_TZ = ['UTC', 'Asia/Shanghai', 'Asia/Tokyo', 'Asia/Singapore'
 const zh = {
   ...zhT,
   brand: '工具箱', search: '搜索工具…', searchShort: '搜索', collapse: '收起侧栏', expand: '展开侧栏',
+  settings: '设置', setLang: '语言', setTheme: '外观', setZoom: '字号', setZoomSub: '放大右侧的工具区，侧栏不变',
   now: '现在', tzSearch: '搜索城市或时区，如 tokyo / 东京 / +9', tzLocal: '本机', tzRecent: '最近使用', tzCommon: '常用', tzNone: '没有匹配的时区', tzLocalTag: ' · 本机',
   ts2t: '时间戳', t2ts: '时间', auto: '自动', units: { s: '秒', ms: '毫秒', us: '微秒', ns: '纳秒' }, tsPh: '粘贴时间戳，如 1793000000', detected: '识别为{u} · {d} 位', forced: '按{u}解析',
   rowISO: 'ISO 8601', rowUTC: 'UTC', rowRel: '相对', copy: '复制', copyText: '复制文本', tsErr: '请输入数字时间戳', tsRange: '超出可表示的时间范围', tsEmpty: '输入时间戳，结果实时显示',
@@ -103,6 +104,7 @@ export type Dict = typeof zh;
 const en: Dict = {
   ...enT,
   brand: 'Toolbox', search: 'Search tools…', searchShort: 'Search', collapse: 'Collapse sidebar', expand: 'Expand sidebar',
+  settings: 'Settings', setLang: 'Language', setTheme: 'Appearance', setZoom: 'Text size', setZoomSub: 'Scales the tool area; the sidebar stays as it is',
   now: 'Now', tzSearch: 'Search city or zone — tokyo, +9…', tzLocal: 'This device', tzRecent: 'Recent', tzCommon: 'Common', tzNone: 'No matching time zone', tzLocalTag: ' · this device',
   ts2t: 'Timestamp', t2ts: 'Date', auto: 'Auto', units: { s: 'seconds', ms: 'milliseconds', us: 'microseconds', ns: 'nanoseconds' }, tsPh: 'Paste a timestamp, e.g. 1793000000', detected: 'Detected {u} · {d} digits', forced: 'Read as {u}',
   rowISO: 'ISO 8601', rowUTC: 'UTC', rowRel: 'Relative', copy: 'Copy', copyText: 'Copy text', tsErr: 'Enter a numeric timestamp', tsRange: 'Out of representable range', tsEmpty: 'Type a timestamp — results appear instantly',

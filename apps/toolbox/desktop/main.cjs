@@ -3,10 +3,15 @@
 //
 // The page is served from app://toolbox/ rather than file://: a real origin, so its storage stays
 // put between launches, its module workers load, and its absolute paths (/favicon.svg) resolve.
-// The page gets no Node: it runs sandboxed, as a web page does. Links to other sites open in the
-// system browser; the window itself never leaves the toolbox.
+// The page gets no Node: it runs sandboxed, as a web page does (preload.cjs passes it the system's
+// name and takes the title bar's colours, nothing more). Links to other sites open in the system
+// browser; the window itself never leaves the toolbox.
+//
+// No system title bar: the page draws its own strip at the top (html.desktop in its styles), in the
+// theme's colours. macOS keeps its window buttons at the top left; Windows and Linux theirs at the
+// top right, coloured as the page says.
 
-const { app, BrowserWindow, nativeTheme, net, protocol, session, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeTheme, net, protocol, session, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -60,17 +65,27 @@ function savedBounds() {
 
 let win = null;
 
+/** Height of the title bar strip the page draws (its styles use the same: --titlebar). */
+const BAR = 36;
+const isMac = process.platform === 'darwin';
+const hex = (c) => /^#[0-9a-f]{6}$/i.test(c);
+
 function open() {
   const b = savedBounds();
+  const dark = nativeTheme.shouldUseDarkColors;
   win = new BrowserWindow({
     ...b,
     minWidth: 720,
     minHeight: 480,
     show: false,
     title: '工具箱',
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#121211' : '#f6f6f4',
+    backgroundColor: dark ? '#121211' : '#f6f6f4',
     autoHideMenuBar: true,
-    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, spellcheck: false },
+    titleBarStyle: 'hidden',
+    ...(isMac
+      ? { trafficLightPosition: { x: 14, y: (BAR - 14) / 2 } }
+      : { titleBarOverlay: { color: dark ? '#121211' : '#f6f6f4', symbolColor: dark ? '#ededeb' : '#1b1b1d', height: BAR } }),
+    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false, spellcheck: false },
   });
   win.once('ready-to-show', () => win.show());
   win.on('close', () => {
@@ -108,6 +123,16 @@ if (!app.requestSingleInstanceLock()) {
       e.preventDefault();
       if (isWeb(url)) shell.openExternal(url);
     });
+  });
+
+  // The page's theme changed: the title bar's buttons (Windows, Linux) and the window behind the
+  // page take its colours. Only from the toolbox's own page, only plain colours.
+  ipcMain.on('title-bar', (e, bg, fg) => {
+    const w = BrowserWindow.fromWebContents(e.sender);
+    if (!w || !e.senderFrame?.url.startsWith(ORIGIN + '/') || !hex(bg) || !hex(fg)) return;
+    w.setBackgroundColor(bg);
+    if (!isMac) w.setTitleBarOverlay({ color: bg, symbolColor: fg, height: BAR });
+    w.titleBarColors = { bg, fg }; // what was last applied (the tests read it)
   });
 
   app.whenReady().then(() => {

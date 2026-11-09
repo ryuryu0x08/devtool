@@ -28,9 +28,10 @@ test('sidebar collapses with the button and Ctrl+B, and remembers it', async ({ 
 
 test('language and theme switch, and are remembered', async ({ page }) => {
   await open(page);
-  await page.locator('.seg button', { hasText: 'EN' }).click();
-  await expect(page.locator('.nav-item.on')).toContainText('Timestamp');
-  await page.locator('.seg button', { hasText: 'Dark' }).click();
+  await page.locator('.side-link').click();
+  await page.locator('.settings .seg button', { hasText: 'English' }).click();
+  await expect(page.locator('.side-link')).toContainText('Settings');
+  await page.locator('.settings .seg button', { hasText: 'Dark' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.reload();
   await expect(page.locator('.nav-item.on')).toContainText('Timestamp');
@@ -129,6 +130,53 @@ test('the app mark replaces "TB" everywhere; the tab icon and touch icon load', 
   await expect(rail.locator('svg')).toHaveCount(1);
   await rail.click();
   await expect(page.locator('.side')).toHaveCSS('width', '232px');
+});
+
+test('settings: language, appearance and text size on a page of their own, opened from the bottom of the sidebar', async ({ page }) => {
+  await open(page, 'JSON 格式化');
+  const entry = page.locator('.side-link');
+  // The sidebar's bottom holds only the entry: shown whole, in both languages.
+  const fits = async () => {
+    const [b, side] = [(await entry.boundingBox())!, (await page.locator('.side').boundingBox())!];
+    expect(b.x + b.width).toBeLessThanOrEqual(side.x + side.width);
+    expect(b.y + b.height).toBeLessThanOrEqual(side.y + side.height);
+  };
+  await fits();
+  await entry.click();
+  await expect(entry).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.nav-item.on')).toHaveCount(0);
+  const card = page.locator('.settings');
+  await expect(card.locator('.card-head')).toHaveText('设置');
+  await card.getByRole('button', { name: 'English' }).click();
+  await expect(card.locator('.card-head')).toHaveText('Settings');
+  await expect(entry).toHaveText('Settings');
+  await fits();
+  // Every choice is shown whole, in English too.
+  for (const b of await card.locator('.seg button').all()) {
+    expect(await b.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  }
+  await card.getByRole('button', { name: 'Dark' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await card.getByRole('button', { name: 'Light' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await card.getByRole('button', { name: '中文' }).click();
+  // Kept after a reload; the page itself is not (the tool is shown again).
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await expect(page.locator('.settings')).toHaveCount(0);
+  await expect(page.locator('.nav-item.on')).toHaveText(/JSON 格式化/);
+  // A tool chosen leaves the page; a second click on the entry does too.
+  await entry.click();
+  await nav(page, '时间戳转换');
+  await expect(page.locator('.settings')).toHaveCount(0);
+  await expect(page.locator('.nav-item.on')).toHaveText(/时间戳转换/);
+  await entry.click();
+  await entry.click();
+  await expect(page.locator('.settings')).toHaveCount(0);
+  // The collapsed sidebar has it too.
+  await page.getByRole('button', { name: '收起侧栏' }).click();
+  await page.getByRole('button', { name: '设置' }).click();
+  await expect(page.locator('.settings')).toBeVisible();
 });
 
 test('no request leaves the page (works offline)', async ({ page }) => {

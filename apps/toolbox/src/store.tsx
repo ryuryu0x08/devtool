@@ -19,6 +19,8 @@ export interface Scan { src: string; name: string; busy: boolean; codes: FoundCo
 
 export interface State {
   tool: ToolId;
+  /** The settings page is shown instead of the tool (not stored). */
+  settings: boolean;
   wide: boolean;
   side: boolean;
   lang: Lang;
@@ -171,6 +173,7 @@ export function initState(): State {
   try { sysDark = matchMedia('(prefers-color-scheme: dark)').matches; } catch { /* old browser */ }
   return {
     tool: (TOOLS.some((t) => t.id === saved) || (typeof saved === 'string' && storedIds().includes(pluginOfTool(saved) ?? '')) ? saved : 'ts') as ToolId,
+    settings: false,
     wide: window.innerWidth >= WIDE_MIN,
     side: pr.side !== false,
     lang: oneOf(pr.lang, ['zh', 'en'] as const, navLang),

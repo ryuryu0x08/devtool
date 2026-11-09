@@ -5,6 +5,9 @@ import '@devtool/ui/theme.css';
 import '@devtool/ui/controls.css';
 import './styles.css';
 import { App } from './App';
+import { markDesktop } from './lib/desktop';
+
+markDesktop();
 
 // An error a tool's boundary caught is shown in the page (components/ToolBoundary.tsx), so it is
 // logged as a warning; uncaught errors are still errors.
