@@ -1,4 +1,4 @@
-"""A stand-in for the usage API, for screenshots in CI: fixed numbers per key."""
+"""A stand-in for the usage API (fixed numbers per key) and the model API, for CI."""
 import http.server
 import json
 
@@ -44,6 +44,15 @@ class H(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         key = self.headers.get("Authorization", "").removeprefix("Bearer ")
+        if self.path.startswith("/api/v1/models"):
+            # The model API's model list (for the fallback gateway's merged list).
+            b = json.dumps({"data": [{"id": "claude-company", "type": "model"}], "has_more": False}).encode()
+            self.send_response(200 if key in KEYS else 401)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(b)))
+            self.end_headers()
+            self.wfile.write(b)
+            return
         if key in KEYS:
             body = {"code": 0, "data": {"valid": True, **KEYS[key], **POOL}}
             status = 200

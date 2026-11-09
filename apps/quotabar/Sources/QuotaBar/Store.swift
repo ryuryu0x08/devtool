@@ -39,6 +39,8 @@ final class Store {
   private(set) var desktopSeen: DesktopSeen?
   /// What the running Desktop lacks of its configuration now (empty: nothing to restart for).
   private(set) var desktopLacks: [String] = []
+  /// Both gateways' model lists, when a fallback gateway is set.
+  private(set) var fallbackModels = FallbackModels()
 
   @ObservationIgnored private var loop: Task<Void, Never>?
   @ObservationIgnored private var cookieLoop: Task<Void, Never>?
@@ -63,6 +65,7 @@ final class Store {
   init() {
     forwarding.onStop = { [weak self] why in self?.forwarderStopped(why) }
     forwarding.onRequest = { [weak self] in self?.heardDesktop() }
+    forwarding.onModels = { [weak self] mine, theirs in self?.setModels(company: mine, fallback: theirs) }
     load()
     findDesktop()
     readSettings()
@@ -173,8 +176,9 @@ final class Store {
     Task { await startForwarder() }
   }
 
-  /// The forwarder runs: Desktop needs it for an http model API, or it swaps the keys.
-  var forwardWanted: Bool { config.swapKeys || config.forward && forwardNeeded }
+  /// The forwarder runs: Desktop needs it for an http model API, it swaps the keys, or it sends
+  /// the fallback gateway's models there.
+  var forwardWanted: Bool { config.swapKeys || config.forward && forwardNeeded || fallback != nil }
 
   /// The key the forwarder sends in place of Desktop's (see DesktopLink.forwarderKey).
   var forwarderKey: String? { link.forwarderKey }
@@ -217,6 +221,7 @@ final class Store {
       if forwardState != .off { ForwardLog.write("转发已关") }
       forwardState = .off
       syncDesktopAddress(key: desktopKey)
+      syncCLIAddress()
       // What the running Desktop lacks depends on the forwarder too (it sends the key).
       readDesktop()
       return
@@ -234,7 +239,9 @@ final class Store {
       // Its key again, now that it is on (Desktop's configured key is read with it running).
       forwarding.key = forwarderKey
       syncDesktopAddress(key: desktopKey, taken: p != preferred ? preferred : nil)
+      syncCLIAddress()
       readDesktop()
+      await refreshModels()
     } catch is CancellationError {
       // Another start (or a stop) came meanwhile: that one says how it is.
       return
@@ -248,6 +255,7 @@ final class Store {
         saveConfig()
         // Off now: Desktop, if it was on the forwarder's address, goes back to the model API.
         syncDesktopAddress(key: desktopKey, failed: true)
+        syncCLIAddress()
       }
       readDesktop()
     }
@@ -511,6 +519,7 @@ final class Store {
   private func saveConfig() {
     write(config, to: configFile)
     forwarding.key = forwarderKey
+    forwarding.second = fallback
   }
   private func writeHistory() { write(history, to: historyFile) }
 
@@ -607,6 +616,7 @@ final class Store {
 
   func refresh() async {
     await checkForwarder()
+    Task { await refreshModels() }
     readSettings()
     readDesktop()
     adoptClaudeKey()
@@ -807,8 +817,12 @@ final class Store {
 
     // Another model API somewhere: change it too, or only the key?
     var others: [String] = []
-    if let t = cliFile, !ClaudeSettings.sameURL(ClaudeSettings.currentEnv(ClaudeSettings.baseURLKey, in: t), base) {
-      others.append("Claude Code: " + (ClaudeSettings.currentEnv(ClaudeSettings.baseURLKey, in: t) ?? "未设置 (官方接口)"))
+    // Claude Code goes through the forwarder too while it sends the fallback's models there; an
+    // address of ours is put right silently.
+    let cliWant = self.cliWant
+    if let t = cliFile {
+      let now = ClaudeSettings.currentEnv(ClaudeSettings.baseURLKey, in: t)
+      if !ClaudeSettings.sameURL(now, cliWant) && !isOurs(now) { others.append("Claude Code: " + (now ?? "未设置 (官方接口)")) }
     }
     // Desktop is to use the forwarder while it runs; an address of ours is put right silently.
     let desktopWant = self.desktopWant
@@ -816,7 +830,9 @@ final class Store {
     if desktopChange == .ask { others.append("Desktop: " + (desktopURL ?? "未设置")) }
     var setURL = false
     if !others.isEmpty {
-      let wanted = desktopWant == base ? base : base + "\nDesktop 经本地转发: " + desktopWant
+      var wanted = base
+      if cliWant != base { wanted += "\nClaude Code 经本地转发: " + cliWant }
+      if desktopWant != base { wanted += "\nDesktop 经本地转发: " + desktopWant }
       switch Dialogs.otherAPI(current: others, wanted: wanted) {
       case .replace: setURL = true
       case .keyOnly: setURL = false
@@ -828,7 +844,7 @@ final class Store {
     if cliFile != nil {
       do {
         let urlNow = cliFile.flatMap { ClaudeSettings.currentEnv(ClaudeSettings.baseURLKey, in: $0) }
-        let wantURL = setURL && !ClaudeSettings.sameURL(urlNow, base) ? base : nil
+        let wantURL = (setURL || isOurs(urlNow)) && !ClaudeSettings.sameURL(urlNow, cliWant) ? cliWant : nil
         _ = try ClaudeSettings.switchToken(p.key, baseURL: wantURL, path: config.settingsPath)
         withAnimation(.snappy) { readSettings() }
         parts.append("Claude Code 已生效")
@@ -862,6 +878,109 @@ final class Store {
     }
     readDesktop()
     announceDesktop(why: "Desktop 改用 \"\(p.label)\" 的 key", text: "已切换到 \"\(p.label)\": " + parts.joined(separator: ", "), changed: desktopChanged)
+  }
+
+  // MARK: - Fallback gateway
+
+  /// The fallback gateway, when its address and key are both set.
+  var fallback: LocalForwarder.Gateway? {
+    let u = config.fallbackURL.trimmingCharacters(in: .whitespaces), k = config.fallbackKey.trimmingCharacters(in: .whitespaces)
+    guard Self.usable(u), !k.isEmpty, let url = URL(string: u) else { return nil }
+    return try? LocalForwarder.Gateway(url: url, key: k)
+  }
+
+  /// Saves the fallback gateway as typed: with one set (or none any more) the forwarder starts
+  /// (or stops), and Claude Code and Desktop follow it.
+  func saveFallback(url: String, key: String) {
+    let was = fallback
+    config.fallbackURL = url.trimmingCharacters(in: .whitespaces)
+    config.fallbackKey = key.trimmingCharacters(in: .whitespaces)
+    guard fallback != was else { return saveConfig() }
+    saveConfig()
+    if (was == nil) != (fallback == nil) {
+      Task { await startForwarder() }
+    } else {
+      Task { await refreshModels() }
+    }
+  }
+
+  /// Reads both model lists (the model API's with the key in use, the fallback's with its own),
+  /// so that requests go where their model is listed, and the settings show it.
+  func refreshModels() async {
+    guard let g = fallback else {
+      fallbackModels = FallbackModels()
+      forwarding.routes = ModelRoutes()
+      return
+    }
+    let companyKey = forwarderKey ?? activeToken ?? people.first { !$0.key.isEmpty }?.key
+    let mineURL = URL(string: config.baseURL.trimmingCharacters(in: .whitespaces)).flatMap(ModelLists.listURL)
+    async let mine = Self.ids(mineURL, key: companyKey)
+    async let theirs = Self.ids(ModelLists.listURL(g.url), key: g.key)
+    let (m, t) = await (mine, theirs)
+    // The gateway changed meanwhile: that one's reading counts.
+    guard fallback == g else { return }
+    var next = fallbackModels
+    if let m { next.company = m }
+    if let t { next.fallback = t }
+    next.error = t == nil ? "读不到备用网关的模型列表 (地址或 key 不对, 或连不上)" : nil
+    show(next)
+  }
+
+  /// A gateway's model ids; a gateway with no model list (404) lists none; nil if unreadable.
+  nonisolated private static func ids(_ url: URL?, key: String?) async -> [String]? {
+    guard let url, let r = await ModelLists.get(url, auth: key.map { "Bearer " + $0 }) else { return nil }
+    if r.status == 404 { return [] }
+    return (200..<300).contains(r.status) ? ModelRoutes.ids(in: r.body) : nil
+  }
+
+  /// Both lists as the forwarder read them for a client.
+  private func setModels(company: [String], fallback theirs: [String]) {
+    guard fallback != nil else { return }
+    show(FallbackModels(company: company, fallback: theirs, error: nil))
+  }
+
+  /// The lists go to the forwarder (where requests go) and the settings; models both list are
+  /// told once, when they appear.
+  private func show(_ m: FallbackModels) {
+    let before = fallbackModels.conflicts
+    withAnimation(.snappy) { fallbackModels = m }
+    forwarding.routes = ModelRoutes(company: m.company ?? [], second: m.fallback ?? [])
+    if !m.conflicts.isEmpty && m.conflicts != before {
+      notice = Notice(text: "两个网关都有: " + m.conflicts.joined(separator: ", ") + ", 用这些模型会报错", bad: true)
+    }
+  }
+
+  // MARK: - Claude Code's address
+
+  /// The address Claude Code is to use: the forwarder's while it sends the fallback's models
+  /// there, else the model API.
+  var cliWant: String {
+    if fallback != nil, let u = forwarderURL { return u }
+    return config.baseURL
+  }
+
+  /// One of the addresses this app set up (the model API, its forwarders).
+  private func isOurs(_ url: String?) -> Bool {
+    (config.ours + [config.baseURL]).contains { ClaudeSettings.sameURL(url, $0) }
+  }
+
+  /// After the forwarder started or stopped: Claude Code follows if it is on one of our
+  /// addresses (its key stays). Its new sessions use the new address.
+  private func syncCLIAddress() {
+    guard let f = ClaudeSettings.file(config.settingsPath), let text = try? String(contentsOf: f, encoding: .utf8),
+          let token = ClaudeSettings.currentToken(in: text) else { return }
+    let now = ClaudeSettings.currentEnv(ClaudeSettings.baseURLKey, in: text)
+    let want = cliWant
+    guard !ClaudeSettings.sameURL(now, want), isOurs(now) else { return }
+    do {
+      _ = try ClaudeSettings.switchToken(token, baseURL: want, path: config.settingsPath)
+      readSettings()
+      let what = want == config.baseURL ? "Claude Code 改回直连模型接口" : "Claude Code 改经本地转发 (\(DesktopLink.short(want)))"
+      ForwardLog.write(what)
+      notice = Notice(text: what + ", 新会话生效")
+    } catch {
+      notice = Notice(text: "Claude Code 未改: " + error.localizedDescription, bad: true)
+    }
   }
 
   // MARK: - Claude Desktop

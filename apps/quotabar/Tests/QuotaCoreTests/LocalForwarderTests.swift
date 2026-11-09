@@ -15,6 +15,9 @@ private final class Upstream: @unchecked Sendable {
   var together = false
   /// Like a gateway: keep the connection for more requests unless asked to close it.
   var keepAlive = false
+  /// A gateway's model list: GET …/v1/models answers these ids (with `modelsStatus`).
+  var models: [String]?
+  var modelsStatus = 200
 
   func start() async throws {
     let params = NWParameters.tcp
@@ -43,6 +46,14 @@ private final class Upstream: @unchecked Sendable {
       guard buf.count - r.upperBound >= length else { return self.read(c, buf) }
       self.heads.append(head)
       self.bodies.append(String(decoding: buf[r.upperBound..<(r.upperBound + length)], as: UTF8.self))
+      if let models = self.models, head.hasPrefix("GET "), head.split(separator: " ")[1].contains("/v1/models") {
+        let body = self.modelsStatus == 200
+          ? "{\"data\":[" + models.map { "{\"id\":\"\($0)\",\"type\":\"model\"}" }.joined(separator: ",") + "],\"has_more\":false}"
+          : "{\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"bad key\"}}"
+        let reply = "HTTP/1.1 \(self.modelsStatus) X\r\nContent-Type: application/json\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n" + body
+        c.send(content: Data(reply.utf8), contentContext: .finalMessage, isComplete: true, completion: .contentProcessed { _ in c.cancel() })
+        return
+      }
       if self.keepAlive {
         let body = "{\"ok\":true}"
         let close = head.lowercased().contains("\r\nconnection: close")
@@ -351,3 +362,147 @@ private final class Counter: @unchecked Sendable {
   func add() { lock.lock(); v += 1; lock.unlock() }
   var n: Int { lock.lock(); defer { lock.unlock() }; return v }
 }
+
+// MARK: - A second gateway
+
+extension LocalForwarderTests {
+
+  /// The company's gateway listing `mine`, a second listing `theirs`, and a forwarder with both.
+  private func twoGateways(_ mine: [String], _ theirs: [String], port: UInt16) async throws -> (Upstream, Upstream, LocalForwarder, UInt16) {
+    let a = Upstream(), b = Upstream()
+    a.models = mine
+    b.models = theirs
+    a.keepAlive = true
+    b.keepAlive = true
+    try await a.start()
+    try await b.start()
+    let f = try LocalForwarder(target: URL(string: "http://127.0.0.1:\(a.port)/api")!)
+    f.second = try LocalForwarder.Gateway(url: URL(string: "http://127.0.0.1:\(b.port)/other/")!, key: "sk-second")
+    f.routes = ModelRoutes(company: mine, second: theirs)
+    let p = try await f.start(preferred: port)
+    return (a, b, f, p)
+  }
+
+  /// A request through the forwarder: its status and body.
+  private func call(_ port: UInt16, _ method: String, _ path: String, body: String? = nil, key: String? = "sk-client") async throws -> (Int, String) {
+    var req = URLRequest(url: URL(string: "http://127.0.0.1:\(port)\(path)")!)
+    req.httpMethod = method
+    if let key { req.setValue("Bearer " + key, forHTTPHeaderField: "Authorization") }
+    req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+    req.setValue("tools-2024", forHTTPHeaderField: "anthropic-beta")
+    if let body {
+      req.httpBody = Data(body.utf8)
+      req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    }
+    let (d, r) = try await URLSession.shared.data(for: req)
+    return ((r as? HTTPURLResponse)?.statusCode ?? 0, String(decoding: d, as: UTF8.self))
+  }
+
+  private func header(_ name: String, _ head: String) -> String? {
+    head.components(separatedBy: "\r\n").first { $0.lowercased().hasPrefix(name + ":") }
+  }
+
+  func testRequestsGoToTheGatewayThatListsTheirModelWithItsKey() async throws {
+    let (a, b, f, port) = try await twoGateways(["claude-a"], ["glm-b"], port: 48200)
+    defer { f.stop() }
+    f.key = "sk-person"
+    var (status, _) = try await call(port, "POST", "/v1/messages?beta=true", body: #"{"model":"glm-b","max_tokens":1}"#)
+    XCTAssertEqual(status, 200)
+    XCTAssertEqual(b.heads.count, 1)
+    XCTAssertEqual(b.heads[0].components(separatedBy: "\r\n")[0], "POST /other/v1/messages?beta=true HTTP/1.1")
+    XCTAssertEqual(header("authorization", b.heads[0]), "Authorization: Bearer sk-second")
+    XCTAssertEqual(header("host", b.heads[0]), "Host: 127.0.0.1:\(b.port)")
+    // Anthropic's version and beta headers reach the second gateway (not the company's).
+    XCTAssertEqual(header("anthropic-version", b.heads[0]), "anthropic-version: 2023-06-01")
+    XCTAssertEqual(header("anthropic-beta", b.heads[0]), "anthropic-beta: tools-2024")
+    XCTAssertEqual(b.bodies[0], #"{"model":"glm-b","max_tokens":1}"#)
+    // The company's model, and one neither lists: the company's gateway, with the person's key.
+    for m in ["claude-a", "unknown"] {
+      (status, _) = try await call(port, "POST", "/v1/messages/count_tokens", body: #"{"model":"\#(m)"}"#)
+      XCTAssertEqual(status, 200)
+    }
+    XCTAssertEqual(a.heads.count, 2)
+    XCTAssertEqual(a.heads.map { header("authorization", $0) }, ["Authorization: Bearer sk-person", "Authorization: Bearer sk-person"])
+    XCTAssertNil(header("anthropic-beta", a.heads[0]))
+    XCTAssertEqual(b.heads.count, 1)
+    // One model by its path.
+    (status, _) = try await call(port, "GET", "/v1/models/glm-b")
+    XCTAssertEqual(status, 200)
+    XCTAssertEqual(b.heads.last?.components(separatedBy: "\r\n")[0], "GET /other/v1/models/glm-b HTTP/1.1")
+    // No second gateway any more: everything to the company's.
+    f.second = nil
+    (status, _) = try await call(port, "POST", "/v1/messages", body: #"{"model":"glm-b"}"#)
+    XCTAssertEqual(status, 200)
+    XCTAssertEqual(a.heads.count, 3)
+  }
+
+  func testTheModelListIsBothListsAsOneEachReadWithItsKey() async throws {
+    let (a, b, f, port) = try await twoGateways(["claude-a"], ["glm-b"], port: 48220)
+    defer { f.stop() }
+    let told = Box<[[String]]>()
+    f.onModels = { told.set([$0, $1]) }
+    let (status, body) = try await call(port, "GET", "/v1/models?limit=1000")
+    XCTAssertEqual(status, 200)
+    XCTAssertEqual(ModelRoutes.ids(in: Data(body.utf8)), ["claude-a", "glm-b"])
+    XCTAssertEqual(a.heads.count, 1)
+    XCTAssertEqual(a.heads[0].components(separatedBy: "\r\n")[0], "GET /api/v1/models?limit=1000 HTTP/1.1")
+    XCTAssertEqual(header("authorization", a.heads[0]), "Authorization: Bearer sk-client")
+    XCTAssertEqual(header("authorization", b.heads[0]), "Authorization: Bearer sk-second")
+    XCTAssertEqual(told.value, [["claude-a"], ["glm-b"]])
+    // The second gateway down (or turning the key down): the company's models only.
+    b.modelsStatus = 401
+    let (s2, body2) = try await call(port, "GET", "/v1/models")
+    XCTAssertEqual(s2, 200)
+    XCTAssertEqual(ModelRoutes.ids(in: Data(body2.utf8)), ["claude-a"])
+    // ...and its models still go to it (the list read before stands).
+    _ = try await call(port, "POST", "/v1/messages", body: #"{"model":"glm-b"}"#)
+    XCTAssertEqual(b.bodies.last, #"{"model":"glm-b"}"#)
+    // A company's gateway with no model list (404): the second's models are the list.
+    a.modelsStatus = 404
+    b.modelsStatus = 200
+    let (s4, body4) = try await call(port, "GET", "/v1/models")
+    XCTAssertEqual(s4, 200)
+    XCTAssertEqual(ModelRoutes.ids(in: Data(body4.utf8)), ["glm-b"])
+    // The company's turning the key down: its answer, as it is.
+    a.modelsStatus = 401
+    let (s3, body3) = try await call(port, "GET", "/v1/models")
+    XCTAssertEqual(s3, 401)
+    XCTAssertTrue(body3.contains("authentication_error"), body3)
+  }
+
+  func testAModelBothListIsTurnedAwaySayingWhy() async throws {
+    let (a, b, f, port) = try await twoGateways(["claude-a", "shared"], ["glm-b", "shared"], port: 48240)
+    defer { f.stop() }
+    let (status, body) = try await call(port, "POST", "/v1/messages", body: #"{"model":"shared"}"#)
+    XCTAssertEqual(status, 409)
+    XCTAssertTrue(body.contains("shared") && body.contains("invalid_request_error"), body)
+    XCTAssertTrue(a.heads.isEmpty && b.heads.isEmpty)
+    // Listed once.
+    let (_, list) = try await call(port, "GET", "/v1/models")
+    XCTAssertEqual(ModelRoutes.ids(in: Data(list.utf8)), ["claude-a", "shared", "glm-b"])
+    XCTAssertEqual(f.routes.conflicts, ["shared"])
+  }
+
+  func testWithNoKeySentTheSecondGatewaysKeyIsNotAdded() async throws {
+    let (_, b, f, port) = try await twoGateways(["claude-a"], ["glm-b"], port: 48260)
+    defer { f.stop() }
+    _ = try await call(port, "POST", "/v1/messages", body: #"{"model":"glm-b"}"#, key: nil)
+    XCTAssertEqual(b.heads.count, 1)
+    XCTAssertNil(header("authorization", b.heads[0]))
+  }
+
+  func testAGatewayMustBeHTTP() {
+    XCTAssertThrowsError(try LocalForwarder.Gateway(url: URL(string: "ftp://x")!, key: "k"))
+    XCTAssertEqual(ModelLists.listURL(URL(string: "http://h:8080/api/")!)?.absoluteString, "http://h:8080/api/v1/models")
+    XCTAssertEqual(ModelLists.listURL(URL(string: "https://h/")!)?.absoluteString, "https://h/v1/models")
+  }
+}
+
+/// A value set from any thread.
+private final class Box<T>: @unchecked Sendable {
+  private let lock = NSLock()
+  private var v: T?
+  func set(_ x: T) { lock.lock(); v = x; lock.unlock() }
+  var value: T? { lock.lock(); defer { lock.unlock() }; return v }
+}
+

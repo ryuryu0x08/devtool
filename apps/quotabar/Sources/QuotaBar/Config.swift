@@ -67,6 +67,10 @@ struct Config: Codable, Equatable {
   /// The portal endpoint reached with the cookies.
   var cookieURL = ProxyUsageAPI.defaultURL
   var barStyle = BarStyle.full
+  /// A fallback gateway besides the model API: the requests for the models it lists go to it,
+  /// with this key (Bearer). Empty: none. Set, Claude Code and Desktop go through the forwarder.
+  var fallbackURL = ""
+  var fallbackKey = ""
 
   static var detectedClaudeDir: String {
     ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"].flatMap { $0.isEmpty ? nil : $0 } ?? "~/.claude"
@@ -80,7 +84,7 @@ struct Config: Codable, Equatable {
   init() {}
 
   private enum CodingKeys: String, CodingKey {
-    case url, interval, people, retired, settingsPath, claudeDir, desktopDir, baseURL, desktopRestart, forward, forwardPort, ours, desktopPrevious, swapKeys, desktopPerson, cookieSync, cookieBrowser, cookieURL, barStyle, keys
+    case url, interval, people, retired, settingsPath, claudeDir, desktopDir, baseURL, desktopRestart, forward, forwardPort, ours, desktopPrevious, swapKeys, desktopPerson, cookieSync, cookieBrowser, cookieURL, barStyle, fallbackURL, fallbackKey, keys
   }
   private struct OldKey: Decodable { var id: String; var key: String }
 
@@ -108,6 +112,8 @@ struct Config: Codable, Equatable {
     let cu = try c.decodeIfPresent(String.self, forKey: .cookieURL) ?? ""
     cookieURL = cu.isEmpty ? ProxyUsageAPI.defaultURL : cu
     barStyle = (try? c.decodeIfPresent(BarStyle.self, forKey: .barStyle)) ?? .full
+    fallbackURL = try c.decodeIfPresent(String.self, forKey: .fallbackURL) ?? ""
+    fallbackKey = try c.decodeIfPresent(String.self, forKey: .fallbackKey) ?? ""
     let b = try c.decodeIfPresent(String.self, forKey: .baseURL) ?? ""
     baseURL = b.isEmpty ? Config.defaultBaseURL : b
     desktopRestart = (try? c.decodeIfPresent(DesktopRestart.self, forKey: .desktopRestart)) ?? .ask
@@ -137,8 +143,24 @@ struct Config: Codable, Equatable {
     try c.encode(cookieBrowser, forKey: .cookieBrowser)
     try c.encode(cookieURL, forKey: .cookieURL)
     try c.encode(barStyle, forKey: .barStyle)
+    try c.encode(fallbackURL, forKey: .fallbackURL)
+    try c.encode(fallbackKey, forKey: .fallbackKey)
     try c.encode(baseURL, forKey: .baseURL)
     try c.encode(desktopRestart, forKey: .desktopRestart)
+  }
+}
+
+/// The fallback gateway's models as last read: what the settings show.
+struct FallbackModels: Equatable {
+  /// The ids each gateway lists (nil: not read yet, or it couldn't be).
+  var company: [String]?
+  var fallback: [String]?
+  /// Why the fallback's list couldn't be read, if it couldn't.
+  var error: String?
+  /// Models both list: requests for them are turned away.
+  var conflicts: [String] {
+    guard let company, let fallback else { return [] }
+    return Set(company).intersection(fallback).sorted()
   }
 }
 

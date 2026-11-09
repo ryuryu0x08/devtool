@@ -25,6 +25,17 @@ final class Forwarding {
     set { forwarder?.key = newValue }
   }
 
+  /// The fallback gateway (nil: none), and which models go to it. Kept here too, so that a
+  /// forwarder started later gets them.
+  var second: LocalForwarder.Gateway? {
+    didSet { forwarder?.second = second }
+  }
+  var routes = ModelRoutes() {
+    didSet { forwarder?.routes = routes }
+  }
+  /// Told of both model lists the forwarder read when a client asked for them.
+  var onModels: ((_ company: [String], _ fallback: [String]) -> Void)?
+
   func stop() {
     attempt += 1
     forwarder?.stop()
@@ -39,6 +50,14 @@ final class Forwarding {
     let f = try LocalForwarder(target: target)
     f.log = { ForwardLog.write($0) }
     f.key = key
+    f.second = second
+    f.routes = routes
+    f.onModels = { [weak self, weak f] mine, theirs in
+      Task { @MainActor in
+        guard let self, let f, self.forwarder === f else { return }
+        self.onModels?(mine, theirs)
+      }
+    }
     f.onRequest = { [weak self, weak f] in
       Task { @MainActor in
         guard let self, let f, self.forwarder === f else { return }

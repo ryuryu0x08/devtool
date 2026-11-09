@@ -6,6 +6,9 @@
 // path asked for, the API's Host, Connection: close), and so is the reply's (Connection: close, so
 // that a client keeping connections open doesn't send its next request down this one). The reply's
 // body is passed on as it comes, so streamed replies arrive as they are sent.
+//
+// With a second gateway set, requests go to the gateway whose model list has the model they ask
+// for (ModelRoutes), with that gateway's key; GET /v1/models answers both lists as one.
 import Foundation
 import Network
 
@@ -27,6 +30,22 @@ public final class LocalForwarder: @unchecked Sendable {
   /// The port tried first unless one was used before: rarely taken.
   public static let defaultPort: UInt16 = 47831
 
+  /// A gateway besides the model API (`target`): the requests for its models go to it.
+  public struct Gateway: Equatable, Sendable {
+    public let url: URL
+    /// Sent as a Bearer token with each request to it.
+    public let key: String
+    let up: Upstream
+
+    public init(url: URL, key: String) throws {
+      self.url = url
+      self.key = key
+      up = try Upstream(url)
+    }
+
+    public static func == (a: Gateway, b: Gateway) -> Bool { a.url == b.url && a.key == b.key }
+  }
+
   public let target: URL
   public private(set) var port: UInt16?
   /// How long to wait for the model API to accept a connection before answering 502.
@@ -39,33 +58,40 @@ public final class LocalForwarder: @unchecked Sendable {
   /// Told (on the forwarder's queue) when the listener stops by itself after it started (the
   /// system ended it, e.g. around sleep): the port no longer answers. Not called for `stop()`.
   public var onStop: (@Sendable (String) -> Void)?
-  private let host: String
-  private let targetPort: UInt16
-  private let tls: Bool
+  /// Told (on a background queue) of both model lists, when a client asked for them and both
+  /// were read, so that the app shows what it saw.
+  public var onModels: (@Sendable (_ company: [String], _ second: [String]) -> Void)?
+  private let company: Upstream
   private let lock = NSLock()
   private var _key: String?
+  private var _second: Gateway?
+  private var _routes = ModelRoutes()
+
+  /// The second gateway (nil: everything goes to `target`).
+  public var second: Gateway? {
+    get { lock.lock(); defer { lock.unlock() }; return _second }
+    set { lock.lock(); _second = newValue; lock.unlock() }
+  }
+
+  /// Which models go to the second gateway (and which both list).
+  public var routes: ModelRoutes {
+    get { lock.lock(); defer { lock.unlock() }; return _routes }
+    set { lock.lock(); _routes = newValue; lock.unlock() }
+  }
 
   /// The key sent with every request in place of the client's (nil: the client's as it is).
   public var key: String? {
     get { lock.lock(); defer { lock.unlock() }; return _key }
     set { lock.lock(); _key = newValue.flatMap { $0.isEmpty ? nil : $0 }; lock.unlock() }
   }
-  private let prefix: String
   private let queue = DispatchQueue(label: "QuotaBar.LocalForwarder")
   private var listener: NWListener?
   /// Set by `stop()` for the listener it ends, so that its ending isn't taken for a failure.
   private var stopping = Flag()
 
   public init(target: URL) throws {
-    let scheme = target.scheme?.lowercased()
-    guard scheme == "http" || scheme == "https", let h = target.host, !h.isEmpty else { throw Failure.notHTTP }
+    company = try Upstream(target)
     self.target = target
-    host = h
-    tls = scheme == "https"
-    targetPort = UInt16(target.port ?? (tls ? 443 : 80))
-    var p = target.path
-    while p.hasSuffix("/") { p.removeLast() }
-    prefix = p
   }
 
   /// The address to give Claude Desktop once started.
@@ -188,9 +214,9 @@ public final class LocalForwarder: @unchecked Sendable {
       if let r = buf.range(of: Data("\r\n\r\n".utf8)) {
         let head = String(decoding: buf[..<r.lowerBound], as: UTF8.self)
         guard Self.fromThisMachine(head) else { return self.reply(c, 403, "QuotaBar 本地转发只接受本机程序的请求") }
-        guard let req = self.rewrite(head), let framing = Self.framing(head) else { return self.reply(c, 400, "bad request") }
+        guard Self.requestLine(head) != nil, let framing = Self.framing(head) else { return self.reply(c, 400, "bad request") }
         self.onRequest?()
-        self.readBody(c, head: Data(req.utf8), framing: framing, got: Data(buf[r.upperBound...]), ended: complete || error != nil)
+        self.readBody(c, head: head, framing: framing, got: Data(buf[r.upperBound...]), ended: complete || error != nil)
       } else if complete || error != nil {
         c.cancel()
       } else if buf.count > 64 * 1024 {
@@ -201,12 +227,12 @@ public final class LocalForwarder: @unchecked Sendable {
     }
   }
 
-  private func readBody(_ c: NWConnection, head: Data, framing: Framing, got: Data, ended: Bool) {
+  private func readBody(_ c: NWConnection, head: String, framing: Framing, got: Data, ended: Bool) {
     switch Self.bodyEnd(framing, got) {
     case .some(-1):
       return reply(c, 400, "bad chunked body")
     case .some(let end):
-      return forward(c, head + got.prefix(end))
+      return dispatch(c, head: head, body: Data(got.prefix(end)))
     case nil where ended:
       return c.cancel()
     case nil where got.count > Self.maxBody:
@@ -275,34 +301,119 @@ public final class LocalForwarder: @unchecked Sendable {
   /// The request headers passed on, as the Python forwarder that works with these gateways does
   /// (some turn down Desktop's other headers, with an empty 400), and the body's framing.
   static let passed: Set<String> = ["authorization", "content-type", "accept", "content-length", "transfer-encoding"]
+  /// To the second gateway also Anthropic's version and beta headers (a gateway in front of
+  /// Anthropic's API passes them on; its features depend on them).
+  static let passedSecond = passed.union(["anthropic-version", "anthropic-beta"])
 
-  /// The head as the API should get it: its path in front, the headers above, its Host, and
-  /// Connection: close. The names of the headers left out go to the log (not their values).
-  func rewrite(_ head: String) -> String? {
-    let lines = head.components(separatedBy: "\r\n")
-    guard !lines.isEmpty else { return nil }
-    let parts = lines[0].split(separator: " ", omittingEmptySubsequences: true)
+  /// Method and path of the request line; nil if it isn't one.
+  static func requestLine(_ head: String) -> (method: String, path: String)? {
+    let parts = (head.components(separatedBy: "\r\n").first ?? "").split(separator: " ", omittingEmptySubsequences: true)
     guard parts.count == 3, parts[1].hasPrefix("/") else { return nil }
-    var out = ["\(parts[0]) \(prefix)\(parts[1]) \(parts[2])"]
-    var left: [String] = []
-    // The key goes only in place of one the client sent: a request with none (a web page's, say)
-    // doesn't get it.
-    let sent = lines.dropFirst().contains { l in
+    return (String(parts[0]), String(parts[1]))
+  }
+
+  /// The client sent a key (Authorization or x-api-key). Only then does a key of ours go in its
+  /// place: a request with none (a web page's, say) doesn't get one.
+  static func sentKey(_ head: String) -> Bool {
+    head.components(separatedBy: "\r\n").dropFirst().contains { l in
       let n = l.split(separator: ":", maxSplits: 1).first.map { $0.trimmingCharacters(in: .whitespaces).lowercased() } ?? ""
       return n == "authorization" || n == "x-api-key"
     }
-    let key = sent ? self.key : nil
+  }
+
+  /// The head as the model API (`target`) should get it, with `key` in place of the client's.
+  func rewrite(_ head: String) -> String? {
+    rewrite(head, to: company, key: Self.sentKey(head) ? key : nil, passing: Self.passed)
+  }
+
+  /// The head as `up` should get it: its path in front, the headers `passing`, `key` (if any) as
+  /// the Authorization, its Host, and Connection: close. The names of the headers left out go to
+  /// the log (not their values).
+  func rewrite(_ head: String, to up: Upstream, key: String?, passing: Set<String>) -> String? {
+    let lines = head.components(separatedBy: "\r\n")
+    guard let line = Self.requestLine(head), let version = lines[0].split(separator: " ").last else { return nil }
+    var out = ["\(line.method) \(up.prefix)\(line.path) \(version)"]
+    var left: [String] = []
     for l in lines.dropFirst() where !l.isEmpty {
       let name = l.split(separator: ":", maxSplits: 1).first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
       if key != nil && name.lowercased() == "authorization" { continue }
-      if Self.passed.contains(name.lowercased()) { out.append(l) } else { left.append(name) }
+      if passing.contains(name.lowercased()) { out.append(l) } else { left.append(name) }
     }
     if let key { out.append("Authorization: Bearer " + key) }
-    out.append("Host: " + (targetPort == (tls ? 443 : 80) ? host : "\(host):\(targetPort)"))
+    out.append("Host: " + up.hostHeader)
     out.append("User-Agent: QuotaBar")
     out.append("Connection: close")
     if !left.isEmpty { log?("left out: " + left.joined(separator: ", ")) }
     return out.joined(separator: "\r\n") + "\r\n\r\n"
+  }
+
+  /// Where a whole request goes: with a second gateway, by the model it asks for (a model both
+  /// gateways list is turned away, GET /v1/models answers both lists); else to the model API.
+  private func dispatch(_ c: NWConnection, head: String, body: Data) {
+    let sent = Self.sentKey(head)
+    if let second, let line = Self.requestLine(head) {
+      let (method, path) = line
+      if method == "GET" && ModelRoutes.isList(path) { return listModels(c, head: head, path: path, second: second) }
+      let model = ModelRoutes.model(inPath: path) ?? ModelRoutes.model(in: body)
+      switch routes.route(model) {
+      case .conflict(let m):
+        log?("\(method) \(path): 模型 \(m) 两个网关都有, 未转发")
+        return reply(c, 409, ModelRoutes.conflictReply(m), json: true)
+      case .second:
+        guard let req = rewrite(head, to: second.up, key: sent ? second.key : nil, passing: Self.passedSecond) else { return reply(c, 400, "bad request") }
+        return forward(c, Data(req.utf8) + body, to: second.up)
+      case .company:
+        break
+      }
+    }
+    guard let req = rewrite(head) else { return reply(c, 400, "bad request") }
+    forward(c, Data(req.utf8) + body, to: company)
+  }
+
+  /// GET /v1/models with a second gateway: both lists as one (ModelRoutes.merge), each read with
+  /// that gateway's key; the routes follow what was read. The model API's answer, if not a list
+  /// (a key turned down, say), is passed back as it is; the second's failing leaves its models out.
+  private func listModels(_ c: NWConnection, head: String, path: String, second: Gateway) {
+    let sent = Self.sentKey(head)
+    let companyAuth = sent ? (key.map { "Bearer " + $0 } ?? Self.header("authorization", in: head)) : nil
+    let secondAuth = sent ? "Bearer " + second.key : nil
+    let version = Self.header("anthropic-version", in: head)
+    let companyURL = company.url(path)
+    Task { [weak self] in
+      async let a = ModelLists.get(companyURL, auth: companyAuth, version: version)
+      async let b = ModelLists.get(second.up.url(path), auth: secondAuth, version: version)
+      let (got, theirs) = await (a, b)
+      guard let self else { return }
+      // A model API with no model list (404) lists nothing: the second's models are the list.
+      let mine = got.map { $0.status == 404 ? ModelLists.Reply(status: 200, body: Data(#"{"data":[]}"#.utf8)) : $0 }
+      let theirIDs = theirs.flatMap { (200..<300).contains($0.status) ? ModelRoutes.ids(in: $0.body) : nil }
+      self.queue.async {
+        guard let mine, (200..<300).contains(mine.status), let merged = ModelRoutes.merge(company: mine.body, second: theirIDs == nil ? nil : theirs?.body) else {
+          self.log?("GET \(path): 公司网关 " + (mine.map { "\($0.status)" } ?? "连不上"))
+          if let mine { return self.reply(c, mine.status, mine.body, json: true) }
+          return self.reply(c, 502, "QuotaBar 本地转发连不上 \(self.company.label)")
+        }
+        let myIDs = ModelRoutes.ids(in: mine.body) ?? []
+        if let theirIDs {
+          self.routes = ModelRoutes(company: myIDs, second: theirIDs)
+          self.onModels?(myIDs, theirIDs)
+        } else {
+          self.log?("GET \(path): 另一个网关 " + (theirs.map { "\($0.status)" } ?? "连不上") + ", 只列公司网关的模型")
+        }
+        let r = self.routes
+        self.log?("GET \(path): \(ModelRoutes.ids(in: merged)?.count ?? 0) 个模型" + (r.conflicts.isEmpty ? "" : ", 两边都有: " + r.conflicts.sorted().joined(separator: ", ")))
+        self.reply(c, 200, merged, json: true)
+      }
+    }
+  }
+
+  /// A header's value in the request head, if it is there.
+  static func header(_ name: String, in head: String) -> String? {
+    for l in head.components(separatedBy: "\r\n").dropFirst() {
+      let kv = l.split(separator: ":", maxSplits: 1)
+      if kv.count == 2, kv[0].trimmingCharacters(in: .whitespaces).lowercased() == name { return kv[1].trimmingCharacters(in: .whitespaces) }
+    }
+    return nil
   }
 
   /// The request was addressed to this machine (its Host header, if any, is 127.0.0.1, localhost
@@ -339,13 +450,13 @@ public final class LocalForwarder: @unchecked Sendable {
     }
   }
 
-  private func forward(_ c: NWConnection, _ request: Data) {
+  private func forward(_ c: NWConnection, _ request: Data, to target: Upstream) {
     // Straight to the API, as curl and the Python forwarder go: Network.framework would otherwise
     // follow the system's proxy (Clash and the like set one), sending this plain-server request
     // to a proxy, which answers it with an empty 400.
-    let params = tls ? NWParameters(tls: NWProtocolTLS.Options(), tcp: NWProtocolTCP.Options()) : NWParameters.tcp
+    let params = target.tls ? NWParameters(tls: NWProtocolTLS.Options(), tcp: NWProtocolTCP.Options()) : NWParameters.tcp
     params.preferNoProxies = true
-    let up = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: targetPort)!, using: params)
+    let up = NWConnection(host: NWEndpoint.Host(target.host), port: NWEndpoint.Port(rawValue: target.port)!, using: params)
     // The state handler runs on `queue` only.
     let started = Once()
     up.stateUpdateHandler = { [weak self] s in
@@ -354,7 +465,7 @@ public final class LocalForwarder: @unchecked Sendable {
       case .ready:
         guard started.first() else { return }
         let line = String(decoding: request.prefix(while: { $0 != 13 }), as: UTF8.self)
-        self.log?("\(line) → \(self.host):\(self.targetPort) (\(up.currentPath?.remoteEndpoint.map { "\($0)" } ?? "?"))")
+        self.log?("\(line) → \(target.label) (\(up.currentPath?.remoteEndpoint.map { "\($0)" } ?? "?"))")
         up.send(content: request, completion: .contentProcessed { e in
           if e != nil { return self.close(c, up) }
           self.replyHead(up, to: c, Data())
@@ -364,8 +475,8 @@ public final class LocalForwarder: @unchecked Sendable {
         // which sends all of it first; closing the client here would drop what is still to come.
         if started.first() {
           up.cancel()
-          self.log?("can't reach \(self.host):\(self.targetPort): \(e)")
-          self.reply(c, 502, "QuotaBar 本地转发连不上 \(self.host):\(self.targetPort) (\(e))")
+          self.log?("can't reach \(target.label): \(e)")
+          self.reply(c, 502, "QuotaBar 本地转发连不上 \(target.label) (\(e))")
         }
       default: break
       }
@@ -375,8 +486,8 @@ public final class LocalForwarder: @unchecked Sendable {
     queue.asyncAfter(deadline: .now() + connectTimeout) { [weak self] in
       guard let self, started.first() else { return }
       up.cancel()
-      self.log?("no connection to \(self.host):\(self.targetPort) within \(Int(self.connectTimeout)) s")
-      self.reply(c, 502, "QuotaBar 本地转发在 \(Int(self.connectTimeout)) 秒内没连上 \(self.host):\(self.targetPort)")
+      self.log?("no connection to \(target.label) within \(Int(self.connectTimeout)) s")
+      self.reply(c, 502, "QuotaBar 本地转发在 \(Int(self.connectTimeout)) 秒内没连上 \(target.label)")
     }
   }
 
@@ -441,10 +552,75 @@ public final class LocalForwarder: @unchecked Sendable {
   }
 
   private func reply(_ c: NWConnection, _ status: Int, _ text: String) {
-    let body = Data(text.utf8)
-    let reason = [403: "Forbidden", 413: "Content Too Large", 431: "Request Header Fields Too Large", 502: "Bad Gateway"][status] ?? "Bad Request"
-    let head = "HTTP/1.1 \(status) \(reason)\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n"
+    reply(c, status, Data(text.utf8), json: false)
+  }
+
+  private func reply(_ c: NWConnection, _ status: Int, _ body: Data, json: Bool) {
+    let reason = [200: "OK", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 409: "Conflict", 413: "Content Too Large", 431: "Request Header Fields Too Large", 502: "Bad Gateway"][status] ?? (status < 400 ? "OK" : "Error")
+    let type = json ? "application/json" : "text/plain; charset=utf-8"
+    let head = "HTTP/1.1 \(status) \(reason)\r\nContent-Type: \(type)\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n"
     c.send(content: Data(head.utf8) + body, contentContext: .finalMessage, isComplete: true, completion: .contentProcessed { _ in c.cancel() })
+  }
+}
+
+/// Where requests go: host, port, TLS, and the path put in front of the client's.
+struct Upstream: Equatable, Sendable {
+  let host: String
+  let port: UInt16
+  let tls: Bool
+  let prefix: String
+
+  init(_ url: URL) throws {
+    let scheme = url.scheme?.lowercased()
+    guard scheme == "http" || scheme == "https", let h = url.host, !h.isEmpty else { throw LocalForwarder.Failure.notHTTP }
+    host = h
+    tls = scheme == "https"
+    port = UInt16(url.port ?? (tls ? 443 : 80))
+    var p = url.path
+    while p.hasSuffix("/") { p.removeLast() }
+    prefix = p
+  }
+
+  /// The Host header: the name, with the port unless it is the scheme's own.
+  var hostHeader: String { port == (tls ? 443 : 80) ? host : "\(host):\(port)" }
+  /// "host:port", for the log and messages.
+  var label: String { "\(host):\(port)" }
+
+  /// The address of the client's `path` (with its query) here.
+  func url(_ path: String) -> URL {
+    URL(string: (tls ? "https://" : "http://") + hostHeader + prefix + path) ?? URL(fileURLWithPath: "/")
+  }
+}
+
+/// Reading a /v1/models list: straight to the gateway (not through the system's proxy, as the
+/// forwarder goes), within 15 s.
+public enum ModelLists {
+  public struct Reply: Sendable { public let status: Int; public let body: Data }
+
+  public static func get(_ url: URL, auth: String?, version: String? = nil) async -> Reply? {
+    var req = URLRequest(url: url, timeoutInterval: 15)
+    req.setValue("application/json", forHTTPHeaderField: "Accept")
+    req.setValue("QuotaBar", forHTTPHeaderField: "User-Agent")
+    if let auth { req.setValue(auth, forHTTPHeaderField: "Authorization") }
+    if let version { req.setValue(version, forHTTPHeaderField: "anthropic-version") }
+    let conf = URLSessionConfiguration.ephemeral
+    conf.connectionProxyDictionary = [:]
+    let session = URLSession(configuration: conf)
+    defer { session.finishTasksAndInvalidate() }
+    guard let (data, resp) = try? await session.data(for: req), let http = resp as? HTTPURLResponse else { return nil }
+    return Reply(status: http.statusCode, body: data)
+  }
+
+  /// The ids `url` lists with `key` (as a Bearer token); nil when it can't be read.
+  public static func ids(_ url: URL, key: String?) async -> [String]? {
+    guard let r = await get(url, auth: key.map { "Bearer " + $0 }), (200..<300).contains(r.status) else { return nil }
+    return ModelRoutes.ids(in: r.body)
+  }
+
+  /// The /v1/models address of a gateway whose API is at `base` ("http://h/api" → "http://h/api/v1/models").
+  public static func listURL(_ base: URL) -> URL? {
+    guard let up = try? Upstream(base) else { return nil }
+    return up.url("/v1/models")
   }
 }
 
