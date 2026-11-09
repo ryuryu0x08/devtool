@@ -71,6 +71,20 @@ jobs:
       - name: Signed (ad hoc) and intact
         if: runner.os == 'macOS'
         run: codesign --verify --deep --strict --verbose=2 apps/toolbox/desktop/release/mac-arm64/Toolbox.app
+      # As on a Mac: build.sh --install builds, installs and opens it; then again over the running one.
+      - name: The build script (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          apps/toolbox/desktop/build.sh --install
+          for _ in $(seq 40); do pgrep -f /Applications/Toolbox.app/ >/dev/null && break; sleep 0.5; done
+          pgrep -f /Applications/Toolbox.app/ >/dev/null || { echo "the installed app is not running"; exit 1; }
+          OLD="$(pgrep -f /Applications/Toolbox.app/Contents/MacOS/Toolbox | head -1)"
+          apps/toolbox/desktop/build.sh --install
+          for _ in $(seq 40); do NEW="$(pgrep -f /Applications/Toolbox.app/Contents/MacOS/Toolbox | head -1)"; [ -n "$NEW" ] && [ "$NEW" != "$OLD" ] && break; sleep 0.5; done
+          [ -n "$NEW" ] && [ "$NEW" != "$OLD" ] || { echo "the new app is not the one running"; exit 1; }
+          [ "$(pgrep -f /Applications/Toolbox.app/Contents/MacOS/Toolbox | wc -l | tr -d ' ')" = 1 ] || { echo "more than one running"; exit 1; }
+          codesign --verify --deep --strict /Applications/Toolbox.app
+          osascript -e 'tell application "Toolbox" to quit' || true
       # Under a virtual display on Linux; one big enough for the 1280 x 900 window.
       - name: The desktop app itself
         run: |

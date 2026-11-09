@@ -51,7 +51,7 @@ if [[ "$OS" == Darwin ]]; then
   fi
 else
   echo "==> 编译 (.deb)"
-  (cd "$ROOT" && npm run web -w @devtool/toolbox-desktop && cd apps/toolbox/desktop && npx electron-builder --linux deb)
+  (cd "$ROOT" && npm run web -w @devtool/toolbox-desktop && npm run electron -w @devtool/toolbox-desktop && cd apps/toolbox/desktop && npx electron-builder --linux deb)
   DEB="$(ls -t "$PWD"/release/*.deb | head -1)"
   echo "Built $DEB"
   if [[ $INSTALL == 1 ]]; then

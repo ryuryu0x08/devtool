@@ -10,10 +10,11 @@
   "scripts": {
     "web": "npm run build -w @devtool/toolbox -- --outDir desktop/web --emptyOutDir",
     "start": "npm run web && electron .",
-    "pack": "npm run web && electron-builder --dir",
-    "dist": "npm run web && electron-builder",
+    "pack": "npm run web && npm run electron && electron-builder --dir",
+    "dist": "npm run web && npm run electron && electron-builder",
     "test:e2e": "playwright test",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "electron": "node -e \"require('electron')\""
   },
   "devDependencies": {
     "electron": "45.2.3",
