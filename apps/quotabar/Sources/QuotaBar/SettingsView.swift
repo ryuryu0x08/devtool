@@ -352,17 +352,29 @@ private struct ModelMapRows: View {
   @State private var rows: [ModelMapping] = []
 
   var body: some View {
-    Group {
-      ForEach($rows) { $r in
-        HStack(spacing: 6) {
-          ModelField(text: $r.from, prompt: "Desktop 里的模型", choices: store.gatewayModels.company ?? [])
-          Text("→").font(.ui(13)).foregroundStyle(.secondary)
-          Segmented(selection: $r.toOther, options: [(false, "公司"), (true, "其他")])
-            .fixedSize()
-          ModelField(text: $r.to, prompt: "发出的模型", choices: (r.toOther ? store.gatewayModels.other : store.gatewayModels.company) ?? [])
-          Button { rows.removeAll { $0.id == r.id } } label: { Icon(.trash, size: 12) }
-            .buttonStyle(.borderless)
-            .help("删除这条映射")
+    VStack(alignment: .leading, spacing: 10) {
+      if !rows.isEmpty {
+        // One grid for all rows: the columns line up from row to row.
+        Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {
+          GridRow {
+            heading("Desktop 里的模型")
+            Color.clear.frame(width: 1, height: 1)
+            heading("网关")
+            heading("发出的模型")
+            Color.clear.frame(width: 1, height: 1)
+          }
+          ForEach($rows) { $r in
+            GridRow(alignment: .center) {
+              ModelField(text: $r.from, prompt: "如 claude-haiku-5-5", choices: store.gatewayModels.company ?? [])
+              Text("→").font(.ui(13)).foregroundStyle(.secondary)
+              Segmented(selection: $r.toOther, options: [(false, "公司"), (true, "其他")])
+                .fixedSize()
+              ModelField(text: $r.to, prompt: "选择或输入", choices: (r.toOther ? store.gatewayModels.other : store.gatewayModels.company) ?? [])
+              Button { rows.removeAll { $0.id == r.id } } label: { Icon(.trash, size: 12) }
+                .buttonStyle(.borderless)
+                .help("删除这条映射")
+            }
+          }
         }
       }
       HStack {
@@ -380,18 +392,25 @@ private struct ModelMapRows: View {
     .onAppear { rows = store.config.modelMap }
     .onChange(of: rows) { store.saveModelMap(rows) }
   }
+
+  private func heading(_ s: String) -> some View {
+    Text(s).font(.ui(11)).foregroundStyle(.secondary)
+  }
 }
 
-/// A model name: typed, or picked from a gateway's list (the menu beside it).
+/// A model name: typed, or picked from a gateway's list (the menu beside it). Left-aligned, and
+/// as wide as its column.
 private struct ModelField: View {
   @Binding var text: String
   let prompt: String
   let choices: [String]
 
   var body: some View {
-    HStack(spacing: 2) {
-      TextField("", text: $text, prompt: Text(prompt))
+    HStack(spacing: 4) {
+      TextField(prompt, text: $text, prompt: Text(prompt))
+        .labelsHidden()
         .textFieldStyle(.roundedBorder)
+        .multilineTextAlignment(.leading)
         .font(.mono(12))
       Menu {
         if choices.isEmpty { Text("还没有读到这个网关的模型列表") }
@@ -402,6 +421,7 @@ private struct ModelField: View {
         .fixedSize()
         .help("从模型列表里选")
     }
+    .frame(minWidth: 150, maxWidth: .infinity)
   }
 }
 
