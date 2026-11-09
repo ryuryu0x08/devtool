@@ -59,8 +59,15 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y xvfb
       - run: npm ci
       - run: npm run typecheck -w @devtool/toolbox-desktop
+      # The packager downloads its tools from GitHub's releases, which now and then answer 5xx:
+      # tried again, a minute apart.
       - name: Build (the installers, and the app beside them)
-        run: npm run dist -w @devtool/toolbox-desktop
+        run: |
+          for try in 1 2 3; do
+            npm run dist -w @devtool/toolbox-desktop && exit 0
+            [ "$try" = 3 ] || { echo "build failed (try $try), again in 60 s"; sleep 60; }
+          done
+          exit 1
       - name: Signed (ad hoc) and intact
         if: runner.os == 'macOS'
         run: codesign --verify --deep --strict --verbose=2 apps/toolbox/desktop/release/mac-arm64/Toolbox.app

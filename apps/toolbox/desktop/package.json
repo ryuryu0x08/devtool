@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "工具箱 · Toolbox as a desktop app (Electron): the toolbox's build in its own window.",
   "author": "devtool",
+  "homepage": "https://github.com/ryuryu0x08/devtool",
   "type": "commonjs",
   "main": "main.cjs",
   "scripts": {
@@ -64,8 +65,13 @@
       "category": "Development",
       "executableName": "toolbox",
       "maintainer": "devtool",
-      "synopsis": "工具箱 · Toolbox"
+      "synopsis": "工具箱 · Toolbox",
+      "artifactName": "Toolbox-${version}-${arch}.${ext}"
     },
-    "publish": null
+    "publish": null,
+    "deb": {
+      "packageName": "toolbox",
+      "artifactName": "Toolbox-${version}-${arch}.${ext}"
+    }
   }
 }
