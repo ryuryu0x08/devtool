@@ -2,10 +2,12 @@
 // this machine, so it is pointed here and the forwarder passes each request on. With `key` set,
 // that key goes with every request instead of the one Desktop sent: the key changes here at once,
 // with no restart of Desktop (which reads its own only at launch). One request per
-// connection, read whole (head and body); its head is rewritten (the API's path in front of the
-// path asked for, the API's Host, Connection: close), and so is the reply's (Connection: close, so
-// that a client keeping connections open doesn't send its next request down this one). The reply's
-// body is passed on as it comes, so streamed replies arrive as they are sent.
+// connection, read whole (head and body). Passed on as it came except for what has to change: the
+// key (when one goes in place of the client's), the API's path in front of the path asked for, its
+// Host, and this connection's own headers (Connection: close). Every other header and the body go
+// byte for byte as sent, so nothing a gateway or its cache looks at changes. The reply likewise
+// (Connection: close, so that a client keeping connections open doesn't send its next request down
+// this one); its body is passed on as it comes, so streamed replies arrive as they are sent.
 //
 // With a second gateway set, requests go to the gateway whose model list has the model they ask
 // for (ModelRoutes), with that gateway's key; GET /v1/models answers both lists as one.
@@ -298,12 +300,9 @@ public final class LocalForwarder: @unchecked Sendable {
     }
   }
 
-  /// The request headers passed on, as the Python forwarder that works with these gateways does
-  /// (some turn down Desktop's other headers, with an empty 400), and the body's framing.
-  static let passed: Set<String> = ["authorization", "content-type", "accept", "content-length", "transfer-encoding"]
-  /// To the second gateway also Anthropic's version and beta headers (a gateway in front of
-  /// Anthropic's API passes them on; its features depend on them).
-  static let passedSecond = passed.union(["anthropic-version", "anthropic-beta"])
+  /// This connection's own headers (hop by hop, RFC 9110 7.6.1): not passed on. Also Expect: the
+  /// body was read whole already, so the gateway is not to wait for a 100 Continue.
+  static let hopByHop: Set<String> = ["keep-alive", "proxy-connection", "proxy-authorization", "te", "upgrade", "expect"]
 
   /// Method and path of the request line; nil if it isn't one.
   static func requestLine(_ head: String) -> (method: String, path: String)? {
@@ -323,27 +322,36 @@ public final class LocalForwarder: @unchecked Sendable {
 
   /// The head as the model API (`target`) should get it, with `key` in place of the client's.
   func rewrite(_ head: String) -> String? {
-    rewrite(head, to: company, key: Self.sentKey(head) ? key : nil, passing: Self.passed)
+    rewrite(head, to: company, key: Self.sentKey(head) ? key : nil)
   }
 
-  /// The head as `up` should get it: its path in front, the headers `passing`, `key` (if any) as
-  /// the Authorization, its Host, and Connection: close. The names of the headers left out go to
-  /// the log (not their values).
-  func rewrite(_ head: String, to up: Upstream, key: String?, passing: Set<String>) -> String? {
+  /// The head as `up` should get it. Changed, each where it was: the request line (the gateway's
+  /// path in front), the key (`key`, if any, as the Authorization in place of the client's
+  /// Authorization or x-api-key), Host, and Connection (close; the other hop-by-hop headers go).
+  /// Every other header as sent, in its order.
+  func rewrite(_ head: String, to up: Upstream, key: String?) -> String? {
     let lines = head.components(separatedBy: "\r\n")
     guard let line = Self.requestLine(head), let version = lines[0].split(separator: " ").last else { return nil }
     var out = ["\(line.method) \(up.prefix)\(line.path) \(version)"]
-    var left: [String] = []
+    var keyed = false, hosted = false, closed = false
     for l in lines.dropFirst() where !l.isEmpty {
-      let name = l.split(separator: ":", maxSplits: 1).first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
-      if key != nil && name.lowercased() == "authorization" { continue }
-      if passing.contains(name.lowercased()) { out.append(l) } else { left.append(name) }
+      let name = (l.split(separator: ":", maxSplits: 1).first.map { $0.trimmingCharacters(in: .whitespaces) } ?? "").lowercased()
+      if let key, name == "authorization" || name == "x-api-key" {
+        if !keyed { out.append("Authorization: Bearer " + key) }
+        keyed = true
+      } else if name == "host" {
+        if !hosted { out.append("Host: " + up.hostHeader) }
+        hosted = true
+      } else if name == "connection" {
+        if !closed { out.append("Connection: close") }
+        closed = true
+      } else if !Self.hopByHop.contains(name) {
+        out.append(l)
+      }
     }
-    if let key { out.append("Authorization: Bearer " + key) }
-    out.append("Host: " + up.hostHeader)
-    out.append("User-Agent: QuotaBar")
-    out.append("Connection: close")
-    if !left.isEmpty { log?("left out: " + left.joined(separator: ", ")) }
+    if let key, !keyed { out.append("Authorization: Bearer " + key) }
+    if !hosted { out.append("Host: " + up.hostHeader) }
+    if !closed { out.append("Connection: close") }
     return out.joined(separator: "\r\n") + "\r\n\r\n"
   }
 
@@ -360,7 +368,7 @@ public final class LocalForwarder: @unchecked Sendable {
         log?("\(method) \(path): 模型 \(m) 两个网关都有, 未转发")
         return reply(c, 409, ModelRoutes.conflictReply(m), json: true)
       case .second:
-        guard let req = rewrite(head, to: second.up, key: sent ? second.key : nil, passing: Self.passedSecond) else { return reply(c, 400, "bad request") }
+        guard let req = rewrite(head, to: second.up, key: sent ? second.key : nil) else { return reply(c, 400, "bad request") }
         return forward(c, Data(req.utf8) + body, to: second.up)
       case .company:
         break
@@ -398,7 +406,7 @@ public final class LocalForwarder: @unchecked Sendable {
           self.routes = ModelRoutes(company: myIDs, second: theirIDs)
           self.onModels?(myIDs, theirIDs)
         } else {
-          self.log?("GET \(path): 另一个网关 " + (theirs.map { "\($0.status)" } ?? "连不上") + ", 只列公司网关的模型")
+          self.log?("GET \(path): 其他网关 " + (theirs.map { "\($0.status)" } ?? "连不上") + ", 只列公司网关的模型")
         }
         let r = self.routes
         self.log?("GET \(path): \(ModelRoutes.ids(in: merged)?.count ?? 0) 个模型" + (r.conflicts.isEmpty ? "" : ", 两边都有: " + r.conflicts.sorted().joined(separator: ", ")))

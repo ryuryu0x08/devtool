@@ -90,7 +90,7 @@ public struct ModelRoutes: Equatable, Sendable {
 
   /// The error a client gets for a model both gateways list, in the shape Anthropic's clients read.
   public static func conflictReply(_ model: String) -> Data {
-    let message = "QuotaBar: 模型 \(model) 在公司网关和另一个网关都有, 不知道该发给哪个 (先在其中一个网关去掉它)"
+    let message = "QuotaBar: 模型 \(model) 在公司网关和其他网关都有, 不知道该发给哪个 (先在其中一个网关去掉它)"
     let o: [String: Any] = ["type": "error", "error": ["type": "invalid_request_error", "message": message]]
     return (try? JSONSerialization.data(withJSONObject: o, options: [.sortedKeys])) ?? Data(message.utf8)
   }

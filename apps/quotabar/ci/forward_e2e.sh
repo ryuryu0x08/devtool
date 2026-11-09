@@ -156,59 +156,59 @@ echo "Desktop's configured key: $out"
 [[ "$out" == *'"nick_name": "yy"'* ]] || { echo "the forwarder did not send Desktop's configured key"; cat "$TMP/app.log"; exit 1; }
 echo "OK: not swapping, the forwarder sends the key in Desktop's configuration"
 
-# A fallback gateway: Claude Code (on the model API, an address of ours) moves to the forwarder by
-# itself; the model list is both gateways'; a request for the fallback's model goes to it with its
-# key, the others to the model API. Without it again, Claude Code goes back.
+# Another gateway: Claude Code (on the model API, an address of ours) moves to the forwarder by
+# itself; the model list is both gateways'; a request for the other gateway's model goes to it with its
+# key, the others to the model API. Without it, Claude Code goes back.
 quit
-python3 ci/fake_fallback.py "$TMP/fallback.json" &
-FALLBACK=$!
-trap 'kill $SERVER $BUSY $PROXY $FALLBACK 2>/dev/null || true; pkill -x QuotaBar || true; [[ -n "$PROXY" ]] && proxies off' EXIT
+python3 ci/fake_other_gateway.py "$TMP/other.json" &
+OTHER=$!
+trap 'kill $SERVER $BUSY $PROXY $OTHER 2>/dev/null || true; pkill -x QuotaBar || true; [[ -n "$PROXY" ]] && proxies off' EXIT
 until curl -s -o /dev/null "http://127.0.0.1:9932/"; do sleep 0.2; done
 printf '{\n  "env": {\n    "ANTHROPIC_AUTH_TOKEN": "sk-demo-yy",\n    "ANTHROPIC_BASE_URL": "http://%s:9931/api"\n  }\n}\n' "$IP" > "$TMP/claude/settings.json"
-fallback_config() {
+other_config() {
   python3 - "$DIR" "$TMP" "$IP" "$1" <<'PY'
 import json, sys
 d, tmp, ip, on = sys.argv[1:]
-# The forwarder stays on for Desktop (the http model API) either way: only Claude Code follows the fallback.
+# The forwarder stays on for Desktop (the http model API) either way: only Claude Code follows the other gateway.
 c = {"url": "http://127.0.0.1:9931/api/v1/billing/usage", "baseURL": f"http://{ip}:9931/api", "forward": True, "forwardPort": 47831,
      "people": [{"id": "b", "name": "yy", "key": "sk-demo-yy"}], "claudeDir": tmp + "/claude", "desktopDir": tmp + "/desktop",
      "ours": ["http://127.0.0.1:47831"]}
 if on == "on":
-    c["fallbackURL"] = "http://127.0.0.1:9932/fb/"
-    c["fallbackKey"] = "sk-fallback"
+    c["otherURL"] = "http://127.0.0.1:9932/other/"
+    c["otherKey"] = "sk-other"
 json.dump(c, open(d + "/config.json", "w"))
 PY
 }
 cli_url() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["env"].get("ANTHROPIC_BASE_URL"))' "$TMP/claude/settings.json"; }
 cli_wait() { for _ in $(seq 40); do [[ "$(cli_url)" == "$1" ]] && return 0; sleep 0.5; done; echo "Claude Code address: $(cli_url), wanted $1"; cat "$TMP/app.log"; return 1; }
-fallback_config on
+other_config on
 launch
 cli_wait "http://127.0.0.1:47831"
 grep -q '"ANTHROPIC_AUTH_TOKEN": "sk-demo-yy"' "$TMP/claude/settings.json" || { echo "Claude Code's key changed"; exit 1; }
-echo "OK: with a fallback gateway, Claude Code moved to the forwarder by itself (its key kept)"
+echo "OK: with another gateway, Claude Code moved to the forwarder by itself (its key kept)"
 models="$(curl -sS -m 20 -H 'Authorization: Bearer sk-demo-yy' -H 'anthropic-version: 2023-06-01' "http://127.0.0.1:47831/v1/models?limit=100")"
 echo "models: $models"
-python3 -c 'import json,sys; ids=[m["id"] for m in json.loads(sys.argv[1])["data"]]; assert ids == ["claude-company", "glm-fallback"], ids' "$models"
-reply="$(curl -sS -m 20 -H 'Authorization: Bearer sk-demo-yy' -H 'anthropic-version: 2023-06-01' -H 'Content-Type: application/json' -d '{"model":"glm-fallback","max_tokens":1}' "http://127.0.0.1:47831/v1/messages")"
-echo "fallback's model: $reply"
-[[ "$reply" == *"from the fallback"* ]] || { echo "the request did not reach the fallback gateway"; cat "$TMP/app.log"; exit 1; }
-python3 - "$TMP/fallback.json" <<'PY'
+python3 -c 'import json,sys; ids=[m["id"] for m in json.loads(sys.argv[1])["data"]]; assert ids == ["claude-company", "glm-other"], ids' "$models"
+reply="$(curl -sS -m 20 -H 'Authorization: Bearer sk-demo-yy' -H 'anthropic-version: 2023-06-01' -H 'Content-Type: application/json' -d '{"model":"glm-other","max_tokens":1}' "http://127.0.0.1:47831/v1/messages")"
+echo "other gateway's model: $reply"
+[[ "$reply" == *"from the other gateway"* ]] || { echo "the request did not reach the other gateway"; cat "$TMP/app.log"; exit 1; }
+python3 - "$TMP/other.json" <<'PY'
 import json, sys
 s = json.load(open(sys.argv[1]))
-assert s["path"] == "/fb/v1/messages", s
-assert s["auth"] == "Bearer sk-fallback", s
+assert s["path"] == "/other/v1/messages", s
+assert s["auth"] == "Bearer sk-other", s
 assert s["version"] == "2023-06-01", s
-assert json.loads(s["body"])["model"] == "glm-fallback", s
+assert json.loads(s["body"])["model"] == "glm-other", s
 PY
 reply="$(curl -sS -m 20 -H 'Authorization: Bearer sk-demo-yy' -H 'Content-Type: application/json' -d '{"model":"claude-company","max_tokens":1}' "http://127.0.0.1:47831/v1/messages")"
 echo "company's model: $reply"
 [[ "$reply" == *'"text": "hi"'* ]] || { echo "the company's model did not go to the model API"; exit 1; }
-echo "OK: one model list of both; each model's requests go to its gateway, the fallback's with its key"
+echo "OK: one model list of both; each model's requests go to its gateway, the other gateway's with its key"
 quit
-fallback_config off
+other_config off
 launch
 cli_wait "http://$IP:9931/api"
-echo "OK: without the fallback gateway, Claude Code went back to the model API"
+echo "OK: without the other gateway, Claude Code went back to the model API"
 
 # The update's last step, as the app does it: the build put in place of the running app (here a
 # copy in a folder of its own), opened, the old one quitting; the new one keeps the port.

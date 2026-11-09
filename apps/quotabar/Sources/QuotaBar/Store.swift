@@ -39,8 +39,8 @@ final class Store {
   private(set) var desktopSeen: DesktopSeen?
   /// What the running Desktop lacks of its configuration now (empty: nothing to restart for).
   private(set) var desktopLacks: [String] = []
-  /// Both gateways' model lists, when a fallback gateway is set.
-  private(set) var fallbackModels = FallbackModels()
+  /// Both gateways' model lists, when a other gateway is set.
+  private(set) var gatewayModels = GatewayModels()
 
   @ObservationIgnored private var loop: Task<Void, Never>?
   @ObservationIgnored private var cookieLoop: Task<Void, Never>?
@@ -65,7 +65,7 @@ final class Store {
   init() {
     forwarding.onStop = { [weak self] why in self?.forwarderStopped(why) }
     forwarding.onRequest = { [weak self] in self?.heardDesktop() }
-    forwarding.onModels = { [weak self] mine, theirs in self?.setModels(company: mine, fallback: theirs) }
+    forwarding.onModels = { [weak self] mine, theirs in self?.setModels(company: mine, other: theirs) }
     load()
     findDesktop()
     readSettings()
@@ -177,8 +177,8 @@ final class Store {
   }
 
   /// The forwarder runs: Desktop needs it for an http model API, it swaps the keys, or it sends
-  /// the fallback gateway's models there.
-  var forwardWanted: Bool { config.swapKeys || config.forward && forwardNeeded || fallback != nil }
+  /// the other gateway's models there.
+  var forwardWanted: Bool { config.swapKeys || config.forward && forwardNeeded || otherGateway != nil }
 
   /// The key the forwarder sends in place of Desktop's (see DesktopLink.forwarderKey).
   var forwarderKey: String? { link.forwarderKey }
@@ -519,7 +519,7 @@ final class Store {
   private func saveConfig() {
     write(config, to: configFile)
     forwarding.key = forwarderKey
-    forwarding.second = fallback
+    forwarding.second = otherGateway
   }
   private func writeHistory() { write(history, to: historyFile) }
 
@@ -817,7 +817,7 @@ final class Store {
 
     // Another model API somewhere: change it too, or only the key?
     var others: [String] = []
-    // Claude Code goes through the forwarder too while it sends the fallback's models there; an
+    // Claude Code goes through the forwarder too while it sends the other gateway's models there; an
     // address of ours is put right silently.
     let cliWant = self.cliWant
     if let t = cliFile {
@@ -880,35 +880,35 @@ final class Store {
     announceDesktop(why: "Desktop 改用 \"\(p.label)\" 的 key", text: "已切换到 \"\(p.label)\": " + parts.joined(separator: ", "), changed: desktopChanged)
   }
 
-  // MARK: - Fallback gateway
+  // MARK: - The other gateway
 
-  /// The fallback gateway, when its address and key are both set.
-  var fallback: LocalForwarder.Gateway? {
-    let u = config.fallbackURL.trimmingCharacters(in: .whitespaces), k = config.fallbackKey.trimmingCharacters(in: .whitespaces)
+  /// The other gateway, when its address and key are both set.
+  var otherGateway: LocalForwarder.Gateway? {
+    let u = config.otherURL.trimmingCharacters(in: .whitespaces), k = config.otherKey.trimmingCharacters(in: .whitespaces)
     guard Self.usable(u), !k.isEmpty, let url = URL(string: u) else { return nil }
     return try? LocalForwarder.Gateway(url: url, key: k)
   }
 
-  /// Saves the fallback gateway as typed: with one set (or none any more) the forwarder starts
+  /// Saves the other gateway as typed: with one set (or none any more) the forwarder starts
   /// (or stops), and Claude Code and Desktop follow it.
-  func saveFallback(url: String, key: String) {
-    let was = fallback
-    config.fallbackURL = url.trimmingCharacters(in: .whitespaces)
-    config.fallbackKey = key.trimmingCharacters(in: .whitespaces)
-    guard fallback != was else { return saveConfig() }
+  func saveOtherGateway(url: String, key: String) {
+    let was = otherGateway
+    config.otherURL = url.trimmingCharacters(in: .whitespaces)
+    config.otherKey = key.trimmingCharacters(in: .whitespaces)
+    guard otherGateway != was else { return saveConfig() }
     saveConfig()
-    if (was == nil) != (fallback == nil) {
+    if (was == nil) != (otherGateway == nil) {
       Task { await startForwarder() }
     } else {
       Task { await refreshModels() }
     }
   }
 
-  /// Reads both model lists (the model API's with the key in use, the fallback's with its own),
+  /// Reads both model lists (the model API's with the key in use, the other gateway's with its own),
   /// so that requests go where their model is listed, and the settings show it.
   func refreshModels() async {
-    guard let g = fallback else {
-      fallbackModels = FallbackModels()
+    guard let g = otherGateway else {
+      gatewayModels = GatewayModels()
       forwarding.routes = ModelRoutes()
       return
     }
@@ -918,11 +918,11 @@ final class Store {
     async let theirs = Self.ids(ModelLists.listURL(g.url), key: g.key)
     let (m, t) = await (mine, theirs)
     // The gateway changed meanwhile: that one's reading counts.
-    guard fallback == g else { return }
-    var next = fallbackModels
+    guard otherGateway == g else { return }
+    var next = gatewayModels
     if let m { next.company = m }
-    if let t { next.fallback = t }
-    next.error = t == nil ? "读不到备用网关的模型列表 (地址或 key 不对, 或连不上)" : nil
+    if let t { next.other = t }
+    next.error = t == nil ? "读不到其他网关的模型列表 (地址或 key 不对, 或连不上)" : nil
     show(next)
   }
 
@@ -934,17 +934,17 @@ final class Store {
   }
 
   /// Both lists as the forwarder read them for a client.
-  private func setModels(company: [String], fallback theirs: [String]) {
-    guard fallback != nil else { return }
-    show(FallbackModels(company: company, fallback: theirs, error: nil))
+  private func setModels(company: [String], other theirs: [String]) {
+    guard otherGateway != nil else { return }
+    show(GatewayModels(company: company, other: theirs, error: nil))
   }
 
   /// The lists go to the forwarder (where requests go) and the settings; models both list are
   /// told once, when they appear.
-  private func show(_ m: FallbackModels) {
-    let before = fallbackModels.conflicts
-    withAnimation(.snappy) { fallbackModels = m }
-    forwarding.routes = ModelRoutes(company: m.company ?? [], second: m.fallback ?? [])
+  private func show(_ m: GatewayModels) {
+    let before = gatewayModels.conflicts
+    withAnimation(.snappy) { gatewayModels = m }
+    forwarding.routes = ModelRoutes(company: m.company ?? [], second: m.other ?? [])
     if !m.conflicts.isEmpty && m.conflicts != before {
       notice = Notice(text: "两个网关都有: " + m.conflicts.joined(separator: ", ") + ", 用这些模型会报错", bad: true)
     }
@@ -952,10 +952,10 @@ final class Store {
 
   // MARK: - Claude Code's address
 
-  /// The address Claude Code is to use: the forwarder's while it sends the fallback's models
+  /// The address Claude Code is to use: the forwarder's while it sends the other gateway's models
   /// there, else the model API.
   var cliWant: String {
-    if fallback != nil, let u = forwarderURL { return u }
+    if otherGateway != nil, let u = forwarderURL { return u }
     return config.baseURL
   }
 

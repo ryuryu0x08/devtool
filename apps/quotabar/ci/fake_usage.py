@@ -45,7 +45,7 @@ class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         key = self.headers.get("Authorization", "").removeprefix("Bearer ")
         if self.path.startswith("/api/v1/models"):
-            # The model API's model list (for the fallback gateway's merged list).
+            # The model API's model list (merged with the other gateway's).
             b = json.dumps({"data": [{"id": "claude-company", "type": "model"}], "has_more": False}).encode()
             self.send_response(200 if key in KEYS else 401)
             self.send_header("content-type", "application/json")

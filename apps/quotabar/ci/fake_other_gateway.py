@@ -1,5 +1,5 @@
-"""A stand-in fallback gateway for forward_e2e.sh: its API under /fb, a key it wants (Bearer
-sk-fallback), one model of its own. Each request it gets is written to the file given."""
+"""A stand-in for another gateway for forward_e2e.sh: its API under /other, a key it wants (Bearer
+sk-other), one model of its own. Each request it gets is written to the file given."""
 import http.server
 import json
 import sys
@@ -23,19 +23,19 @@ class H(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         self.record("")
-        if self.headers.get("Authorization") != "Bearer sk-fallback":
+        if self.headers.get("Authorization") != "Bearer sk-other":
             return self.answer(401, {"type": "error", "error": {"type": "authentication_error", "message": "bad key"}})
-        if self.path.startswith("/fb/v1/models"):
-            return self.answer(200, {"data": [{"id": "glm-fallback", "type": "model", "display_name": "GLM"}], "has_more": False})
+        if self.path.startswith("/other/v1/models"):
+            return self.answer(200, {"data": [{"id": "glm-other", "type": "model", "display_name": "GLM"}], "has_more": False})
         self.answer(404, {"type": "error", "error": {"type": "not_found_error", "message": self.path}})
 
     def do_POST(self):
         n = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(n).decode()
         self.record(body)
-        if self.headers.get("Authorization") != "Bearer sk-fallback" or not self.path.startswith("/fb/v1/messages"):
+        if self.headers.get("Authorization") != "Bearer sk-other" or not self.path.startswith("/other/v1/messages"):
             return self.answer(401, {"type": "error", "error": {"type": "authentication_error", "message": "bad key or path"}})
-        self.answer(200, {"type": "message", "content": [{"type": "text", "text": "from the fallback"}]})
+        self.answer(200, {"type": "message", "content": [{"type": "text", "text": "from the other gateway"}]})
 
     def log_message(self, *a):
         pass

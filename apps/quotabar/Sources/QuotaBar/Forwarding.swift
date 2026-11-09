@@ -25,7 +25,7 @@ final class Forwarding {
     set { forwarder?.key = newValue }
   }
 
-  /// The fallback gateway (nil: none), and which models go to it. Kept here too, so that a
+  /// The other gateway (nil: none), and which models go to it. Kept here too, so that a
   /// forwarder started later gets them.
   var second: LocalForwarder.Gateway? {
     didSet { forwarder?.second = second }
@@ -34,7 +34,7 @@ final class Forwarding {
     didSet { forwarder?.routes = routes }
   }
   /// Told of both model lists the forwarder read when a client asked for them.
-  var onModels: ((_ company: [String], _ fallback: [String]) -> Void)?
+  var onModels: ((_ company: [String], _ other: [String]) -> Void)?
 
   func stop() {
     attempt += 1

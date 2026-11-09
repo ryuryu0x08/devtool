@@ -34,7 +34,14 @@ struct SettingsView: View {
             Text("地址需以 http:// 或 https:// 开头").foregroundStyle(.orange).font(.ui(11.5))
           }
         } header: {
-          header("接口")
+          header("公司网关")
+        }
+        Section {
+          OtherGatewayRows()
+        } header: {
+          header("其他网关")
+        } footer: {
+          footer("两个网关的模型合在一起供 Claude Code 和 Desktop 选择, 用哪个模型就发给哪个网关; 用量只看公司网关")
         }
         Section {
           ForEach(store.people) { p in
@@ -60,11 +67,6 @@ struct SettingsView: View {
           }
         } header: {
           header("Desktop")
-        }
-        Section {
-          FallbackRows()
-        } header: {
-          header("备用网关")
         }
         Section {
           LoginItemRow()
@@ -259,41 +261,37 @@ private struct ForwardRow: View {
   }
 }
 
-/// A fallback gateway: its address and key, and what it lists. Saved as typed. Set, Claude Code
-/// and Desktop go through the forwarder, which sends the requests for its models to it.
-private struct FallbackRows: View {
+/// Another gateway beside the company's: its address and key, and what it lists. Saved as typed.
+/// Set, Claude Code and Desktop go through the forwarder, which sends the requests for its models
+/// to it.
+private struct OtherGatewayRows: View {
   @Environment(Store.self) private var store
   @State private var url = ""
   @State private var key = ""
 
   var body: some View {
     Group {
-      TextField(text: $url, prompt: Text("留空不用")) {
-        HStack(spacing: 5) {
-          Text("地址").font(.ui(13))
-          InfoTip(text: "模型在备用网关的列表里, 请求就发给它, 其余照旧走公司的模型接口; Claude Code 和 Desktop 自动经本地转发")
-        }
-      }
-      .font(.mono(12.5))
+      TextField(text: $url, prompt: Text("留空不用")) { Text("模型接口").font(.ui(13)) }
+        .font(.mono(12.5))
       SecureField(text: $key, prompt: Text("Bearer key")) { Text("Key").font(.ui(13)) }
         .font(.mono(12.5))
       status
     }
     .onAppear {
-      url = store.config.fallbackURL
-      key = store.config.fallbackKey
+      url = store.config.otherURL
+      key = store.config.otherKey
     }
     .task(id: url + "\n" + key) {
       try? await Task.sleep(for: .milliseconds(600))
       if !Task.isCancelled { save() }
     }
     .onDisappear { save() }
-    .animation(.snappy, value: store.fallbackModels)
+    .animation(.snappy, value: store.gatewayModels)
   }
 
   /// One line: what is missing, what went wrong, or how many models it adds.
   @ViewBuilder private var status: some View {
-    let m = store.fallbackModels
+    let m = store.gatewayModels
     let u = url.trimmingCharacters(in: .whitespaces), k = key.trimmingCharacters(in: .whitespaces)
     if u.isEmpty && k.isEmpty {
       EmptyView()
@@ -305,7 +303,7 @@ private struct FallbackRows: View {
       line("两边都有: " + m.conflicts.joined(separator: ", ") + ", 用这些模型会报错", bad: true)
     } else if let e = m.error {
       line(e, bad: true)
-    } else if let models = m.fallback {
+    } else if let models = m.other {
       HStack(spacing: 8) {
         line("已加入 \(models.count) 个模型", bad: false)
           .help(models.joined(separator: "\n"))
@@ -329,8 +327,8 @@ private struct FallbackRows: View {
   }
 
   private func save() {
-    guard url != store.config.fallbackURL || key != store.config.fallbackKey else { return }
-    store.saveFallback(url: url, key: key)
+    guard url != store.config.otherURL || key != store.config.otherKey else { return }
+    store.saveOtherGateway(url: url, key: key)
   }
 }
 

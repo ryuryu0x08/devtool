@@ -274,13 +274,13 @@ final class LocalForwarderTests: XCTestCase {
     let f = try LocalForwarder(target: URL(string: "https://api.example/api")!)
     f.key = "sk-now"
     XCTAssertEqual(f.rewrite("POST /v1/messages HTTP/1.1\r\nauthorization: Bearer sk-desktop\r\nX-Api-Key: sk-desktop\r\nContent-Length: 2"),
-                   "POST /api/v1/messages HTTP/1.1\r\nContent-Length: 2\r\nAuthorization: Bearer sk-now\r\nHost: api.example\r\nUser-Agent: QuotaBar\r\nConnection: close\r\n\r\n")
+                   "POST /api/v1/messages HTTP/1.1\r\nAuthorization: Bearer sk-now\r\nContent-Length: 2\r\nHost: api.example\r\nConnection: close\r\n\r\n")
     // x-api-key alone counts as a key sent.
     XCTAssertEqual(f.rewrite("GET /v1/models HTTP/1.1\r\nx-api-key: sk-desktop"),
-                   "GET /api/v1/models HTTP/1.1\r\nAuthorization: Bearer sk-now\r\nHost: api.example\r\nUser-Agent: QuotaBar\r\nConnection: close\r\n\r\n")
+                   "GET /api/v1/models HTTP/1.1\r\nAuthorization: Bearer sk-now\r\nHost: api.example\r\nConnection: close\r\n\r\n")
     // A request with no key of its own (a web page's) doesn't get it.
     XCTAssertEqual(f.rewrite("GET /v1/models HTTP/1.1"),
-                   "GET /api/v1/models HTTP/1.1\r\nHost: api.example\r\nUser-Agent: QuotaBar\r\nConnection: close\r\n\r\n")
+                   "GET /api/v1/models HTTP/1.1\r\nHost: api.example\r\nConnection: close\r\n\r\n")
     f.key = ""
     XCTAssertNil(f.key)
   }
@@ -338,11 +338,12 @@ final class LocalForwarderTests: XCTestCase {
 
   func testTheHeadIsRewritten() throws {
     let f = try LocalForwarder(target: URL(string: "http://api.example/api")!)
+    // No key of ours: the client's goes as it is. Host and Connection change where they were.
     XCTAssertEqual(f.rewrite("GET /v1/models HTTP/1.1\r\nHost: 127.0.0.1:47831\r\nConnection: keep-alive\r\nX-Api-Key: k"),
-                   "GET /api/v1/models HTTP/1.1\r\nHost: api.example\r\nUser-Agent: QuotaBar\r\nConnection: close\r\n\r\n")
-    // Only the headers the Python forwarder passes on, and the body's framing.
-    XCTAssertEqual(f.rewrite("POST /v1/messages HTTP/1.1\r\nAuthorization: Bearer k\r\nContent-Type: application/json\r\nanthropic-beta: x\r\nUser-Agent: Claude/1\r\nAccept-Encoding: br\r\nContent-Length: 2"),
-                   "POST /api/v1/messages HTTP/1.1\r\nAuthorization: Bearer k\r\nContent-Type: application/json\r\nContent-Length: 2\r\nHost: api.example\r\nUser-Agent: QuotaBar\r\nConnection: close\r\n\r\n")
+                   "GET /api/v1/models HTTP/1.1\r\nHost: api.example\r\nConnection: close\r\nX-Api-Key: k\r\n\r\n")
+    // Every other header as sent, in its order; this connection's own ones (Keep-Alive, TE) go.
+    XCTAssertEqual(f.rewrite("POST /v1/messages HTTP/1.1\r\nAuthorization: Bearer k\r\nContent-Type: application/json\r\nanthropic-beta: x\r\nUser-Agent: Claude/1\r\nKeep-Alive: timeout=5\r\nTE: trailers\r\nAccept-Encoding: br\r\nContent-Length: 2"),
+                   "POST /api/v1/messages HTTP/1.1\r\nAuthorization: Bearer k\r\nContent-Type: application/json\r\nanthropic-beta: x\r\nUser-Agent: Claude/1\r\nAccept-Encoding: br\r\nContent-Length: 2\r\nHost: api.example\r\nConnection: close\r\n\r\n")
     XCTAssertNil(f.rewrite("GET http://elsewhere/ HTTP/1.1"))
   }
 
@@ -412,7 +413,7 @@ extension LocalForwarderTests {
     XCTAssertEqual(b.heads[0].components(separatedBy: "\r\n")[0], "POST /other/v1/messages?beta=true HTTP/1.1")
     XCTAssertEqual(header("authorization", b.heads[0]), "Authorization: Bearer sk-second")
     XCTAssertEqual(header("host", b.heads[0]), "Host: 127.0.0.1:\(b.port)")
-    // Anthropic's version and beta headers reach the second gateway (not the company's).
+    // Anthropic's version and beta headers reach it, as to the company's.
     XCTAssertEqual(header("anthropic-version", b.heads[0]), "anthropic-version: 2023-06-01")
     XCTAssertEqual(header("anthropic-beta", b.heads[0]), "anthropic-beta: tools-2024")
     XCTAssertEqual(b.bodies[0], #"{"model":"glm-b","max_tokens":1}"#)
@@ -423,7 +424,7 @@ extension LocalForwarderTests {
     }
     XCTAssertEqual(a.heads.count, 2)
     XCTAssertEqual(a.heads.map { header("authorization", $0) }, ["Authorization: Bearer sk-person", "Authorization: Bearer sk-person"])
-    XCTAssertNil(header("anthropic-beta", a.heads[0]))
+    XCTAssertEqual(header("anthropic-beta", a.heads[0]), "anthropic-beta: tools-2024")
     XCTAssertEqual(b.heads.count, 1)
     // One model by its path.
     (status, _) = try await call(port, "GET", "/v1/models/glm-b")
@@ -489,6 +490,47 @@ extension LocalForwarderTests {
     _ = try await call(port, "POST", "/v1/messages", body: #"{"model":"glm-b"}"#, key: nil)
     XCTAssertEqual(b.heads.count, 1)
     XCTAssertNil(header("authorization", b.heads[0]))
+  }
+
+  /// What matters for a gateway and its cache arrives as sent: only the key, the path's front,
+  /// Host and this connection's own headers change; the body is the same bytes.
+  func testOnlyTheKeyPathHostAndConnectionChangeTheRestArrivesByteForByte() async throws {
+    let (a, b, f, port) = try await twoGateways(["claude-a"], ["glm-b"], port: 48280)
+    defer { f.stop() }
+    f.key = "sk-person"
+    for (model, up, key, prefix) in [("glm-b", b, "sk-second", "/other"), ("claude-a", a, "sk-person", "/api")] {
+      // Odd spacing, key order, escapes and characters: re-encoding JSON would change them.
+      let body = "{ \"system\":[{\"type\":\"text\",\"text\":\"缓存 \\u00e9\",\"cache_control\":{\"type\":\"ephemeral\"}}],\n  \"model\" : \"\(model)\", \"max_tokens\":1.0e1 }"
+      let head = [
+        "POST /v1/messages?beta=true HTTP/1.1",
+        "Host: 127.0.0.1:\(port)",
+        "User-Agent: claude-cli/9.9.9 (external, cli)",
+        "x-api-key: sk-client",
+        "anthropic-version: 2023-06-01",
+        "anthropic-beta: prompt-caching-2024-07-31,interleaved-thinking-2025-05-14",
+        "X-Stainless-Lang: js",
+        "Accept-Encoding: gzip, br",
+        "Keep-Alive: timeout=5",
+        "Connection: keep-alive",
+        "Content-Type: application/json",
+        "Content-Length: \(body.utf8.count)",
+      ]
+      _ = try await rawExchange(port: port, send: head.joined(separator: "\r\n") + "\r\n\r\n" + body)
+      XCTAssertEqual(up.heads.last?.components(separatedBy: "\r\n"), [
+        "POST \(prefix)/v1/messages?beta=true HTTP/1.1",
+        "Host: 127.0.0.1:\(up.port)",
+        "User-Agent: claude-cli/9.9.9 (external, cli)",
+        "Authorization: Bearer \(key)",
+        "anthropic-version: 2023-06-01",
+        "anthropic-beta: prompt-caching-2024-07-31,interleaved-thinking-2025-05-14",
+        "X-Stainless-Lang: js",
+        "Accept-Encoding: gzip, br",
+        "Connection: close",
+        "Content-Type: application/json",
+        "Content-Length: \(body.utf8.count)",
+      ])
+      XCTAssertEqual(up.bodies.last, body)
+    }
   }
 
   func testAGatewayMustBeHTTP() {
