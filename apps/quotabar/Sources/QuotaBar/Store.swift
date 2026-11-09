@@ -529,6 +529,7 @@ final class Store {
     forwarding.second = otherGateway
     forwarding.keyNames = keyNames
     forwarding.fallback = fallbackModelNow
+    forwarding.fallbackFor = TimeInterval(config.fallbackMinutes * 60)
     if fallbackModelNow == nil { fallingBackUntil = nil }
   }
 
@@ -538,11 +539,13 @@ final class Store {
     return config.autoFallback && otherGateway != nil && !m.isEmpty ? m : nil
   }
 
-  /// Saves the fallback (on or off, and the model) as set.
-  func setFallback(on: Bool, model: String) {
-    guard on != config.autoFallback || model != config.fallbackModel else { return }
+  /// Saves the fallback (on or off, the model, the minutes before the company's is tried again).
+  func setFallback(on: Bool, model: String, minutes: Int) {
+    let minutes = min(60, max(1, minutes))
+    guard on != config.autoFallback || model != config.fallbackModel || minutes != config.fallbackMinutes else { return }
     config.autoFallback = on
     config.fallbackModel = model
+    config.fallbackMinutes = minutes
     saveConfig()
   }
 

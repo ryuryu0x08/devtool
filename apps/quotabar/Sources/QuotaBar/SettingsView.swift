@@ -59,7 +59,7 @@ struct SettingsView: View {
         } header: {
           header("额度用尽时")
         } footer: {
-          footer("公司网关回 403 (个人或部门额度用尽) 时, 这个请求换成所选模型发给其他网关; 之后 5 分钟内直接走其他网关, 再回来试公司网关. 换网关后原来的提示词缓存用不上")
+          footer("公司网关回 403 (个人或部门额度用尽) 时, 这个请求换成所选模型发给其他网关; 之后设定的时间内直接走其他网关, 时间到了再试公司网关, 恢复了就切回去. 换网关后原来的提示词缓存用不上")
         }
         Section {
           ForEach(store.people) { p in
@@ -438,6 +438,7 @@ private struct FallbackRows: View {
   @Environment(Store.self) private var store
   @State private var on = false
   @State private var model = ""
+  @State private var minutes = 5
 
   var body: some View {
     Group {
@@ -452,6 +453,12 @@ private struct FallbackRows: View {
         ModelField(text: $model, prompt: "选择或输入", choices: store.gatewayModels.other ?? [])
           .disabled(!on)
       }
+      HStack {
+        Text("多久后再试公司网关").font(.ui(13)).foregroundStyle(on ? .primary : .secondary)
+        Spacer()
+        Text("\(minutes) 分钟").font(.ui(13)).monospacedDigit().foregroundStyle(.secondary)
+        Stepper("多久后再试公司网关", value: $minutes, in: 1...60).labelsHidden().disabled(!on)
+      }
       if on && store.otherGateway == nil {
         status("要先填其他网关", bad: true)
       } else if on && model.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -463,9 +470,11 @@ private struct FallbackRows: View {
     .onAppear {
       on = store.config.autoFallback
       model = store.config.fallbackModel
+      minutes = store.config.fallbackMinutes
     }
-    .onChange(of: on) { store.setFallback(on: on, model: model) }
-    .onChange(of: model) { store.setFallback(on: on, model: model) }
+    .onChange(of: on) { store.setFallback(on: on, model: model, minutes: minutes) }
+    .onChange(of: model) { store.setFallback(on: on, model: model, minutes: minutes) }
+    .onChange(of: minutes) { store.setFallback(on: on, model: model, minutes: minutes) }
     .animation(.snappy, value: store.fallingBackUntil)
   }
 

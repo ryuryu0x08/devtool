@@ -37,6 +37,10 @@ final class Forwarding {
   var fallback: String? {
     didSet { forwarder?.fallback = fallback }
   }
+  /// How long requests skip the company's gateway after a 403 (seconds).
+  var fallbackFor: TimeInterval = 300 {
+    didSet { forwarder?.fallbackFor = fallbackFor }
+  }
   /// Told when a 403 started the fallback, and until when.
   var onFallback: ((Date) -> Void)?
 
@@ -69,6 +73,7 @@ final class Forwarding {
     f.requestLog = requests
     f.keyNames = keyNames
     f.fallback = fallback
+    f.fallbackFor = fallbackFor
     f.onFallback = { [weak self, weak f] until in
       Task { @MainActor in
         guard let self, let f, self.forwarder === f else { return }
