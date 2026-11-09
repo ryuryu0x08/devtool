@@ -169,7 +169,8 @@ fallback_config() {
   python3 - "$DIR" "$TMP" "$IP" "$1" <<'PY'
 import json, sys
 d, tmp, ip, on = sys.argv[1:]
-c = {"url": "http://127.0.0.1:9931/api/v1/billing/usage", "baseURL": f"http://{ip}:9931/api", "forwardPort": 47831,
+# The forwarder stays on for Desktop (the http model API) either way: only Claude Code follows the fallback.
+c = {"url": "http://127.0.0.1:9931/api/v1/billing/usage", "baseURL": f"http://{ip}:9931/api", "forward": True, "forwardPort": 47831,
      "people": [{"id": "b", "name": "yy", "key": "sk-demo-yy"}], "claudeDir": tmp + "/claude", "desktopDir": tmp + "/desktop",
      "ours": ["http://127.0.0.1:47831"]}
 if on == "on":
