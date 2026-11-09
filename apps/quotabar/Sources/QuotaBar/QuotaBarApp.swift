@@ -63,6 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       if empty || args.contains("--dashboard") || args.contains("--settings") {
         Windows.showDashboard(store, settings: empty || args.contains("--settings"))
       }
+      if args.contains("--requests") { Windows.showRequests(store) }
       // The panel in a window of its own, to look at it without clicking the menu bar.
       if CommandLine.arguments.contains("--panel-window") {
         let w = NSWindow(contentViewController: NSHostingController(rootView: PanelView().environment(store)))
@@ -111,6 +112,25 @@ enum Windows {
   static func keep(_ w: NSWindow) { others.append(w) }
 
   static var dashboardOpen: Bool { dashboard?.isVisible == true }
+
+  private static var requests: NSWindow?
+
+  /// The request list (RequestsView), brought to the front (opened if needed).
+  static func showRequests(_ store: Store) {
+    StatusBar.shared.closePanel()
+    if requests == nil {
+      let w = NSWindow(contentViewController: NSHostingController(rootView: RequestsView().environment(store)))
+      w.title = "请求记录"
+      w.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+      w.setContentSize(NSSize(width: 900, height: 480))
+      w.isReleasedWhenClosed = false
+      w.setFrameAutosaveName("requests")
+      if w.frame.origin == .zero { w.center() }
+      requests = w
+    }
+    NSApp.activate(ignoringOtherApps: true)
+    requests?.makeKeyAndOrderFront(nil)
+  }
 
   /// Brings the dashboard to the front (opening it if needed), with the settings sheet if asked.
   static func showDashboard(_ store: Store, settings: Bool = false) {

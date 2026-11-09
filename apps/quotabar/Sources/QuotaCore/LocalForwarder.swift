@@ -63,8 +63,18 @@ public final class LocalForwarder: @unchecked Sendable {
   /// Told (on a background queue) of both model lists, when a client asked for them and both
   /// were read, so that the app shows what it saw.
   public var onModels: (@Sendable (_ company: [String], _ second: [String]) -> Void)?
+  /// Where each request is recorded (the app keeps one across forwarders); nil: nowhere.
+  public var requestLog: RequestLog?
   private let company: Upstream
   private let lock = NSLock()
+  private var _keyNames: [String: String] = [:]
+
+  /// Names for keys (a person's, the other gateway's), for the request log; other keys show
+  /// their last characters only.
+  public var keyNames: [String: String] {
+    get { lock.lock(); defer { lock.unlock() }; return _keyNames }
+    set { lock.lock(); _keyNames = newValue; lock.unlock() }
+  }
   private var _key: String?
   private var _second: Gateway?
   private var _routes = ModelRoutes()
@@ -355,33 +365,57 @@ public final class LocalForwarder: @unchecked Sendable {
     return out.joined(separator: "\r\n") + "\r\n\r\n"
   }
 
+  /// The key a client sent: Authorization's Bearer token, or x-api-key.
+  static func clientKey(_ head: String) -> String? {
+    if let a = header("authorization", in: head) {
+      let parts = a.split(separator: " ", maxSplits: 1)
+      return parts.count == 2 && parts[0].lowercased() == "bearer" ? String(parts[1]).trimmingCharacters(in: .whitespaces) : a
+    }
+    return header("x-api-key", in: head)
+  }
+
+  /// A key as the request log shows it: its name, or its last characters.
+  private func label(_ key: String?) -> String? {
+    guard let key, !key.isEmpty else { return nil }
+    return keyNames[key] ?? RequestLog.mask(key)
+  }
+
   /// Where a whole request goes: with a second gateway, by the model it asks for (a model both
   /// gateways list is turned away, GET /v1/models answers both lists); else to the model API.
+  /// Each is recorded in the request log, with the gateway and the key it went with.
   private func dispatch(_ c: NWConnection, head: String, body: Data) {
     let sent = Self.sentKey(head)
-    if let second, let line = Self.requestLine(head) {
-      let (method, path) = line
-      if method == "GET" && ModelRoutes.isList(path) { return listModels(c, head: head, path: path, second: second) }
-      let model = ModelRoutes.model(inPath: path) ?? ModelRoutes.model(in: body)
+    guard let line = Self.requestLine(head) else { return reply(c, 400, "bad request") }
+    let (method, path) = line
+    let model = ModelRoutes.model(inPath: path) ?? ModelRoutes.model(in: body)
+    let companyKey = sent ? (key ?? Self.clientKey(head)) : nil
+    if let second {
+      if method == "GET" && ModelRoutes.isList(path) {
+        let id = requestLog?.add(method: method, path: path, model: nil, gateway: .both, key: label(companyKey))
+        return listModels(c, head: head, path: path, second: second, record: id)
+      }
       switch routes.route(model) {
       case .conflict(let m):
         log?("\(method) \(path): 模型 \(m) 两个网关都有, 未转发")
+        if let id = requestLog?.add(method: method, path: path, model: m, gateway: .refused, key: nil) { requestLog?.finish(id, status: 409, note: "两个网关都有这个模型") }
         return reply(c, 409, ModelRoutes.conflictReply(m), json: true)
       case .second:
         guard let req = rewrite(head, to: second.up, key: sent ? second.key : nil) else { return reply(c, 400, "bad request") }
-        return forward(c, Data(req.utf8) + body, to: second.up)
+        let id = requestLog?.add(method: method, path: path, model: model, gateway: .other, key: sent ? label(second.key) : nil)
+        return forward(c, Data(req.utf8) + body, to: second.up, record: id)
       case .company:
         break
       }
     }
     guard let req = rewrite(head) else { return reply(c, 400, "bad request") }
-    forward(c, Data(req.utf8) + body, to: company)
+    let id = requestLog?.add(method: method, path: path, model: model, gateway: .company, key: label(companyKey))
+    forward(c, Data(req.utf8) + body, to: company, record: id)
   }
 
   /// GET /v1/models with a second gateway: both lists as one (ModelRoutes.merge), each read with
   /// that gateway's key; the routes follow what was read. The model API's answer, if not a list
   /// (a key turned down, say), is passed back as it is; the second's failing leaves its models out.
-  private func listModels(_ c: NWConnection, head: String, path: String, second: Gateway) {
+  private func listModels(_ c: NWConnection, head: String, path: String, second: Gateway, record: Int?) {
     let sent = Self.sentKey(head)
     let companyAuth = sent ? (key.map { "Bearer " + $0 } ?? Self.header("authorization", in: head)) : nil
     let secondAuth = sent ? "Bearer " + second.key : nil
@@ -398,6 +432,7 @@ public final class LocalForwarder: @unchecked Sendable {
       self.queue.async {
         guard let mine, (200..<300).contains(mine.status), let merged = ModelRoutes.merge(company: mine.body, second: theirIDs == nil ? nil : theirs?.body) else {
           self.log?("GET \(path): 公司网关 " + (mine.map { "\($0.status)" } ?? "连不上"))
+          if let record { self.requestLog?.finish(record, status: mine?.status ?? 502, note: mine == nil ? "连不上公司网关" : nil) }
           if let mine { return self.reply(c, mine.status, mine.body, json: true) }
           return self.reply(c, 502, "QuotaBar 本地转发连不上 \(self.company.label)")
         }
@@ -410,6 +445,7 @@ public final class LocalForwarder: @unchecked Sendable {
         }
         let r = self.routes
         self.log?("GET \(path): \(ModelRoutes.ids(in: merged)?.count ?? 0) 个模型" + (r.conflicts.isEmpty ? "" : ", 两边都有: " + r.conflicts.sorted().joined(separator: ", ")))
+        if let record { self.requestLog?.finish(record, status: 200, note: theirIDs == nil ? "其他网关的列表没读到" : nil) }
         self.reply(c, 200, merged, json: true)
       }
     }
@@ -458,7 +494,7 @@ public final class LocalForwarder: @unchecked Sendable {
     }
   }
 
-  private func forward(_ c: NWConnection, _ request: Data, to target: Upstream) {
+  private func forward(_ c: NWConnection, _ request: Data, to target: Upstream, record: Int?) {
     // Straight to the API, as curl and the Python forwarder go: Network.framework would otherwise
     // follow the system's proxy (Clash and the like set one), sending this plain-server request
     // to a proxy, which answers it with an empty 400.
@@ -476,7 +512,7 @@ public final class LocalForwarder: @unchecked Sendable {
         self.log?("\(line) → \(target.label) (\(up.currentPath?.remoteEndpoint.map { "\($0)" } ?? "?"))")
         up.send(content: request, completion: .contentProcessed { e in
           if e != nil { return self.close(c, up) }
-          self.replyHead(up, to: c, Data())
+          self.replyHead(up, to: c, Data(), record: record)
         })
       case .failed(let e), .waiting(let e):
         // Once connected, the API closing (or failing) is seen while the reply is passed on,
@@ -484,6 +520,7 @@ public final class LocalForwarder: @unchecked Sendable {
         if started.first() {
           up.cancel()
           self.log?("can't reach \(target.label): \(e)")
+          if let record { self.requestLog?.finish(record, status: 502, note: "连不上 \(target.label)") }
           self.reply(c, 502, "QuotaBar 本地转发连不上 \(target.label) (\(e))")
         }
       default: break
@@ -495,12 +532,13 @@ public final class LocalForwarder: @unchecked Sendable {
       guard let self, started.first() else { return }
       up.cancel()
       self.log?("no connection to \(target.label) within \(Int(self.connectTimeout)) s")
+      if let record { self.requestLog?.finish(record, status: 502, note: "\(Int(self.connectTimeout)) 秒内没连上 \(target.label)") }
       self.reply(c, 502, "QuotaBar 本地转发在 \(Int(self.connectTimeout)) 秒内没连上 \(target.label)")
     }
   }
 
   /// Reads the reply's head, passes it on rewritten, then the rest as it comes.
-  private func replyHead(_ up: NWConnection, to c: NWConnection, _ got: Data) {
+  private func replyHead(_ up: NWConnection, to c: NWConnection, _ got: Data, record: Int?) {
     up.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, complete, error in
       guard let self else { return }
       var buf = got
@@ -511,6 +549,7 @@ public final class LocalForwarder: @unchecked Sendable {
         let status = head.components(separatedBy: "\r\n").first ?? ""
         let code = Int(status.split(separator: " ").dropFirst().first ?? "") ?? 0
         self.log?(status + (code >= 400 ? " — " + String(decoding: buf[r.upperBound...].prefix(300), as: UTF8.self) : ""))
+        if let record { self.requestLog?.finish(record, status: code) }
         self.send(Data(head.utf8) + buf[r.upperBound...], to: c) { ok in
           guard ok else { return self.close(up, c) }
           if complete || error != nil { return self.finish(up, c) }
@@ -518,9 +557,10 @@ public final class LocalForwarder: @unchecked Sendable {
         }
       } else if complete || error != nil || buf.count > 64 * 1024 {
         // No reply head: pass on what came, and end.
+        if let record { self.requestLog?.finish(record, status: 0, note: "没有收到回复") }
         self.send(buf, to: c) { _ in self.finish(up, c) }
       } else {
-        self.replyHead(up, to: c, buf)
+        self.replyHead(up, to: c, buf, record: record)
       }
     }
   }

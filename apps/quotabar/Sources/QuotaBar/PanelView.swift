@@ -63,6 +63,10 @@ struct PanelView: View {
     HStack(spacing: 14) {
       Button { Windows.showDashboard(store) } label: { HStack(spacing: 5) { Icon(.chart, size: 12); Text("看板") } }
       Button { Windows.showDashboard(store, settings: true) } label: { HStack(spacing: 5) { Icon(.gear, size: 12); Text("设置") } }
+      if store.forwarderURL != nil {
+        Button { Windows.showRequests(store) } label: { HStack(spacing: 5) { Icon(.swap, size: 12); Text("请求") } }
+          .help("最近 10 分钟经本地转发的请求")
+      }
       Spacer()
       Button("退出") { NSApp.terminate(nil) }
     }

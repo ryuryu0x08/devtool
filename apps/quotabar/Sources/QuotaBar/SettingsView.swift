@@ -223,6 +223,8 @@ private struct ForwardRow: View {
         HStack(spacing: 8) {
           Label { Text("已启用 · " + u.replacingOccurrences(of: "http://", with: "")) } icon: { Icon(.checkFilled, size: 11) }
             .foregroundStyle(.green)
+          Button("请求记录") { Windows.showRequests(store) }
+            .buttonStyle(.link)
           Button("日志") { NSWorkspace.shared.open(ForwardLog.url) }
             .buttonStyle(.link)
             .help(ForwardLog.url.path)
@@ -307,7 +309,7 @@ private struct OtherGatewayRows: View {
       HStack(spacing: 8) {
         line("已加入 \(models.count) 个模型", bad: false)
           .help(models.joined(separator: "\n"))
-        Button("日志") { NSWorkspace.shared.open(ForwardLog.url) }
+        Button("请求记录") { Windows.showRequests(store) }
           .buttonStyle(.link)
           .font(.ui(11))
       }

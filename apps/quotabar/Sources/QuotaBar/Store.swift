@@ -520,7 +520,19 @@ final class Store {
     write(config, to: configFile)
     forwarding.key = forwarderKey
     forwarding.second = otherGateway
+    forwarding.keyNames = keyNames
   }
+
+  /// Who each key is, for the request log: people by name, the other gateway's as such.
+  private var keyNames: [String: String] {
+    var names: [String: String] = [:]
+    for p in people where !p.key.isEmpty { names[p.key] = p.label }
+    if let g = otherGateway { names[g.key] = "其他网关的 key" }
+    return names
+  }
+
+  /// The requests through the forwarder in the last 10 minutes, newest first.
+  func recentRequests() -> [RequestRecord] { forwarding.requests.recent() }
   private func writeHistory() { write(history, to: historyFile) }
 
   private func write<T: Encodable>(_ v: T, to url: URL) {

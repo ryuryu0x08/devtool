@@ -182,7 +182,8 @@ PY
 cli_url() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["env"].get("ANTHROPIC_BASE_URL"))' "$TMP/claude/settings.json"; }
 cli_wait() { for _ in $(seq 40); do [[ "$(cli_url)" == "$1" ]] && return 0; sleep 0.5; done; echo "Claude Code address: $(cli_url), wanted $1"; cat "$TMP/app.log"; return 1; }
 other_config on
-launch
+# With the request list open: a screenshot of it once the requests below went through.
+build/QuotaBar.app/Contents/MacOS/QuotaBar --requests >>"$TMP/app.log" 2>&1 &
 cli_wait "http://127.0.0.1:47831"
 grep -q '"ANTHROPIC_AUTH_TOKEN": "sk-demo-yy"' "$TMP/claude/settings.json" || { echo "Claude Code's key changed"; exit 1; }
 echo "OK: with another gateway, Claude Code moved to the forwarder by itself (its key kept)"
@@ -204,6 +205,9 @@ reply="$(curl -sS -m 20 -H 'Authorization: Bearer sk-demo-yy' -H 'Content-Type: 
 echo "company's model: $reply"
 [[ "$reply" == *'"text": "hi"'* ]] || { echo "the company's model did not go to the model API"; exit 1; }
 echo "OK: one model list of both; each model's requests go to its gateway, the other gateway's with its key"
+sleep 2
+mkdir -p build/shots
+screencapture -x build/shots/requests.png || true
 quit
 other_config off
 launch

@@ -533,6 +533,32 @@ extension LocalForwarderTests {
     }
   }
 
+  func testEachRequestIsRecordedWithItsGatewayModelKeyAndOutcome() async throws {
+    let (_, _, f, port) = try await twoGateways(["claude-a", "shared"], ["glm-b", "shared"], port: 48300)
+    defer { f.stop() }
+    let log = RequestLog()
+    f.requestLog = log
+    f.key = "sk-person-0001"
+    f.keyNames = ["sk-person-0001": "ye", "sk-second": "其他网关的 key"]
+    _ = try await call(port, "POST", "/v1/messages?beta=true", body: #"{"model":"glm-b"}"#)
+    _ = try await call(port, "POST", "/v1/messages", body: #"{"model":"claude-a"}"#)
+    _ = try await call(port, "POST", "/v1/messages", body: #"{"model":"shared"}"#)
+    _ = try await call(port, "GET", "/v1/models")
+    _ = try await call(port, "POST", "/v1/messages", body: #"{"model":"claude-a"}"#, key: nil)
+    // Newest first.
+    let r = Array(log.recent().reversed())
+    XCTAssertEqual(r.map(\.gateway), [.other, .company, .refused, .both, .company])
+    XCTAssertEqual(r.map(\.model), ["glm-b", "claude-a", "shared", nil, "claude-a"])
+    XCTAssertEqual(r.map(\.key), ["其他网关的 key", "ye", nil, "ye", nil])
+    XCTAssertEqual(r.map(\.status), [200, 200, 409, 200, 200])
+    XCTAssertEqual(r[0].path, "/v1/messages")
+    XCTAssertTrue(r.allSatisfy { $0.ms != nil })
+    // A key with no name: its end only.
+    f.keyNames = [:]
+    _ = try await call(port, "POST", "/v1/messages", body: #"{"model":"claude-a"}"#)
+    XCTAssertEqual(log.recent().first?.key, "…0001")
+  }
+
   func testAGatewayMustBeHTTP() {
     XCTAssertThrowsError(try LocalForwarder.Gateway(url: URL(string: "ftp://x")!, key: "k"))
     XCTAssertEqual(ModelLists.listURL(URL(string: "http://h:8080/api/")!)?.absoluteString, "http://h:8080/api/v1/models")

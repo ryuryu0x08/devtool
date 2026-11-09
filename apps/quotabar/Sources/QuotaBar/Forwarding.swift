@@ -33,6 +33,13 @@ final class Forwarding {
   var routes = ModelRoutes() {
     didSet { forwarder?.routes = routes }
   }
+  /// The requests of the last 10 minutes, kept across restarts of the forwarder.
+  let requests = RequestLog()
+  /// Names for keys in the request log (people's, the other gateway's).
+  var keyNames: [String: String] = [:] {
+    didSet { forwarder?.keyNames = keyNames }
+  }
+
   /// Told of both model lists the forwarder read when a client asked for them.
   var onModels: ((_ company: [String], _ other: [String]) -> Void)?
 
@@ -52,6 +59,8 @@ final class Forwarding {
     f.key = key
     f.second = second
     f.routes = routes
+    f.requestLog = requests
+    f.keyNames = keyNames
     f.onModels = { [weak self, weak f] mine, theirs in
       Task { @MainActor in
         guard let self, let f, self.forwarder === f else { return }
