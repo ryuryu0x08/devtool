@@ -67,6 +67,7 @@ final class Store {
     forwarding.onRequest = { [weak self] in self?.heardDesktop() }
     forwarding.onModels = { [weak self] mine, theirs in self?.setModels(company: mine, other: theirs) }
     load()
+    applyRoutes()
     findDesktop()
     readSettings()
     adoptClaudeKey()
@@ -924,7 +925,7 @@ final class Store {
   func refreshModels() async {
     guard let g = otherGateway else {
       gatewayModels = GatewayModels()
-      forwarding.routes = ModelRoutes()
+      applyRoutes()
       return
     }
     let companyKey = forwarderKey ?? activeToken ?? people.first { !$0.key.isEmpty }?.key
@@ -959,10 +960,23 @@ final class Store {
   private func show(_ m: GatewayModels) {
     let before = gatewayModels.conflicts
     withAnimation(.snappy) { gatewayModels = m }
-    forwarding.routes = ModelRoutes(company: m.company ?? [], second: m.other ?? [])
+    applyRoutes()
     if !m.conflicts.isEmpty && m.conflicts != before {
       notice = Notice(text: "两个网关都有: " + m.conflicts.joined(separator: ", ") + ", 用这些模型会报错", bad: true)
     }
+  }
+
+  /// Where each model goes: by the lists read, and the mappings set.
+  private func applyRoutes() {
+    forwarding.routes = ModelRoutes(company: gatewayModels.company ?? [], second: gatewayModels.other ?? [], renames: config.renames)
+  }
+
+  /// Saves the model mappings as edited; the forwarder uses them at once.
+  func saveModelMap(_ list: [ModelMapping]) {
+    guard list != config.modelMap else { return }
+    config.modelMap = list
+    saveConfig()
+    applyRoutes()
   }
 
   // MARK: - Claude Code's address

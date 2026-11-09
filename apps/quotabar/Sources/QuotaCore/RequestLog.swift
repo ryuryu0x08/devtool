@@ -21,6 +21,8 @@ public struct RequestRecord: Identifiable, Equatable, Sendable {
   /// The path, without its query (which can carry a key).
   public let path: String
   public let model: String?
+  /// The model it was sent on as (a model mapped in the settings); nil: as asked.
+  public let mappedTo: String?
   public let gateway: Gateway
   /// Whose key went with it (a name, or "…" and the key's last 4 characters); nil: none.
   public let key: String?
@@ -48,13 +50,13 @@ public final class RequestLog: @unchecked Sendable {
 
   /// Records a request taken; its id, for `finish`.
   @discardableResult
-  public func add(method: String, path: String, model: String?, gateway: RequestRecord.Gateway, key: String?, at: Date = Date()) -> Int {
+  public func add(method: String, path: String, model: String?, mappedTo: String? = nil, gateway: RequestRecord.Gateway, key: String?, at: Date = Date()) -> Int {
     lock.lock()
     defer { lock.unlock() }
     let id = next
     next += 1
     let bare = String(path.prefix { $0 != "?" && $0 != "#" })
-    records.append(RequestRecord(id: id, at: at, method: method, path: bare, model: model, gateway: gateway, key: key))
+    records.append(RequestRecord(id: id, at: at, method: method, path: bare, model: model, mappedTo: mappedTo, gateway: gateway, key: key))
     prune(at)
     return id
   }

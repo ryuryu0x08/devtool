@@ -72,6 +72,19 @@ struct Config: Codable, Equatable {
   /// forwarder. Only the company's has a usage API.
   var otherURL = ""
   var otherKey = ""
+  /// Models sent on as others (Desktop offers only the models it knows: one of them can stand
+  /// for a model of the other gateway).
+  var modelMap: [ModelMapping] = []
+
+  /// The mappings filled in, by the model asked for (a later one for the same model wins).
+  var renames: [String: ModelRoutes.Rename] {
+    var out: [String: ModelRoutes.Rename] = [:]
+    for m in modelMap {
+      let from = m.from.trimmingCharacters(in: .whitespaces), to = m.to.trimmingCharacters(in: .whitespaces)
+      if !from.isEmpty && !to.isEmpty && from != to { out[from] = ModelRoutes.Rename(toOther: m.toOther, model: to) }
+    }
+    return out
+  }
 
   static var detectedClaudeDir: String {
     ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"].flatMap { $0.isEmpty ? nil : $0 } ?? "~/.claude"
@@ -85,7 +98,7 @@ struct Config: Codable, Equatable {
   init() {}
 
   private enum CodingKeys: String, CodingKey {
-    case url, interval, people, retired, settingsPath, claudeDir, desktopDir, baseURL, desktopRestart, forward, forwardPort, ours, desktopPrevious, swapKeys, desktopPerson, cookieSync, cookieBrowser, cookieURL, barStyle, otherURL, otherKey, keys
+    case url, interval, people, retired, settingsPath, claudeDir, desktopDir, baseURL, desktopRestart, forward, forwardPort, ours, desktopPrevious, swapKeys, desktopPerson, cookieSync, cookieBrowser, cookieURL, barStyle, otherURL, otherKey, modelMap, keys
   }
   private struct OldKey: Decodable { var id: String; var key: String }
 
@@ -115,6 +128,7 @@ struct Config: Codable, Equatable {
     barStyle = (try? c.decodeIfPresent(BarStyle.self, forKey: .barStyle)) ?? .full
     otherURL = try c.decodeIfPresent(String.self, forKey: .otherURL) ?? ""
     otherKey = try c.decodeIfPresent(String.self, forKey: .otherKey) ?? ""
+    modelMap = (try? c.decodeIfPresent([ModelMapping].self, forKey: .modelMap)) ?? []
     let b = try c.decodeIfPresent(String.self, forKey: .baseURL) ?? ""
     baseURL = b.isEmpty ? Config.defaultBaseURL : b
     desktopRestart = (try? c.decodeIfPresent(DesktopRestart.self, forKey: .desktopRestart)) ?? .ask
@@ -146,9 +160,19 @@ struct Config: Codable, Equatable {
     try c.encode(barStyle, forKey: .barStyle)
     try c.encode(otherURL, forKey: .otherURL)
     try c.encode(otherKey, forKey: .otherKey)
+    try c.encode(modelMap, forKey: .modelMap)
     try c.encode(baseURL, forKey: .baseURL)
     try c.encode(desktopRestart, forKey: .desktopRestart)
   }
+}
+
+/// A model Desktop (or Claude Code) asks for, sent on as `to`, to the other gateway (`toOther`)
+/// or the company's.
+struct ModelMapping: Codable, Equatable, Identifiable {
+  var id = UUID().uuidString
+  var from = ""
+  var toOther = true
+  var to = ""
 }
 
 /// Both gateways' models as last read: what the settings show.

@@ -59,4 +59,27 @@ final class ModelRoutesTests: XCTestCase {
     XCTAssertEqual(e["type"] as? String, "invalid_request_error")
     XCTAssertTrue((e["message"] as? String ?? "").contains("shared"))
   }
+
+  func testAMappedModelGoesWhereItsMappingSaysBeforeAnyList() {
+    let r = ModelRoutes(company: ["claude-haiku-5-5", "shared"], second: ["deepseek-chat", "shared"],
+                        renames: ["claude-haiku-5-5": .init(toOther: true, model: "deepseek-chat"), "shared": .init(toOther: false, model: "claude-x")])
+    XCTAssertEqual(r.route("claude-haiku-5-5"), .renamed(.init(toOther: true, model: "deepseek-chat")))
+    // A mapping decides a model both list too.
+    XCTAssertEqual(r.route("shared"), .renamed(.init(toOther: false, model: "claude-x")))
+    XCTAssertEqual(r.route("deepseek-chat"), .second)
+  }
+
+  func testOnlyTheTopLevelModelValueChangesEveryOtherByteStays() throws {
+    let body = #"{ "system": [{"type":"text","text":"say \"model\": \"x\"","model":"inner"}],"model" : "claude-haiku-5-5",  "max_tokens":1.0e1, "metadata":{"model":"m"} }"#
+    let out = try XCTUnwrap(ModelRoutes.renaming(Data(body.utf8), to: "deepseek-chat"))
+    XCTAssertEqual(String(decoding: out, as: UTF8.self),
+                   #"{ "system": [{"type":"text","text":"say \"model\": \"x\"","model":"inner"}],"model" : "deepseek-chat",  "max_tokens":1.0e1, "metadata":{"model":"m"} }"#)
+    // First member, unicode and escapes around it.
+    XCTAssertEqual(String(decoding: try XCTUnwrap(ModelRoutes.renaming(Data(#"{"model":"a","x":"缓存é"}"#.utf8), to: "b")), as: UTF8.self), #"{"model":"b","x":"缓存é"}"#)
+    // None at the top level, not a string, or not an object: nothing to change.
+    XCTAssertNil(ModelRoutes.renaming(Data(#"{"messages":[{"model":"a"}]}"#.utf8), to: "b"))
+    XCTAssertNil(ModelRoutes.renaming(Data(#"{"model":3}"#.utf8), to: "b"))
+    XCTAssertNil(ModelRoutes.renaming(Data(#"["model","a"]"#.utf8), to: "b"))
+    XCTAssertNil(ModelRoutes.renaming(Data(), to: "b"))
+  }
 }

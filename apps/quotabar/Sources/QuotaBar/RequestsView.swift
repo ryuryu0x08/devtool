@@ -25,8 +25,11 @@ struct RequestsView: View {
             .width(64)
           TableColumn("请求") { r in Text("\(r.method) \(r.path)").font(.mono(11.5)).lineLimit(1).truncationMode(.middle).help("\(r.method) \(r.path)") }
             .width(min: 140, ideal: 200)
-          TableColumn("模型") { r in Text(r.model ?? "—").font(.mono(11.5)).lineLimit(1).foregroundStyle(r.model == nil ? .secondary : .primary).help(r.model ?? "") }
-            .width(min: 100, ideal: 170)
+          TableColumn("模型") { r in
+            let text = (r.model ?? "—") + (r.mappedTo.map { " → " + $0 } ?? "")
+            Text(text).font(.mono(11.5)).lineLimit(1).foregroundStyle(r.model == nil ? .secondary : .primary).help(text)
+          }
+          .width(min: 120, ideal: 220)
           TableColumn("网关") { r in GatewayTag(gateway: r.gateway) }
             .width(70)
           TableColumn("Key") { r in Text(r.key ?? "未带 key").font(.ui(12)).lineLimit(1).foregroundStyle(r.key == nil ? .secondary : .primary) }

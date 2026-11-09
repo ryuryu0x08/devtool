@@ -337,9 +337,10 @@ public final class LocalForwarder: @unchecked Sendable {
 
   /// The head as `up` should get it. Changed, each where it was: the request line (the gateway's
   /// path in front), the key (`key`, if any, as the Authorization in place of the client's
-  /// Authorization or x-api-key), Host, and Connection (close; the other hop-by-hop headers go).
+  /// Authorization or x-api-key), Host, Connection (close; the other hop-by-hop headers go), and
+  /// with `length`, Content-Length (the body was changed: a model mapped).
   /// Every other header as sent, in its order.
-  func rewrite(_ head: String, to up: Upstream, key: String?) -> String? {
+  func rewrite(_ head: String, to up: Upstream, key: String?, length: Int? = nil) -> String? {
     let lines = head.components(separatedBy: "\r\n")
     guard let line = Self.requestLine(head), let version = lines[0].split(separator: " ").last else { return nil }
     var out = ["\(line.method) \(up.prefix)\(line.path) \(version)"]
@@ -355,6 +356,9 @@ public final class LocalForwarder: @unchecked Sendable {
       } else if name == "connection" {
         if !closed { out.append("Connection: close") }
         closed = true
+      } else if let length, name == "content-length" {
+        // The body was changed (a model mapped): its new length.
+        out.append("Content-Length: \(length)")
       } else if !Self.hopByHop.contains(name) {
         out.append(l)
       }
@@ -389,6 +393,23 @@ public final class LocalForwarder: @unchecked Sendable {
     let (method, path) = line
     let model = ModelRoutes.model(inPath: path) ?? ModelRoutes.model(in: body)
     let companyKey = sent ? (key ?? Self.clientKey(head)) : nil
+    // Mapped in the settings: the body's model changes (nothing else), to the gateway chosen.
+    let gw = second
+    if case .renamed(let r) = routes.route(model), let model, !(r.toOther && gw == nil) {
+      let chunked = Self.header("transfer-encoding", in: head)?.lowercased().contains("chunked") == true
+      if !chunked, let renamed = ModelRoutes.renaming(body, to: r.model) {
+        let to = r.toOther ? gw!.up : company
+        // The key put in, as for any request to that gateway (the company's: ours if set, else
+        // the client's goes as it is), and the one that goes, for the log.
+        let put = !sent ? nil : r.toOther ? gw!.key : key
+        let goes = r.toOther ? put : companyKey
+        guard let req = rewrite(head, to: to, key: put, length: renamed.count) else { return reply(c, 400, "bad request") }
+        log?("\(method) \(path): 模型 \(model) → \(r.model) (\(r.toOther ? "其他网关" : "公司网关"))")
+        let id = requestLog?.add(method: method, path: path, model: model, mappedTo: r.model, gateway: r.toOther ? .other : .company, key: label(goes))
+        return forward(c, Data(req.utf8) + renamed, to: to, record: id)
+      }
+      log?("\(method) \(path): 模型 \(model) 有映射, 但请求体改不了 (" + (chunked ? "分块传输" : "不是 JSON 对象") + "), 原样转发")
+    }
     if let second {
       if method == "GET" && ModelRoutes.isList(path) {
         let id = requestLog?.add(method: method, path: path, model: nil, gateway: .both, key: label(companyKey))
@@ -438,7 +459,7 @@ public final class LocalForwarder: @unchecked Sendable {
         }
         let myIDs = ModelRoutes.ids(in: mine.body) ?? []
         if let theirIDs {
-          self.routes = ModelRoutes(company: myIDs, second: theirIDs)
+          self.routes = ModelRoutes(company: myIDs, second: theirIDs, renames: self.routes.renames)
           self.onModels?(myIDs, theirIDs)
         } else {
           self.log?("GET \(path): 其他网关 " + (theirs.map { "\($0.status)" } ?? "连不上") + ", 只列公司网关的模型")

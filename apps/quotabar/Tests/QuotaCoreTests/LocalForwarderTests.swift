@@ -560,6 +560,27 @@ extension LocalForwarderTests {
     XCTAssertEqual(log.recent().first?.key, "…0001")
   }
 
+  func testAMappedModelIsSentAsTheOtherWithOnlyItsNameAndLengthChanged() async throws {
+    let (a, b, f, port) = try await twoGateways(["claude-haiku-5-5"], ["deepseek-chat"], port: 48320)
+    defer { f.stop(); withExtendedLifetime((a, b)) {} }
+    let log = RequestLog()
+    f.requestLog = log
+    f.keyNames = ["sk-second": "其他网关的 key"]
+    f.routes = ModelRoutes(company: ["claude-haiku-5-5"], second: ["deepseek-chat"], renames: ["claude-haiku-5-5": .init(toOther: true, model: "deepseek-chat")])
+    let body = #"{"model":"claude-haiku-5-5","messages":[{"role":"user","content":"hi"}],"stream":false}"#
+    let (status, _) = try await call(port, "POST", "/v1/messages", body: body)
+    XCTAssertEqual(status, 200)
+    XCTAssertTrue(a.heads.isEmpty)
+    let sent = #"{"model":"deepseek-chat","messages":[{"role":"user","content":"hi"}],"stream":false}"#
+    XCTAssertEqual(b.bodies.last, sent)
+    XCTAssertEqual(header("content-length", b.heads[0]), "Content-Length: \(sent.utf8.count)")
+    XCTAssertEqual(header("authorization", b.heads[0]), "Authorization: Bearer sk-second")
+    let r = try XCTUnwrap(log.recent().first)
+    XCTAssertEqual([r.model, r.mappedTo, r.key], ["claude-haiku-5-5", "deepseek-chat", "其他网关的 key"])
+    XCTAssertEqual(r.gateway, .other)
+    XCTAssertEqual(r.status, 200)
+  }
+
   func testAGatewayMustBeHTTP() {
     XCTAssertThrowsError(try LocalForwarder.Gateway(url: URL(string: "ftp://x")!, key: "k"))
     XCTAssertEqual(ModelLists.listURL(URL(string: "http://h:8080/api/")!)?.absoluteString, "http://h:8080/api/v1/models")

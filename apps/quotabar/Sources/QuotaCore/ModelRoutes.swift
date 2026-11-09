@@ -3,6 +3,8 @@
 // "model" of its JSON body, or the id in GET /v1/models/{id}); anything else goes to the
 // company's. A model both list is a conflict: requests for it are turned away with a message,
 // since which gateway is meant isn't known. GET /v1/models answers both lists as one.
+// A model mapped in the settings (a model Desktop offers, sent on as another, to the gateway
+// chosen) comes first: only the body's "model" value changes, every other byte stays.
 // Only the rules and the JSON here; the forwarder and the app do the network.
 import Foundation
 
@@ -11,21 +13,37 @@ public struct ModelRoutes: Equatable, Sendable {
   public private(set) var second: Set<String>
   /// Models both gateways list.
   public private(set) var conflicts: Set<String>
+  /// Models sent on as others (by the model asked for).
+  public private(set) var renames: [String: Rename]
 
-  public init(company: [String] = [], second: [String] = []) {
+  /// A model asked for, sent on as `model` to the other gateway (`toOther`) or the company's.
+  public struct Rename: Equatable, Sendable {
+    public var toOther: Bool
+    public var model: String
+    public init(toOther: Bool, model: String) {
+      self.toOther = toOther
+      self.model = model
+    }
+  }
+
+  public init(company: [String] = [], second: [String] = [], renames: [String: Rename] = [:]) {
     self.second = Set(second)
     conflicts = Set(company).intersection(second)
+    self.renames = renames
   }
 
   public enum Route: Equatable, Sendable {
     case company, second
     /// Both list it.
     case conflict(String)
+    /// Mapped: sent on as another model, to the gateway chosen.
+    case renamed(Rename)
   }
 
   /// Where a request for `model` goes (nil: it names none, so the company's gateway).
   public func route(_ model: String?) -> Route {
     guard let model else { return .company }
+    if let r = renames[model] { return .renamed(r) }
     if conflicts.contains(model) { return .conflict(model) }
     return second.contains(model) ? .second : .company
   }
@@ -35,6 +53,73 @@ public struct ModelRoutes: Equatable, Sendable {
     guard !body.isEmpty, let o = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
           let m = o["model"] as? String, !m.isEmpty else { return nil }
     return m
+  }
+
+  /// `body` with the "model" member of its top-level object set to `model`: only that string's
+  /// bytes change, every other byte (spacing, order, escapes, the rest of the request) stays as it
+  /// was. nil when the body isn't a JSON object with a string "model" at its top level.
+  public static func renaming(_ body: Data, to model: String) -> Data? {
+    let b = [UInt8](body)
+    var i = 0
+    func space() { while i < b.count, [0x20, 0x09, 0x0A, 0x0D].contains(b[i]) { i += 1 } }
+    /// The index of the quote that ends the string starting at `at`.
+    func stringEnd(_ at: Int) -> Int? {
+      var j = at + 1
+      while j < b.count {
+        if b[j] == 0x5C { j += 2; continue }
+        if b[j] == 0x22 { return j }
+        j += 1
+      }
+      return nil
+    }
+    /// The index just after the value starting at `at`.
+    func valueEnd(_ at: Int) -> Int? {
+      guard at < b.count else { return nil }
+      switch b[at] {
+      case 0x22: return stringEnd(at).map { $0 + 1 }
+      case 0x7B, 0x5B:
+        var depth = 0, j = at
+        while j < b.count {
+          switch b[j] {
+          case 0x22: guard let e = stringEnd(j) else { return nil }; j = e
+          case 0x7B, 0x5B: depth += 1
+          case 0x7D, 0x5D:
+            depth -= 1
+            if depth == 0 { return j + 1 }
+          default: break
+          }
+          j += 1
+        }
+        return nil
+      default:
+        var j = at
+        while j < b.count, ![0x2C, 0x7D, 0x5D, 0x20, 0x09, 0x0A, 0x0D].contains(b[j]) { j += 1 }
+        return j > at ? j : nil
+      }
+    }
+    space()
+    guard i < b.count, b[i] == 0x7B else { return nil }
+    i += 1
+    while true {
+      space()
+      guard i < b.count, b[i] == 0x22, let keyEnd = stringEnd(i) else { return nil }
+      let key = b[(i + 1)..<keyEnd]
+      i = keyEnd + 1
+      space()
+      guard i < b.count, b[i] == 0x3A else { return nil }
+      i += 1
+      space()
+      let start = i
+      guard let end = valueEnd(start) else { return nil }
+      if Array(key) == Array("model".utf8) {
+        guard b[start] == 0x22, let value = try? JSONSerialization.data(withJSONObject: model, options: [.fragmentsAllowed]) else { return nil }
+        return Data(b[..<start]) + value + Data(b[end...])
+      }
+      i = end
+      space()
+      guard i < b.count, b[i] == 0x2C else { return nil }
+      i += 1
+    }
   }
 
   /// The path without its query ("/v1/models" for "/v1/models?limit=1000").

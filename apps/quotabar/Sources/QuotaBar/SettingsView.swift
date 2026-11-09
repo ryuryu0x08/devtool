@@ -48,6 +48,13 @@ struct SettingsView: View {
           footer("两个网关的模型合在一起供 Claude Code 和 Desktop 选择, 用哪个模型就发给哪个网关; 用量只看公司网关")
         }
         Section {
+          ModelMapRows()
+        } header: {
+          header("模型映射")
+        } footer: {
+          footer("Desktop 只显示它认识的 Claude 模型: 在这里让其中一个代表别的模型. 只改请求里的模型名, 其余不变; Desktop 里显示的还是原名. 模型名以请求记录的「模型」列为准")
+        }
+        Section {
           ForEach(store.people) { p in
             PersonKeyRow(p: p).transition(.opacity)
           }
@@ -335,6 +342,66 @@ private struct OtherGatewayRows: View {
   private func save() {
     guard url != store.config.otherURL || key != store.config.otherKey else { return }
     store.saveOtherGateway(url: url, key: key)
+  }
+}
+
+/// The model mappings: each a model asked for → a gateway and the model it is sent on as. Saved as
+/// edited.
+private struct ModelMapRows: View {
+  @Environment(Store.self) private var store
+  @State private var rows: [ModelMapping] = []
+
+  var body: some View {
+    Group {
+      ForEach($rows) { $r in
+        HStack(spacing: 6) {
+          ModelField(text: $r.from, prompt: "Desktop 里的模型", choices: store.gatewayModels.company ?? [])
+          Text("→").font(.ui(13)).foregroundStyle(.secondary)
+          Segmented(selection: $r.toOther, options: [(false, "公司"), (true, "其他")])
+            .fixedSize()
+          ModelField(text: $r.to, prompt: "发出的模型", choices: (r.toOther ? store.gatewayModels.other : store.gatewayModels.company) ?? [])
+          Button { rows.removeAll { $0.id == r.id } } label: { Icon(.trash, size: 12) }
+            .buttonStyle(.borderless)
+            .help("删除这条映射")
+        }
+      }
+      HStack {
+        Button { rows.append(ModelMapping()) } label: { HStack(spacing: 4) { Icon(.plus, size: 11); Text("添加映射") } }
+          .buttonStyle(.borderless)
+          .font(.ui(12))
+        Spacer()
+        if rows.contains(where: { $0.toOther }) && store.otherGateway == nil {
+          Label { Text("映射到其他网关的, 要先填其他网关") } icon: { Icon(.warning, size: 11) }
+            .foregroundStyle(.orange)
+            .font(.ui(11))
+        }
+      }
+    }
+    .onAppear { rows = store.config.modelMap }
+    .onChange(of: rows) { store.saveModelMap(rows) }
+  }
+}
+
+/// A model name: typed, or picked from a gateway's list (the menu beside it).
+private struct ModelField: View {
+  @Binding var text: String
+  let prompt: String
+  let choices: [String]
+
+  var body: some View {
+    HStack(spacing: 2) {
+      TextField("", text: $text, prompt: Text(prompt))
+        .textFieldStyle(.roundedBorder)
+        .font(.mono(12))
+      Menu {
+        if choices.isEmpty { Text("还没有读到这个网关的模型列表") }
+        ForEach(choices, id: \.self) { m in Button(m) { text = m } }
+      } label: { Image(systemName: "chevron.up.chevron.down").font(.system(size: 10)) }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("从模型列表里选")
+    }
   }
 }
 
