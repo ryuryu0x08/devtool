@@ -424,7 +424,8 @@ public final class LocalForwarder: @unchecked Sendable {
         guard let req = rewrite(head, to: second.up, key: sent ? second.key : nil) else { return reply(c, 400, "bad request") }
         let id = requestLog?.add(method: method, path: path, model: model, gateway: .other, key: sent ? label(second.key) : nil)
         return forward(c, Data(req.utf8) + body, to: second.up, record: id)
-      case .company:
+      case .company, .renamed:
+        // (A mapping that couldn't be applied above: the company's, as sent.)
         break
       }
     }
