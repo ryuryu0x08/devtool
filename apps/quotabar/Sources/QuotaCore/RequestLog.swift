@@ -65,7 +65,7 @@ public final class RequestLog: @unchecked Sendable {
     defer { lock.unlock() }
     guard let i = records.lastIndex(where: { $0.id == id }), records[i].status == nil else { return }
     records[i].status = status
-    records[i].ms = max(0, Int(at.timeIntervalSince(records[i].at) * 1000))
+    records[i].ms = max(0, Int((at.timeIntervalSince(records[i].at) * 1000).rounded()))
     records[i].note = note
   }
 
