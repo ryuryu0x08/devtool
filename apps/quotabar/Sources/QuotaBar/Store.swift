@@ -41,8 +41,10 @@ final class Store {
   private(set) var desktopLacks: [String] = []
   /// Both gateways' model lists, when a other gateway is set.
   private(set) var gatewayModels = GatewayModels()
-  /// The company's gateway answered 403 (quota used up): requests go to the other gateway until then.
-  private(set) var fallingBackUntil: Date?
+  /// Keys with no quota left, by the latest readings (requests with them fall back).
+  private(set) var exhaustedKeys: Set<String> = []
+  /// Keys the company's gateway answered 403 since the last refresh (they fall back until then).
+  private(set) var forbiddenKeys: Set<String> = []
 
   @ObservationIgnored private var loop: Task<Void, Never>?
   @ObservationIgnored private var cookieLoop: Task<Void, Never>?
@@ -68,7 +70,7 @@ final class Store {
     forwarding.onStop = { [weak self] why in self?.forwarderStopped(why) }
     forwarding.onRequest = { [weak self] in self?.heardDesktop() }
     forwarding.onModels = { [weak self] mine, theirs in self?.setModels(company: mine, other: theirs) }
-    forwarding.onFallback = { [weak self] until in self?.fellBack(until: until) }
+    forwarding.onForbidden = { [weak self] key in self?.forbidden(key) }
     load()
     applyRoutes()
     findDesktop()
@@ -529,8 +531,7 @@ final class Store {
     forwarding.second = otherGateway
     forwarding.keyNames = keyNames
     forwarding.fallback = fallbackModelNow
-    forwarding.fallbackFor = TimeInterval(config.fallbackMinutes * 60)
-    if fallbackModelNow == nil { fallingBackUntil = nil }
+    if fallbackModelNow == nil { forbiddenKeys = [] }
   }
 
   /// The model the forwarder falls back to on a 403, when that is on and can be done.
@@ -539,28 +540,56 @@ final class Store {
     return config.autoFallback && otherGateway != nil && !m.isEmpty ? m : nil
   }
 
-  /// Saves the fallback (on or off, the model, the minutes before the company's is tried again).
-  func setFallback(on: Bool, model: String, minutes: Int) {
-    let minutes = min(60, max(1, minutes))
-    guard on != config.autoFallback || model != config.fallbackModel || minutes != config.fallbackMinutes else { return }
+  /// Saves the fallback (on or off, and the model).
+  func setFallback(on: Bool, model: String) {
+    guard on != config.autoFallback || model != config.fallbackModel else { return }
     config.autoFallback = on
     config.fallbackModel = model
-    config.fallbackMinutes = minutes
     saveConfig()
   }
 
-  /// A 403 from the company's gateway started the fallback: said once, shown until `until`.
-  private func fellBack(until: Date) {
-    let first = fallingBackUntil == nil
-    fallingBackUntil = until
-    if first, let m = fallbackModelNow {
-      notice = Notice(text: "公司额度用尽 (403), 已改用其他网关的 \(m); \(until.formatted(date: .omitted, time: .shortened)) 再试公司网关", bad: true)
-    }
-    // Back to the company's once the time is up (the next 403 starts it again).
-    Task { [weak self] in
-      try? await Task.sleep(for: .seconds(max(0, until.timeIntervalSinceNow) + 1))
-      guard let self, let u = self.fallingBackUntil, u <= Date() else { return }
-      self.fallingBackUntil = nil
+  /// The key requests go to the company's gateway with now (Desktop's through the forwarder, else
+  /// Claude Code's).
+  private var keyInUse: String? { forwarderKey ?? activeToken }
+
+  /// Why requests fall back now, if they do: the key in use has no quota left, or the company's
+  /// gateway answered 403 since the last refresh.
+  var fallingBack: String? {
+    guard fallbackModelNow != nil else { return nil }
+    if let k = keyInUse, exhaustedKeys.contains(k) { return (people.first { $0.key == k }?.label ?? "当前 key") + " 的额度已用完" }
+    if !forbiddenKeys.isEmpty { return "公司网关回了 403" }
+    return nil
+  }
+
+  /// After the readings: the keys with no quota left (by a reading of the last 10 minutes; an
+  /// older one could keep a key off the company's gateway for good) go to the forwarder, and the
+  /// keys it was answered 403 with are tried again. Falling back starting is said once.
+  private func updateExhausted() {
+    let was = fallingBack
+    let fresh = Date().addingTimeInterval(-600)
+    exhaustedKeys = Set(people.compactMap { p in
+      guard !p.key.isEmpty, let g = p.lastGood, g.at > fresh, KeyState(g.usage).kind == .out else { return nil }
+      return p.key
+    })
+    forbiddenKeys = []
+    forwarding.exhaustedKeys = exhaustedKeys
+    forwarding.forgetForbidden()
+    announceFallback(was: was)
+  }
+
+  /// The company's gateway answered 403 and the request went to the other gateway.
+  private func forbidden(_ key: String?) {
+    let was = fallingBack
+    forbiddenKeys.insert(key ?? "")
+    announceFallback(was: was)
+  }
+
+  private func announceFallback(was: String?) {
+    guard let m = fallbackModelNow else { return }
+    if was == nil, let why = fallingBack {
+      notice = Notice(text: why + ", 已改用其他网关的 \(m); 额度恢复后自动切回", bad: true)
+    } else if was != nil, fallingBack == nil {
+      notice = Notice(text: "额度已恢复, 切回公司网关")
     }
   }
 
@@ -693,6 +722,7 @@ final class Store {
     writeHistory()
     lastRefresh = at
     refreshing = false
+    updateExhausted()
   }
 
   nonisolated private func fetch(url: URL, key: String) async -> UsageReply {

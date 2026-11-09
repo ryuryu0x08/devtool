@@ -70,30 +70,37 @@ public final class LocalForwarder: @unchecked Sendable {
   private var _keyNames: [String: String] = [:]
 
   private var _fallback: String?
-  private var _fallbackUntil: Date?
+  private var _exhausted: Set<String> = []
+  private var _forbidden: Set<String> = []
 
-  /// When the model API answers 403 (a person's or a department's quota used up), the request is
-  /// sent again to the second gateway as this model, and so are the requests after it for
-  /// `fallbackFor` seconds; nil: the 403 goes back to the client.
+  /// The model a request for the model API goes to the second gateway as, when the key it goes
+  /// with has no quota left; nil: no fallback (a 403 goes back to the client).
   public var fallback: String? {
     get { lock.lock(); defer { lock.unlock() }; return _fallback }
     set {
       lock.lock()
       _fallback = newValue.flatMap { $0.isEmpty ? nil : $0 }
-      if _fallback == nil { _fallbackUntil = nil }
+      if _fallback == nil { _forbidden = [] }
       lock.unlock()
     }
   }
-  /// How long the requests skip the model API after a 403 (then it is tried again).
-  public var fallbackFor: TimeInterval = 300
-  /// Until when they do (nil: they don't now).
-  public var fallbackUntil: Date? {
-    lock.lock(); defer { lock.unlock() }
-    guard let u = _fallbackUntil, u > Date() else { return nil }
-    return u
+  /// Keys whose quota the usage readings say is used up (the app sets them at each refresh).
+  public var exhaustedKeys: Set<String> {
+    get { lock.lock(); defer { lock.unlock() }; return _exhausted }
+    set { lock.lock(); _exhausted = newValue; lock.unlock() }
   }
-  /// Told (on the forwarder's queue) when a 403 started the fallback, and until when.
-  public var onFallback: (@Sendable (Date) -> Void)?
+  /// Keys the model API answered 403 since the last refresh: their requests skip it until then.
+  public var forbiddenKeys: Set<String> {
+    lock.lock(); defer { lock.unlock() }
+    return _forbidden
+  }
+  /// The model API is tried again with the keys it answered 403 (at each refresh).
+  public func forgetForbidden() {
+    lock.lock(); _forbidden = []; lock.unlock()
+  }
+  /// Told (on the forwarder's queue) when the model API answered 403 and the request went to the
+  /// second gateway instead (the key it went with, if any).
+  public var onForbiddenKey: (@Sendable (String?) -> Void)?
 
   /// Names for keys (a person's, the other gateway's), for the request log; other keys show
   /// their last characters only.
@@ -456,8 +463,9 @@ public final class LocalForwarder: @unchecked Sendable {
       }
     }
     guard let req = rewrite(head) else { return reply(c, 400, "bad request") }
-    // Quota used up at the model API (403): the same request as the fallback model, to the second
-    // gateway; during the fallback, straight there.
+    // No quota left with the key it goes with (the readings say so, or the model API answered 403
+    // since the last refresh): the same request as the fallback model, to the second gateway. A
+    // 403 not foreseen does the same, and marks the key.
     var onForbidden: (() -> Void)?
     if let fb = fallback, let gw, let model, model != fb,
        Self.header("transfer-encoding", in: head)?.lowercased().contains("chunked") != true,
@@ -469,12 +477,14 @@ public final class LocalForwarder: @unchecked Sendable {
         let id = self.requestLog?.add(method: method, path: path, model: model, mappedTo: fb, gateway: .other, key: sent ? self.label(gw.key) : nil, note: why)
         self.forward(c, Data(again.utf8) + renamed, to: gw.up, record: id)
       }
-      if fallbackUntil != nil { return toFallback("公司额度用尽, 降级中") }
+      if let k = companyKey {
+        if exhaustedKeys.contains(k) { return toFallback("\(label(k) ?? "") 额度已用完") }
+        if forbiddenKeys.contains(k) { return toFallback("公司网关刚回过 403") }
+      }
       onForbidden = { [weak self] in
         guard let self else { return }
-        let until = Date().addingTimeInterval(self.fallbackFor)
-        self.lock.lock(); self._fallbackUntil = until; self.lock.unlock()
-        self.onFallback?(until)
+        if let k = companyKey { self.lock.lock(); self._forbidden.insert(k); self.lock.unlock() }
+        self.onForbiddenKey?(companyKey)
         toFallback("公司网关 403, 自动降级")
       }
     }

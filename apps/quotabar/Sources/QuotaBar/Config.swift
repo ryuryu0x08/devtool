@@ -75,12 +75,10 @@ struct Config: Codable, Equatable {
   /// Models sent on as others (Desktop offers only the models it knows: one of them can stand
   /// for a model of the other gateway).
   var modelMap: [ModelMapping] = []
-  /// When the company's gateway answers 403 (quota used up), send the request to the other
-  /// gateway as `fallbackModel` instead (and the next ones, for a while).
+  /// When the key a request goes with has no quota left (the readings say so, or the company's
+  /// gateway answers 403), send it to the other gateway as `fallbackModel` instead.
   var autoFallback = false
   var fallbackModel = ""
-  /// Minutes the requests skip the company's gateway after a 403, before it is tried again.
-  var fallbackMinutes = 5
 
   /// The mappings filled in, by the model asked for (a later one for the same model wins).
   var renames: [String: ModelRoutes.Rename] {
@@ -104,7 +102,7 @@ struct Config: Codable, Equatable {
   init() {}
 
   private enum CodingKeys: String, CodingKey {
-    case url, interval, people, retired, settingsPath, claudeDir, desktopDir, baseURL, desktopRestart, forward, forwardPort, ours, desktopPrevious, swapKeys, desktopPerson, cookieSync, cookieBrowser, cookieURL, barStyle, otherURL, otherKey, modelMap, autoFallback, fallbackModel, fallbackMinutes, keys
+    case url, interval, people, retired, settingsPath, claudeDir, desktopDir, baseURL, desktopRestart, forward, forwardPort, ours, desktopPrevious, swapKeys, desktopPerson, cookieSync, cookieBrowser, cookieURL, barStyle, otherURL, otherKey, modelMap, autoFallback, fallbackModel, keys
   }
   private struct OldKey: Decodable { var id: String; var key: String }
 
@@ -137,7 +135,6 @@ struct Config: Codable, Equatable {
     modelMap = (try? c.decodeIfPresent([ModelMapping].self, forKey: .modelMap)) ?? []
     autoFallback = try c.decodeIfPresent(Bool.self, forKey: .autoFallback) ?? false
     fallbackModel = try c.decodeIfPresent(String.self, forKey: .fallbackModel) ?? ""
-    fallbackMinutes = min(60, max(1, try c.decodeIfPresent(Int.self, forKey: .fallbackMinutes) ?? 5))
     let b = try c.decodeIfPresent(String.self, forKey: .baseURL) ?? ""
     baseURL = b.isEmpty ? Config.defaultBaseURL : b
     desktopRestart = (try? c.decodeIfPresent(DesktopRestart.self, forKey: .desktopRestart)) ?? .ask
@@ -172,7 +169,6 @@ struct Config: Codable, Equatable {
     try c.encode(modelMap, forKey: .modelMap)
     try c.encode(autoFallback, forKey: .autoFallback)
     try c.encode(fallbackModel, forKey: .fallbackModel)
-    try c.encode(fallbackMinutes, forKey: .fallbackMinutes)
     try c.encode(baseURL, forKey: .baseURL)
     try c.encode(desktopRestart, forKey: .desktopRestart)
   }

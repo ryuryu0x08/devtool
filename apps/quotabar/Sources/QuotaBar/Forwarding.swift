@@ -37,12 +37,14 @@ final class Forwarding {
   var fallback: String? {
     didSet { forwarder?.fallback = fallback }
   }
-  /// How long requests skip the company's gateway after a 403 (seconds).
-  var fallbackFor: TimeInterval = 300 {
-    didSet { forwarder?.fallbackFor = fallbackFor }
+  /// Keys the readings say have no quota left.
+  var exhaustedKeys: Set<String> = [] {
+    didSet { forwarder?.exhaustedKeys = exhaustedKeys }
   }
-  /// Told when a 403 started the fallback, and until when.
-  var onFallback: ((Date) -> Void)?
+  /// The company's gateway is tried again with the keys it answered 403.
+  func forgetForbidden() { forwarder?.forgetForbidden() }
+  /// Told when the company's gateway answered 403 and the request went to the other gateway.
+  var onForbidden: ((String?) -> Void)?
 
   /// The requests of the last 10 minutes, kept across restarts of the forwarder.
   let requests = RequestLog()
@@ -73,11 +75,11 @@ final class Forwarding {
     f.requestLog = requests
     f.keyNames = keyNames
     f.fallback = fallback
-    f.fallbackFor = fallbackFor
-    f.onFallback = { [weak self, weak f] until in
+    f.exhaustedKeys = exhaustedKeys
+    f.onForbiddenKey = { [weak self, weak f] key in
       Task { @MainActor in
         guard let self, let f, self.forwarder === f else { return }
-        self.onFallback?(until)
+        self.onForbidden?(key)
       }
     }
     f.onModels = { [weak self, weak f] mine, theirs in

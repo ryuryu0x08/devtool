@@ -583,14 +583,14 @@ extension LocalForwarderTests {
     XCTAssertEqual(r.status, 200)
   }
 
-  func testA403FromTheCompanyIsSentToTheOtherGatewayAsTheFallbackModelAndSoAreTheNextOnes() async throws {
+  func testA403FromTheCompanyIsSentToTheOtherGatewayAsTheFallbackModelUntilTheNextRefresh() async throws {
     let (a, b, f, port) = try await twoGateways(["claude-opus-5-5"], ["deepseek-v4.1-flash"], port: 48340)
     defer { f.stop(); withExtendedLifetime((a, b)) {} }
     let log = RequestLog()
     f.requestLog = log
     f.fallback = "deepseek-v4.1-flash"
-    let started = Box<Date>()
-    f.onFallback = { started.set($0) }
+    let told = Box<String>()
+    f.onForbiddenKey = { told.set($0 ?? "") }
     a.replyStatus = 403
     let body = #"{"model":"claude-opus-5-5","max_tokens":1}"#
     // The client gets the other gateway's answer, not the 403.
@@ -599,8 +599,8 @@ extension LocalForwarderTests {
     XCTAssertEqual(a.bodies, [body])
     XCTAssertEqual(b.bodies, [#"{"model":"deepseek-v4.1-flash","max_tokens":1}"#])
     XCTAssertEqual(header("authorization", b.heads[0]), "Authorization: Bearer sk-second")
-    XCTAssertNotNil(started.value)
-    XCTAssertNotNil(f.fallbackUntil)
+    XCTAssertEqual(told.value, "sk-client")
+    XCTAssertEqual(f.forbiddenKeys, ["sk-client"])
     // The next one goes straight there.
     (status, _) = try await call(port, "POST", "/v1/messages", body: body)
     XCTAssertEqual(status, 200)
@@ -610,12 +610,42 @@ extension LocalForwarderTests {
     XCTAssertEqual(r.map(\.gateway), [.company, .other, .other])
     XCTAssertEqual(r.map(\.status), [403, 200, 200])
     XCTAssertEqual(r.map(\.mappedTo), [nil, "deepseek-v4.1-flash", "deepseek-v4.1-flash"])
+    // At the refresh the company's is tried again: quota back, it answers.
+    f.forgetForbidden()
+    a.replyStatus = 200
+    (status, _) = try await call(port, "POST", "/v1/messages", body: body)
+    XCTAssertEqual(status, 200)
+    XCTAssertEqual(a.bodies.count, 2)
+    XCTAssertEqual(b.bodies.count, 2)
     // Turned off: a 403 goes back as it is.
     f.fallback = nil
-    XCTAssertNil(f.fallbackUntil)
+    a.replyStatus = 403
     (status, _) = try await call(port, "POST", "/v1/messages", body: body)
     XCTAssertEqual(status, 403)
     XCTAssertEqual(b.bodies.count, 2)
+  }
+
+  func testAKeyTheReadingsSayIsUsedUpGoesStraightToTheOtherGateway() async throws {
+    let (a, b, f, port) = try await twoGateways(["claude-opus-5-5"], ["deepseek-v4.1-flash"], port: 48380)
+    defer { f.stop(); withExtendedLifetime((a, b)) {} }
+    f.fallback = "deepseek-v4.1-flash"
+    f.keyNames = ["sk-client": "ye"]
+    let log = RequestLog()
+    f.requestLog = log
+    f.exhaustedKeys = ["sk-client"]
+    let (status, _) = try await call(port, "POST", "/v1/messages", body: #"{"model":"claude-opus-5-5"}"#)
+    XCTAssertEqual(status, 200)
+    XCTAssertTrue(a.heads.isEmpty)
+    XCTAssertEqual(b.bodies, [#"{"model":"deepseek-v4.1-flash"}"#])
+    XCTAssertEqual(log.recent().first?.note, "ye 额度已用完")
+    // Quota back (the next readings): the company's again.
+    f.exhaustedKeys = []
+    _ = try await call(port, "POST", "/v1/messages", body: #"{"model":"claude-opus-5-5"}"#)
+    XCTAssertEqual(a.bodies.count, 1)
+    // Another key, not used up: the company's.
+    f.exhaustedKeys = ["sk-other"]
+    _ = try await call(port, "POST", "/v1/messages", body: #"{"model":"claude-opus-5-5"}"#)
+    XCTAssertEqual(a.bodies.count, 2)
   }
 
   func testOnlyA403FallsBackAndOnlyForAModelOfTheCompany() async throws {
@@ -626,12 +656,13 @@ extension LocalForwarderTests {
     let (status, _) = try await call(port, "POST", "/v1/messages", body: #"{"model":"claude-opus-5-5"}"#)
     XCTAssertEqual(status, 500)
     XCTAssertTrue(b.heads.isEmpty)
-    XCTAssertNil(f.fallbackUntil)
+    XCTAssertTrue(f.forbiddenKeys.isEmpty)
     // A request with no model (a GET): no fallback either.
     a.replyStatus = 403
     let (s2, _) = try await call(port, "GET", "/v1/billing/usage")
     XCTAssertEqual(s2, 403)
     XCTAssertTrue(b.heads.isEmpty)
+    XCTAssertTrue(f.forbiddenKeys.isEmpty)
   }
 
   func testAGatewayMustBeHTTP() {
