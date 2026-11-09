@@ -73,6 +73,9 @@ final class Store {
     restart()
     startCookieLoop()
     Task { await startForwarder() }
+    // The logs keep their last 10 minutes only.
+    LogFile.trimAll()
+    Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in LogFile.trimAll() }
     // Just after waking the network is often not back yet: a moment first, and again as soon
     // as the network is there (Wi-Fi joining, a VPN connecting).
     NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in

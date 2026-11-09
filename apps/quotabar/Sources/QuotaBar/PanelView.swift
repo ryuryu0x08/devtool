@@ -52,7 +52,7 @@ struct PanelView: View {
     VStack(spacing: 10) {
       Icon(.key, size: 28).foregroundStyle(.secondary)
       Text("在设置里粘贴 key").font(.ui(12.5)).foregroundStyle(.secondary)
-      Button { Windows.showDashboard(store, settings: true) } label: { Text("打开设置").font(.ui(12.5, .medium)) }
+      Button { Windows.show(.settings, store) } label: { Text("打开设置").font(.ui(12.5, .medium)) }
         .buttonStyle(.borderedProminent)
     }
     .frame(maxWidth: .infinity)
@@ -61,10 +61,10 @@ struct PanelView: View {
 
   private var footer: some View {
     HStack(spacing: 14) {
-      Button { Windows.showDashboard(store) } label: { HStack(spacing: 5) { Icon(.chart, size: 12); Text("看板") } }
-      Button { Windows.showDashboard(store, settings: true) } label: { HStack(spacing: 5) { Icon(.gear, size: 12); Text("设置") } }
+      Button { Windows.show(.dashboard, store) } label: { HStack(spacing: 5) { Icon(.chart, size: 12); Text("看板") } }
+      Button { Windows.show(.settings, store) } label: { HStack(spacing: 5) { Icon(.gear, size: 12); Text("设置") } }
       if store.forwarderURL != nil {
-        Button { Windows.showRequests(store) } label: { HStack(spacing: 5) { Icon(.swap, size: 12); Text("请求") } }
+        Button { Windows.show(.requests, store) } label: { HStack(spacing: 5) { Icon(.swap, size: 12); Text("请求") } }
           .help("最近 10 分钟经本地转发的请求")
       }
       Spacer()

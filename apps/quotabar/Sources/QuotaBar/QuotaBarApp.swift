@@ -43,7 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   /// Opened again (Spotlight, Launchpad, Finder) while it runs: the dashboard, so the app is
   /// there even when macOS hid its menu bar item for want of room.
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-    MainActor.assumeIsolated { Windows.showDashboard(Store.shared) }
+    MainActor.assumeIsolated { Windows.show(.dashboard, Store.shared) }
     return false
   }
 
@@ -60,10 +60,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       }
       let args = CommandLine.arguments
       let empty = !store.hasURL || store.people.isEmpty
-      if empty || args.contains("--dashboard") || args.contains("--settings") {
-        Windows.showDashboard(store, settings: empty || args.contains("--settings"))
+      if empty || args.contains("--settings") {
+        Windows.show(.settings, store)
+      } else if args.contains("--dashboard") {
+        Windows.show(.dashboard, store)
+      } else if args.contains("--requests") {
+        Windows.show(.requests, store)
       }
-      if args.contains("--requests") { Windows.showRequests(store) }
       // The panel in a window of its own, to look at it without clicking the menu bar.
       if CommandLine.arguments.contains("--panel-window") {
         let w = NSWindow(contentViewController: NSHostingController(rootView: PanelView().environment(store)))
@@ -104,67 +107,113 @@ extension Store {
   static let shared = Store()
 }
 
+/// The app's one window: the dashboard, the settings, or the request list, one at a time (opening
+/// another page shows it in the same window). Only from the dashboard do the settings open over it
+/// (a sheet), so that closing them goes back there.
 @MainActor
 enum Windows {
-  private static var dashboard: NSWindow?
+  private static var window: NSWindow?
+  /// Windows kept open besides it (the panel in a window, for CI).
   private static var others: [NSWindow] = []
 
   static func keep(_ w: NSWindow) { others.append(w) }
 
-  static var dashboardOpen: Bool { dashboard?.isVisible == true }
+  static var isOpen: Bool { window?.isVisible == true }
 
-  private static var requests: NSWindow?
-
-  /// The request list (RequestsView), brought to the front (opened if needed).
-  static func showRequests(_ store: Store) {
-    StatusBar.shared.closePanel()
-    if requests == nil {
-      let w = NSWindow(contentViewController: NSHostingController(rootView: RequestsView().environment(store)))
-      w.title = "请求记录"
-      w.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-      w.setContentSize(NSSize(width: 900, height: 480))
-      w.isReleasedWhenClosed = false
-      w.setFrameAutosaveName("requests")
-      if w.frame.origin == .zero { w.center() }
-      requests = w
-    }
-    NSApp.activate(ignoringOtherApps: true)
-    requests?.makeKeyAndOrderFront(nil)
-  }
-
-  /// Brings the dashboard to the front (opening it if needed), with the settings sheet if asked.
-  static func showDashboard(_ store: Store, settings: Bool = false) {
+  /// Brings the window to the front on `page` (opening it if needed).
+  static func show(_ page: WindowPage, _ store: Store) {
     StatusBar.shared.closePanel()
     let model = DashboardModel.shared
-    if dashboard == nil {
-      let host = NSHostingController(rootView: DashboardRoot(model: model).environment(store))
-      host.sceneBridgingOptions = [.toolbars, .title]
-      let w = NSWindow(contentViewController: host)
-      w.title = "额度看板"
-      w.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
-      w.toolbarStyle = .unified
-      w.setContentSize(NSSize(width: 980, height: 760))
-      w.isReleasedWhenClosed = false
-      w.setFrameAutosaveName("dashboard")
-      if w.frame.origin == .zero { w.center() }
-      dashboard = w
+    model.showSettings = false
+    let w = window ?? make(store)
+    if window == nil || model.page != page || !w.isVisible {
+      if window != nil, w.isVisible { w.saveFrame(usingName: model.page.frameName) }
+      model.page = page
+      arrange(w, for: page)
     }
-    model.showSettings = settings || model.showSettings
+    window = w
     NSApp.activate(ignoringOtherApps: true)
-    dashboard?.makeKeyAndOrderFront(nil)
+    w.makeKeyAndOrderFront(nil)
+  }
+
+  /// The window in front again, on the page it shows.
+  static func front() {
+    NSApp.activate(ignoringOtherApps: true)
+    window?.makeKeyAndOrderFront(nil)
+  }
+
+  /// Closed (the settings page's 完成).
+  static func close() { window?.performClose(nil) }
+
+  private static func make(_ store: Store) -> NSWindow {
+    let host = NSHostingController(rootView: WindowRoot(model: DashboardModel.shared).environment(store))
+    host.sceneBridgingOptions = [.toolbars, .title]
+    let w = NSWindow(contentViewController: host)
+    w.isReleasedWhenClosed = false
+    w.toolbarStyle = .unified
+    return w
+  }
+
+  /// The page's title, style and size: the size it last had, else its own.
+  private static func arrange(_ w: NSWindow, for page: WindowPage) {
+    w.title = page.title
+    var style: NSWindow.StyleMask = [.titled, .closable, .miniaturizable]
+    if page != .settings { style.insert(.resizable) }
+    if page == .dashboard { style.insert(.fullSizeContentView) }
+    w.styleMask = style
+    if !w.setFrameUsingName(page.frameName) {
+      w.setContentSize(page.size)
+      w.center()
+    }
+  }
+}
+
+/// What the window shows.
+enum WindowPage: Equatable {
+  case dashboard, settings, requests
+
+  var title: String {
+    switch self {
+    case .dashboard: return "额度看板"
+    case .settings: return "设置"
+    case .requests: return "请求记录"
+    }
+  }
+
+  /// Where its frame is kept ("dashboard": as before there was one window for all three).
+  var frameName: String {
+    switch self {
+    case .dashboard: return "dashboard"
+    case .settings: return "settings"
+    case .requests: return "requests"
+    }
+  }
+
+  var size: NSSize {
+    switch self {
+    case .dashboard: return NSSize(width: 980, height: 760)
+    case .settings: return NSSize(width: 600, height: 640)
+    case .requests: return NSSize(width: 900, height: 480)
+    }
   }
 }
 
 @MainActor @Observable
 final class DashboardModel {
   static let shared = DashboardModel()
+  var page = WindowPage.dashboard
+  /// The settings over the dashboard (opened from it).
   var showSettings = false
 }
 
-private struct DashboardRoot: View {
+private struct WindowRoot: View {
   @Bindable var model: DashboardModel
 
   var body: some View {
-    DashboardView(showSettings: $model.showSettings)
+    switch model.page {
+    case .dashboard: DashboardView(showSettings: $model.showSettings)
+    case .settings: SettingsView(done: { Windows.close() })
+    case .requests: RequestsView()
+    }
   }
 }

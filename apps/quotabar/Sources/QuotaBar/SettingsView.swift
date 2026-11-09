@@ -8,6 +8,10 @@ import SwiftUI
 struct SettingsView: View {
   @Environment(Store.self) private var store
   @Environment(\.dismiss) private var dismiss
+  /// On a page of its own (not over the dashboard): what 完成 does.
+  private let done: (() -> Void)?
+
+  init(done: (() -> Void)? = nil) { self.done = done }
   @Bindable private var text = TextSize.shared
   @State private var url = ""
   @State private var baseURL = ""
@@ -108,7 +112,7 @@ struct SettingsView: View {
       HStack {
         NoticeBanner()
         Spacer()
-        Button { dismiss() } label: { Text("完成").font(.ui(13, .medium)).padding(.horizontal, 6) }
+        Button { if let done { done() } else { dismiss() } } label: { Text("完成").font(.ui(13, .medium)).padding(.horizontal, 6) }
           .keyboardShortcut(.defaultAction)
           .buttonStyle(.borderedProminent)
       }
@@ -223,7 +227,7 @@ private struct ForwardRow: View {
         HStack(spacing: 8) {
           Label { Text("已启用 · " + u.replacingOccurrences(of: "http://", with: "")) } icon: { Icon(.checkFilled, size: 11) }
             .foregroundStyle(.green)
-          Button("请求记录") { Windows.showRequests(store) }
+          Button("请求记录") { Windows.show(.requests, store) }
             .buttonStyle(.link)
           Button("日志") { NSWorkspace.shared.open(ForwardLog.url) }
             .buttonStyle(.link)
@@ -309,7 +313,7 @@ private struct OtherGatewayRows: View {
       HStack(spacing: 8) {
         line("已加入 \(models.count) 个模型", bad: false)
           .help(models.joined(separator: "\n"))
-        Button("请求记录") { Windows.showRequests(store) }
+        Button("请求记录") { Windows.show(.requests, store) }
           .buttonStyle(.link)
           .font(.ui(11))
       }

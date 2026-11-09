@@ -34,7 +34,7 @@ final class Updater {
   let commit: String?
   let built: String?
 
-  static let log = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/QuotaBar/update.log")
+  static let log = LogFile.dir.appendingPathComponent("update.log")
 
   @ObservationIgnored private var loop: Task<Void, Never>?
 

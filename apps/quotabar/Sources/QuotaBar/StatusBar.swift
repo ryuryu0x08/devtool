@@ -28,8 +28,8 @@ final class StatusBar: NSObject {
   }
 
   @objc private func click() {
-    if Windows.dashboardOpen {
-      Windows.showDashboard(Store.shared)
+    if Windows.isOpen {
+      Windows.front()
     } else if popover.isShown {
       popover.performClose(nil)
     } else if let b = item?.button {

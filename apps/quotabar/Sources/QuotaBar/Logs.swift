@@ -1,8 +1,15 @@
-// The app's logs, under ~/Library/Logs/QuotaBar (local time; no keys in them).
+// The app's logs, under ~/Library/Logs/QuotaBar (local time; no keys in them). Only the last 10
+// minutes are kept: every minute the older lines are removed (LogTrim), and so are files left
+// there with nothing newer.
 import Foundation
+import QuotaCore
 
 /// A log under ~/Library/Logs/QuotaBar, kept under 1 MB.
 struct LogFile: Sendable {
+  static let dir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/QuotaBar")
+  /// How long a line is kept (seconds).
+  static let keep: TimeInterval = 600
+
   let url: URL
   private static let queue = DispatchQueue(label: "QuotaBar.Log")
 
@@ -16,7 +23,7 @@ struct LogFile: Sendable {
   }
 
   init(_ name: String) {
-    url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/QuotaBar/" + name)
+    url = Self.dir.appendingPathComponent(name)
   }
 
   func write(_ line: String) {
@@ -31,6 +38,33 @@ struct LogFile: Sendable {
       defer { try? h.close() }
       _ = try? h.seekToEnd()
       try? h.write(contentsOf: Data(text.utf8))
+    }
+  }
+}
+
+extension LogFile {
+  /// Removes what is older than `keep` from every log in the folder (on the queue the logs are
+  /// written on, so no line is lost to it); a file left with nothing is removed, and so is any
+  /// other file there not changed within `keep`.
+  static func trimAll(now: Date = Date()) {
+    queue.async {
+      let fm = FileManager.default
+      let since = now.addingTimeInterval(-keep)
+      guard let files = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey]) else { return }
+      for f in files {
+        let v = try? f.resourceValues(forKeys: [.isRegularFileKey, .contentModificationDateKey])
+        guard v?.isRegularFile == true else { continue }
+        guard f.pathExtension == "log", let text = try? String(contentsOf: f, encoding: .utf8) else {
+          if (v?.contentModificationDate ?? .distantPast) < since { try? fm.removeItem(at: f) }
+          continue
+        }
+        let kept = LogTrim.keep(text, since: since)
+        if kept.isEmpty {
+          try? fm.removeItem(at: f)
+        } else if kept != text {
+          try? kept.write(to: f, atomically: true, encoding: .utf8)
+        }
+      }
     }
   }
 }
