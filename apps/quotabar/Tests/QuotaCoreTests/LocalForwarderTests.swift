@@ -485,8 +485,8 @@ extension LocalForwarderTests {
   }
 
   func testWithNoKeySentTheSecondGatewaysKeyIsNotAdded() async throws {
-    let (_, b, f, port) = try await twoGateways(["claude-a"], ["glm-b"], port: 48260)
-    defer { f.stop() }
+    let (a, b, f, port) = try await twoGateways(["claude-a"], ["glm-b"], port: 48260)
+    defer { f.stop(); withExtendedLifetime(a) {} }
     _ = try await call(port, "POST", "/v1/messages", body: #"{"model":"glm-b"}"#, key: nil)
     XCTAssertEqual(b.heads.count, 1)
     XCTAssertNil(header("authorization", b.heads[0]))
@@ -534,8 +534,9 @@ extension LocalForwarderTests {
   }
 
   func testEachRequestIsRecordedWithItsGatewayModelKeyAndOutcome() async throws {
-    let (_, _, f, port) = try await twoGateways(["claude-a", "shared"], ["glm-b", "shared"], port: 48300)
-    defer { f.stop() }
+    // The stand-ins are kept to the end (their listeners use them).
+    let (up1, up2, f, port) = try await twoGateways(["claude-a", "shared"], ["glm-b", "shared"], port: 48300)
+    defer { f.stop(); withExtendedLifetime((up1, up2)) {} }
     let log = RequestLog()
     f.requestLog = log
     f.key = "sk-person-0001"
