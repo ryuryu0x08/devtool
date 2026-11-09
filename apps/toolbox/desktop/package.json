@@ -1,0 +1,71 @@
+{
+  "name": "@devtool/toolbox-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "工具箱 · Toolbox as a desktop app (Electron): the toolbox's build in its own window.",
+  "author": "devtool",
+  "type": "commonjs",
+  "main": "main.cjs",
+  "scripts": {
+    "web": "npm run build -w @devtool/toolbox -- --outDir desktop/web --emptyOutDir",
+    "start": "npm run web && electron .",
+    "pack": "npm run web && electron-builder --dir",
+    "dist": "npm run web && electron-builder",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "electron": "45.2.3",
+    "electron-builder": "26.18.1"
+  },
+  "build": {
+    "appId": "com.devtool.toolbox",
+    "productName": "Toolbox",
+    "directories": {
+      "output": "release",
+      "buildResources": "icons"
+    },
+    "files": [
+      "main.cjs",
+      "web/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "afterPack": "./adhoc-sign.cjs",
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.developer-tools",
+      "icon": "icons/icon.icns",
+      "identity": null
+    },
+    "dmg": {
+      "artifactName": "Toolbox-${version}-${arch}.dmg"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "icons/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Toolbox-${version}-setup.exe"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "icons/icon.png",
+      "category": "Development",
+      "executableName": "toolbox",
+      "maintainer": "devtool",
+      "synopsis": "工具箱 · Toolbox"
+    },
+    "publish": null
+  }
+}

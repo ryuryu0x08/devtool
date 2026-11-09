@@ -1,5 +1,6 @@
 # Checks the toolbox (apps/toolbox): types, unit tests, the build, and the end-to-end tests in
-# Chromium against the build.
+# Chromium against the build. Then its desktop app (apps/toolbox/desktop) on macOS, Windows and
+# Linux: built, the same end-to-end tests run in it, and its installers attached to the run.
 name: toolbox
 on:
   push:
@@ -9,6 +10,9 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # Electron is the desktop app's: not needed here.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,3 +31,64 @@ jobs:
         with:
           name: e2e-results
           path: apps/toolbox/test-results
+
+  desktop:
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            name: macos
+          - os: windows-latest
+            name: windows
+          - os: ubuntu-22.04
+            name: linux
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+      - run: npm ci
+      - run: npm run typecheck -w @devtool/toolbox-desktop
+      - name: Build (the installers, and the app beside them)
+        run: npm run dist -w @devtool/toolbox-desktop
+      - name: Signed (ad hoc) and intact
+        if: runner.os == 'macOS'
+        run: codesign --verify --deep --strict --verbose=2 apps/toolbox/desktop/release/mac-arm64/Toolbox.app
+      # Under a virtual display on Linux; one big enough for the 1280 x 900 window.
+      - name: The desktop app itself
+        run: |
+          run() { if [[ "$RUNNER_OS" == Linux ]]; then xvfb-run -a -s "-screen 0 1600x1200x24" "$@"; else "$@"; fi; }
+          cd apps/toolbox/desktop && run npx playwright test
+      # Windows: the time zone the tests use can't be set for one program there; macOS and Linux
+      # cover the toolbox in the app.
+      - name: The toolbox's end-to-end tests, in the app
+        if: runner.os != 'Windows'
+        run: |
+          run() { if [[ "$RUNNER_OS" == Linux ]]; then xvfb-run -a -s "-screen 0 1600x1200x24" "$@"; else "$@"; fi; }
+          cd apps/toolbox && run npx playwright test -c playwright.desktop.config.ts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: toolbox-${{ matrix.name }}
+          path: |
+            apps/toolbox/desktop/release/*.dmg
+            apps/toolbox/desktop/release/*.exe
+            apps/toolbox/desktop/release/*.AppImage
+            apps/toolbox/desktop/release/*.deb
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: desktop-e2e-results-${{ matrix.name }}
+          path: |
+            apps/toolbox/test-results
+            apps/toolbox/desktop/test-results

@@ -1,8 +1,9 @@
 // Local plugins: pasted or imported pages, each a tool of its own in the sidebar, run isolated,
 // against a stand-in API (no real endpoint). Installing, the toolbox bridge (fetch, storage),
 // isolation, running while another tool is shown, editing, exporting and deleting.
+import { readFileSync } from 'node:fs';
 import type { Page, Request } from '@playwright/test';
-import { STAND_IN_API, expect, nav, open, test } from './helpers';
+import { downloaded, expect, nav, open, STAND_IN_API, test } from './helpers';
 
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' };
 const URL_ = STAND_IN_API + 'usage';
@@ -130,13 +131,9 @@ test('import from an .html file; export gives the same code back', async ({ page
   await (await chooser).setFiles({ name: 'mine.html', mimeType: 'text/html', buffer: Buffer.from(code) });
   await expect(page.getByLabel('插件代码（HTML）')).toHaveValue(code);
   await page.getByRole('button', { name: '安装「Mine」' }).click();
-  const dl = page.waitForEvent('download');
-  await page.getByRole('button', { name: '导出 .html' }).click();
-  const d = await dl;
-  expect(d.suggestedFilename()).toBe('Mine.html');
-  const chunks: Buffer[] = [];
-  for await (const c of (await d.createReadStream())!) chunks.push(c as Buffer);
-  expect(Buffer.concat(chunks).toString()).toBe(code);
+  const d = await downloaded(page, () => page.getByRole('button', { name: '导出 .html' }).click());
+  expect(d.name).toBe('Mine.html');
+  expect(readFileSync(d.path, 'utf8')).toBe(code);
 });
 
 test('an API that can’t be reached rejects toolbox.fetch with "connect: …"', async ({ page }) => {

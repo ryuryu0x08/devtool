@@ -5,6 +5,9 @@ on:
   push:
     paths: ['apps/relay/**', 'packages/**', 'package.json', 'package-lock.json', '.github/workflows/relay.yml']
   workflow_dispatch:
+env:
+  # Electron is the toolbox's desktop app's: not needed here.
+  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
 jobs:
   test:
     runs-on: ubuntu-24.04

@@ -1,5 +1,5 @@
 // App shell: navigation, sidebar, search palette, themes, languages, layout, offline.
-import { activeTool, expect, nav, open, test } from './helpers';
+import { HOME, OWN_HOST, activeTool, expect, nav, open, test } from './helpers';
 
 const TOOLS = ['时间戳转换', 'Cron 表达式', '生成二维码', '识别二维码', 'JSON 格式化', 'TOML 格式化', 'YAML 格式化', 'XML 格式化', 'SQL 格式化', 'JSON Schema 校验',
   'JSON 对比', '文本对比', 'Base64 编解码', '哈希', 'URL 编解码', 'Unicode 转义', 'HTML 实体', 'Hex 编解码', '进制转换', 'Gzip 压缩解压', '转义 / 还原',
@@ -119,9 +119,10 @@ test('the app mark replaces "TB" everywhere; the tab icon and touch icon load', 
   await expect(page.locator('.logo', { hasText: 'TB' })).toHaveCount(0);
   for (const sel of ['link[rel=icon]', 'link[rel=apple-touch-icon]']) {
     const href = (await page.locator(sel).getAttribute('href'))!;
-    const r = await page.request.get(new URL(href, page.url()).toString());
-    expect(r.status(), sel).toBe(200);
-    expect(r.headers()['content-type'], sel).toMatch(sel.includes('apple') ? /image\/png/ : /image\/svg\+xml/);
+    // Fetched by the page itself: from wherever it is served (the desktop app's own origin too).
+    const r = await page.evaluate((h) => fetch(h).then((r) => ({ status: r.status, type: r.headers.get('content-type') ?? '' })), href);
+    expect(r.status, sel).toBe(200);
+    expect(r.type, sel).toMatch(sel.includes('apple') ? /image\/png/ : /image\/svg\+xml/);
   }
   await page.getByRole('button', { name: '收起侧栏' }).click();
   const rail = page.getByRole('button', { name: '展开侧栏' }).first();
@@ -133,7 +134,7 @@ test('the app mark replaces "TB" everywhere; the tab icon and touch icon load', 
 test('no request leaves the page (works offline)', async ({ page }) => {
   const external: string[] = [];
   await page.route('**/*', (r) => {
-    if (new URL(r.request().url()).hostname !== 'localhost') { external.push(r.request().url()); return r.abort(); }
+    if (new URL(r.request().url()).hostname !== OWN_HOST) { external.push(r.request().url()); return r.abort(); }
     return r.continue();
   });
   await open(page);
@@ -152,7 +153,7 @@ for (const [width, locale, scheme] of [[320, 'zh-CN', 'dark'], [390, 'en-US', 'l
   test.describe(`${width}px ${locale} ${scheme}`, () => {
     test.use({ viewport: { width, height: 800 }, locale, colorScheme: scheme, hasTouch: width < 800, isMobile: width < 800 });
     test('every tool fits the width', async ({ page }) => {
-      await page.goto('/');
+      await page.goto(HOME);
       await page.evaluate(() => localStorage.clear());
       await page.reload();
       const count = width < 800 ? await page.locator('.chip').count() : await page.locator('.nav-item').count();
@@ -163,7 +164,7 @@ for (const [width, locale, scheme] of [[320, 'zh-CN', 'dark'], [390, 'en-US', 'l
       }
     });
     test('a long message stays fully on screen', async ({ page }) => {
-      await page.goto('/');
+      await page.goto(HOME);
       await page.evaluate(() => localStorage.clear());
       await page.reload();
       if (width < 800) await page.locator('.chip').filter({ hasText: /^JSON$/ }).click();

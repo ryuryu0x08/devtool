@@ -1,5 +1,5 @@
 // Getting content in and keeping it: smart paste, drag & drop, undo, persistence.
-import { activeTool, drop, editor, expect, nav, open, pasteOnBlank, setValue, status, test, toast } from './helpers';
+import { HOME, IN_DESKTOP, activeTool, drop, editor, expect, nav, open, pasteOnBlank, setValue, status, test, toast } from './helpers';
 
 test.describe('smart paste on a blank area', () => {
   for (const [text, tool] of [
@@ -106,7 +106,7 @@ test.describe('persistence', () => {
   });
 
   test('damaged stored preferences fall back to defaults', async ({ page }) => {
-    await page.goto('/');
+    await page.goto(HOME);
     await page.evaluate(() => {
       localStorage.clear();
       localStorage.setItem('tb.prefs', JSON.stringify({ view: 'bogus', theme: 42, indent: '9', lang: 'fr', diffView: null }));
@@ -126,6 +126,14 @@ test.describe('persistence', () => {
     await page.locator('textarea').fill('old text');
     await page.waitForTimeout(600);
     await setValue(page.locator('textarea'), 'x'.repeat(6_000_000));
+    if (IN_DESKTOP) {
+      // The desktop app's storage holds about 50 MB (a browser's about 5): this is kept.
+      await page.waitForTimeout(2000);
+      await expect(toast(page)).toHaveCount(0);
+      await page.reload();
+      await expect.poll(() => page.locator('textarea').evaluate((t: HTMLTextAreaElement) => t.value.length), { timeout: 20_000 }).toBe(6_000_000);
+      return;
+    }
     // Laying out 6 MB of text takes the browser over a second, several when the machine is busy.
     await expect(toast(page)).toHaveText('内容过大，浏览器无法保存；刷新页面后不会保留', { timeout: 20_000 });
     await page.reload();

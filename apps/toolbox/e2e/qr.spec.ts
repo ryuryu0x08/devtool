@@ -1,6 +1,6 @@
 // QR codes: what is generated scans back to exactly the same text; what is scanned is shown faithfully.
 import { fileURLToPath } from 'node:url';
-import { clipboard, drop, expect, nav, open, setValue, test, toast } from './helpers';
+import { clipboard, downloaded, drop, expect, nav, open, setValue, test, toast } from './helpers';
 import type { Page } from '@playwright/test';
 
 const fixture = (name: string) => fileURLToPath(new URL('./fixtures/' + name, import.meta.url));
@@ -11,10 +11,10 @@ const results = (page: Page) => page.locator('.qr-text');
 async function roundTrip(page: Page, text: string) {
   await nav(page, '生成二维码');
   await setValue(qrText(page), text);
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '下载 PNG' }).click()]);
+  const dl = await downloaded(page, () => page.getByRole('button', { name: '下载 PNG' }).click());
   await nav(page, '识别二维码');
   // The downloaded temp file has no extension (so no type): the picker must still read it.
-  await page.locator('input[type=file]').setInputFiles(await dl.path());
+  await page.locator('input[type=file]').setInputFiles(dl.path);
   await expect(page.getByText(/识别到 \d+ 个二维码|未识别到二维码/)).toBeVisible();
   return results(page).allTextContents();
 }

@@ -13,6 +13,8 @@ export default defineConfig({
     timezoneId: 'Asia/Shanghai',
     permissions: ['clipboard-read', 'clipboard-write'],
     viewport: { width: 1280, height: 900 },
+    // Scrollbars that take room, as on Windows and Linux (Playwright hides them by default).
+    launchOptions: { ignoreDefaultArgs: ['--hide-scrollbars'] },
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 900 } } }],
   webServer: {

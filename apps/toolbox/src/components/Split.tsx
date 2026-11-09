@@ -154,8 +154,25 @@ export function Split({ a, b, id }: { a: ReactNode; b: ReactNode; id?: string })
     prev.current = { shown, a: ra, b: rb };
   }, [shown]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Carried: the slot can change width after the switch too (a scrollbar showing as the page grows
+  // taller, the window resized), and the result keeps the slot's width.
+  useLayoutEffect(() => {
+    const s = slotB.current;
+    if (target === null || !s) return;
+    const ro = new ResizeObserver(() => {
+      const g = grab.current, f = floatB.current;
+      const w = s.getBoundingClientRect().width;
+      if (!g || !f || Math.abs(w - g.w) < 0.5) return;
+      g.w = w;
+      f.style.width = w / z + 'px';
+      place();
+    });
+    ro.observe(s);
+    return () => ro.disconnect();
+  }, [target, z]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Gap between the panes: drag to share the width; double-click to share it equally.
-  const onGutter = (e: RPointerEvent<HTMLDivElement>) => {
+  const onGutter =(e: RPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     e.preventDefault();
     const rect = box.current!.getBoundingClientRect();

@@ -1,9 +1,10 @@
 {
   "name": "devtool",
   "private": true,
-  "description": "Monorepo: apps/toolbox (web), apps/quotabar (macOS), apps/relay (desktop). The root dev/build/test scripts are the toolbox's, as they were before the move; the relay's: npm run <script> -w @devtool/relay.",
+  "description": "Monorepo: apps/toolbox (web, and its desktop app in apps/toolbox/desktop), apps/quotabar (macOS), apps/relay (desktop). The root dev/build/test scripts are the toolbox's, as they were before the move; the others': npm run <script> -w @devtool/<name>.",
   "workspaces": [
     "apps/toolbox",
+    "apps/toolbox/desktop",
     "apps/relay",
     "packages/ui"
   ],

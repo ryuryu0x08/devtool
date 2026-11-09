@@ -1,6 +1,6 @@
 // Base64 and hashes: exact bytes in, exact results out, compared with Node's own implementations.
 import { createHash } from 'node:crypto';
-import { clipboard, drop, expect, nav, open, setValue, test, toast } from './helpers';
+import { clipboard, downloaded, drop, expect, nav, open, setValue, test, toast } from './helpers';
 import type { Page } from '@playwright/test';
 
 const input = (page: Page) => page.locator('textarea[data-autofocus]');
@@ -99,17 +99,17 @@ test.describe('Base64', () => {
     await expect(page.locator('pre.b64-hex')).toHaveText('00000000  00 01 02 ff fe 80 41                               |......A|');
     await page.locator('pre.b64-hex').click();
     await expect.poll(() => clipboard(page)).toBe('000102fffe8041');
-    const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '下载' }).click()]);
-    expect(dl.suggestedFilename()).toBe('decoded.bin');
+    const dl = await downloaded(page, () => page.getByRole('button', { name: '下载' }).click());
+    expect(dl.name).toBe('decoded.bin');
     const fs = await import('node:fs');
-    expect(fs.readFileSync((await dl.path())!)).toEqual(bin);
+    expect(fs.readFileSync(dl.path)).toEqual(bin);
     // A 1×1 PNG as a data URL.
     const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
     await input(page).fill('data:image/png;base64,' + png);
     await expect(page.locator('section img')).toBeVisible();
-    const [dl2] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '下载' }).click()]);
-    expect(dl2.suggestedFilename()).toBe('decoded.png');
-    expect(fs.readFileSync((await dl2.path())!)).toEqual(Buffer.from(png, 'base64'));
+    const dl2 = await downloaded(page, () => page.getByRole('button', { name: '下载' }).click());
+    expect(dl2.name).toBe('decoded.png');
+    expect(fs.readFileSync(dl2.path)).toEqual(Buffer.from(png, 'base64'));
   });
 
   test('a dropped file is encoded byte for byte; data URL output; removing it brings back the text', async ({ page }) => {

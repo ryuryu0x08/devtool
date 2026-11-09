@@ -3,7 +3,7 @@
 import { createHmac } from 'node:crypto';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import type { Locator, Page } from '@playwright/test';
-import { activeTool, clipboard, drop, expect, nav, open, pasteOnBlank, setValue, test } from './helpers';
+import { activeTool, clipboard, downloaded, drop, expect, nav, open, pasteOnBlank, setValue, test } from './helpers';
 
 const input = (page: Page) => page.locator('textarea[data-autofocus], input[data-autofocus]').first();
 const out = (page: Page) => page.locator('.out-card .tool-out').first();
@@ -97,8 +97,8 @@ test.describe('encoding', () => {
     await expect(seg(page, '解压')).toHaveClass(/on/);
     await expect(out(page)).toHaveText('dropped 文本');
     // Saved under the name it had inside the .gz, not notes.txt.txt.
-    const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '下载' }).click()]);
-    expect(dl.suggestedFilename()).toBe('notes.txt');
+    const dl = await downloaded(page, () => page.getByRole('button', { name: '下载' }).click());
+    expect(dl.name).toBe('notes.txt');
   });
 
   test('Gzip: what it compresses, zlib decompresses; what zlib compresses, it decompresses', async ({ page }) => {

@@ -54,7 +54,8 @@ const M = [
   ['UTF-8: invalid bytes accepted', 'src/lib/data.ts', "new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })", "new TextDecoder('utf-8', { fatal: false, ignoreBOM: true })", 'unit'],
   ['clipboard: lone surrogates not detected', 'src/lib/data.ts', '      if (!(d >= 0xdc00 && d <= 0xdfff)) return false;', '', 'unit'],
   ['copy: failure reported as success', 'src/App.tsx', '      if (ok) done();\n      else toast(t.copyFail, 5000);', '      done();', 'clipboard refuses'],
-  ['focus: autofocus steals from another field', 'src/App.tsx', 'if (el && !typing && !ref.current.palette) el.focus();', 'if (el && !ref.current.palette) el.focus();', 'never steals'],
+  ['focus: autofocus steals from another field', 'src/App.tsx', 'if (el && !typing && !inTool && !ref.current.palette) el.focus();', 'if (el && !inTool && !ref.current.palette) el.focus();', 'never steals'],
+  ['focus: autofocus steals from a button in the tool', 'src/App.tsx', 'if (el && !typing && !inTool && !ref.current.palette) el.focus();', 'if (el && !typing && !ref.current.palette) el.focus();', 'chosen right after switching'],
   ['toast: long message runs off a phone screen', 'src/styles.css', 'max-width: calc(100vw - 32px);', 'max-width: none; white-space: nowrap;', 'long message stays'],
   // Hashes and Base64.
   ['MD5: wrong shift', 'src/lib/hash.ts', 'const MD5_S = [7, 12, 17, 22,', 'const MD5_S = [7, 12, 17, 21,', 'unit'],
@@ -123,6 +124,7 @@ const M = [
   ['layout: switching back is measured from the pickup, not the last switch', 'src/components/Split.tsx', '{ tgt = next; from.x = ev.clientX; from.y = ev.clientY; animate.current = true;', '{ tgt = next; animate.current = true;', 'a short carry'],
   ['layout: the stacked input height is not remembered', 'src/components/Split.tsx', 'title={T.ui.resizeH}\n          onPointerDown={(e) => dragHeight(e, paneA.current!, MIN_H, setLiveH, setInH)}', 'title={T.ui.resizeH}\n          onPointerDown={(e) => dragHeight(e, paneA.current!, MIN_H, setLiveH, () => {})}', 'bar between stacked'],
   ['layout: the stacked input can be dragged to nothing', 'src/components/Split.tsx', 'last = Math.max(min, h0 + (ev.clientY - y0) / z);', 'last = h0 + (ev.clientY - y0) / z;', 'bar between stacked'],
+  ['layout: the carried result keeps its first width when the slot narrows (a scrollbar shows)', 'src/components/Split.tsx', '    ro.observe(s);\n    return () => ro.disconnect();\n  }, [target, z]);', '    return () => ro.disconnect();\n  }, [target, z]);', 'takes the width of the slot'],
   ['layout: the result height is not remembered', 'src/components/Split.tsx', 'dragHeight(e, slotB.current!, MIN_OUT, setLiveOut, setOutH)', 'dragHeight(e, slotB.current!, MIN_OUT, setLiveOut, () => {})', 'bar below the result'],
   ['layout: a long result makes its pane taller', 'src/styles.css', '.split-pane.result .pane-scroll { flex: 1 1 0px !important; max-height: none !important; }', '.split-pane.result .pane-scroll { max-height: none !important; }', 'never changes the size'],
   ['layout: a set height leaves the result capped', 'src/styles.css', '.split-pane.result .pane-scroll { flex: 1 1 0px !important; max-height: none !important; }', '.split-pane.result .pane-scroll { flex: 1 1 0px !important; }', 'height of both'],

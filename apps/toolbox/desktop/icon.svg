@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- 工具箱: the toolbox's favicon (a case with a blue latch) on the desktop icon grid. -->
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="#1b1b1d"/>
+  <g fill="none" stroke="#fff" stroke-width="56" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M420 394V343a38 38 0 0 1 38-38h108a38 38 0 0 1 38 38v51"/>
+    <rect x="266" y="394" width="492" height="336" rx="64"/>
+    <path d="M266 540h492"/>
+  </g>
+  <rect x="461" y="489" width="102" height="102" rx="26" fill="#3d6df2"/>
+</svg>

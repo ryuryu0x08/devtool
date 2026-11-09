@@ -1,14 +1,67 @@
-import { expect, test as base, type Locator, type Page } from '@playwright/test';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { _electron, expect, test as base, type ElectronApplication, type Locator, type Page, type TestInfo } from '@playwright/test';
 
 /** Host of the stand-in LLM endpoint in e2e/llm.spec.ts. */
 export const STAND_IN_API = 'https://api.test.example/';
+
+/**
+ * The desktop app's executable (playwright.desktop.config.ts sets it): each test then runs in a
+ * fresh launch of the app, with storage of its own, instead of in the browser.
+ */
+const DESKTOP = process.env.TOOLBOX_APP;
+
+/** The toolbox's first page: the browser's is the config's baseURL, the desktop app's its own origin. */
+export const HOME = DESKTOP ? 'app://toolbox/' : '/';
+
+/** In the desktop app (rather than the browser). */
+export const IN_DESKTOP = !!DESKTOP;
+
+/** The host the toolbox is served from: a request to any other leaves the page. */
+export const OWN_HOST = DESKTOP ? 'toolbox' : 'localhost';
+
+/** What a test sets for the browser's page (config, test.use): the desktop app's window gets the same. */
+interface Emulated { viewport: { width: number; height: number } | null; locale?: string; timezoneId?: string; colorScheme?: 'light' | 'dark' | 'no-preference' | null }
+
+/** The desktop app each page is in. */
+const APPS = new WeakMap<Page, ElectronApplication>();
+
+/** A launch of the desktop app, its window set up as the browser's page would be. */
+async function desktopPage(info: TestInfo, e: Emulated) {
+  const app = await _electron.launch({
+    executablePath: DESKTOP!,
+    args: [`--user-data-dir=${info.outputPath('user-data')}`, `--lang=${e.locale ?? 'zh-CN'}`, ...(process.getuid?.() === 0 ? ['--no-sandbox'] : [])],
+    env: { ...process.env, TZ: e.timezoneId ?? 'Asia/Shanghai' },
+  });
+  const page = await app.firstWindow();
+  APPS.set(page, app);
+  await page.setViewportSize(e.viewport ?? { width: 1280, height: 900 });
+  if (e.colorScheme) await page.emulateMedia({ colorScheme: e.colorScheme });
+  await page.waitForSelector('.app');
+  return { page, close: () => app.close() };
+}
 
 /**
  * Every test fails on a page error / console error, and on text that should never reach the
  * screen: an unfilled placeholder like "{n}", "undefined", "NaN" or "[object Object]".
  */
 export const test = base.extend<{ page: Page }>({
-  page: async ({ page }, use) => {
+  page: DESKTOP
+    ? async ({ viewport, locale, timezoneId, colorScheme, isMobile }, use, info) => {
+        info.skip(isMobile, 'a phone layout: the desktop app has none (its window is at least 720 px wide)');
+        const d = await desktopPage(info, { viewport, locale, timezoneId, colorScheme });
+        try {
+          await checked(d.page, use);
+        } finally {
+          await d.close();
+        }
+      }
+    : async ({ page }, use) => checked(page, use),
+});
+
+async function checked(page: Page, use: (p: Page) => Promise<void>) {
+  {
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(String(e)));
     // The browser logs a failed request as an error; the stand-in API used by the LLM tests fails on purpose.
@@ -36,13 +89,13 @@ export const test = base.extend<{ page: Page }>({
     });
     expect(chrome, 'unfilled placeholder in the UI').not.toMatch(/\{[a-zA-Z]\w*\}/);
     expect(text, 'broken value on screen').not.toMatch(/\bundefined\b|\bNaN\b|\[object Object\]/);
-  },
-});
+  }
+}
 export { expect };
 
 /** Fresh app (empty storage), optionally on a tool. */
 export async function open(page: Page, tool?: string) {
-  await page.goto('/');
+  await page.goto(HOME);
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForSelector('.app');
@@ -99,3 +152,30 @@ export async function pasteOnBlank(page: Page, data: { text?: string; image?: bo
 
 export const clipboard = (page: Page) => page.evaluate(() => navigator.clipboard.readText());
 export const activeTool = async (page: Page) => (await page.locator('.nav-item.on').innerText()).replace(/\s+/g, ' ').trim();
+
+/**
+ * What `click` downloads: its file name and where it was saved. The desktop app asks where to save
+ * (the system's dialog); here it is saved in the test's folder instead.
+ */
+export async function downloaded(page: Page, click: () => Promise<unknown>): Promise<{ name: string; path: string }> {
+  const app = APPS.get(page);
+  if (!app) {
+    const [dl] = await Promise.all([page.waitForEvent('download'), click()]);
+    return { name: dl.suggestedFilename(), path: (await dl.path())! };
+  }
+  // A folder of its own for each download (one picked again later is a new file to the page), with
+  // a plain path: Playwright can't pick a file whose path has characters like the "→" of test titles.
+  const dir = mkdtempSync(join(tmpdir(), 'toolbox-download-'));
+  await app.evaluate(({ session }, dir) => {
+    (globalThis as unknown as { next: Promise<unknown> }).next = new Promise((done) =>
+      session.defaultSession.once('will-download', (_e, item) => {
+        const path = dir + '/' + item.getFilename();
+        item.setSavePath(path);
+        item.once('done', (_e2, state) => done({ name: item.getFilename(), path, state }));
+      }));
+  }, dir);
+  await click();
+  const d = (await app.evaluate(() => (globalThis as unknown as { next: Promise<unknown> }).next)) as { name: string; path: string; state: string };
+  expect(d.state, 'download').toBe('completed');
+  return { name: d.name, path: d.path };
+}
