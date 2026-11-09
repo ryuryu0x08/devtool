@@ -134,7 +134,8 @@ test('text size: the tool area scales as a whole, the sidebar stays; remembered;
   await page.getByRole('button', { name: '放大右侧内容' }).click();
   await page.getByRole('button', { name: '放大右侧内容' }).click();
   await expect(page.locator('.zoom-btn.pct')).toHaveText('125%');
-  expect((await headH()) / h0).toBeCloseTo(1.25, 1);
+  // Within a pixel: a line's height is whole pixels with some system fonts (16 px → 20 or 21).
+  expect(Math.abs((await headH()) - h0 * 1.25)).toBeLessThanOrEqual(1);
   expect(await navH()).toBe(n0);
   await page.reload();
   await expect(page.locator('.zoom-btn.pct')).toHaveText('125%');

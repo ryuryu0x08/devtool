@@ -72,6 +72,7 @@
     "deb": {
       "packageName": "toolbox",
       "artifactName": "Toolbox-${version}-${arch}.${ext}"
-    }
+    },
+    "electronDist": "../../../node_modules/electron/dist"
   }
 }
