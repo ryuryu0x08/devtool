@@ -58,8 +58,11 @@ echo "Built $PWD/$APP"
 
 if [[ $INSTALL == 1 ]]; then
   pkill -x QuotaBar 2>/dev/null || true
+  # Opened only once the old one is gone: opening while it still quits fails (error -600).
+  for _ in $(seq 40); do pgrep -x QuotaBar >/dev/null || break; sleep 0.25; done
+  pkill -9 -x QuotaBar 2>/dev/null || true
   rm -rf /Applications/QuotaBar.app
   cp -R "$APP" /Applications/
-  open /Applications/QuotaBar.app
+  for try in 1 2 3; do open /Applications/QuotaBar.app && break; sleep 1; done
   echo "Installed /Applications/QuotaBar.app"
 fi
