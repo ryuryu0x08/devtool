@@ -18,6 +18,8 @@ private final class Upstream: @unchecked Sendable {
   /// A gateway's model list: GET …/v1/models answers these ids (with `modelsStatus`).
   var models: [String]?
   var modelsStatus = 200
+  /// The status of the other replies when keeping connections (403: a quota used up).
+  var replyStatus = 200
 
   func start() async throws {
     let params = NWParameters.tcp
@@ -57,7 +59,7 @@ private final class Upstream: @unchecked Sendable {
       if self.keepAlive {
         let body = "{\"ok\":true}"
         let close = head.lowercased().contains("\r\nconnection: close")
-        let reply = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: \(body.utf8.count)\r\nConnection: keep-alive\r\n\r\n" + body
+        let reply = "HTTP/1.1 \(self.replyStatus) X\r\nContent-Type: application/json\r\nContent-Length: \(body.utf8.count)\r\nConnection: keep-alive\r\n\r\n" + body
         c.send(content: Data(reply.utf8), completion: .contentProcessed { _ in
           if close { c.cancel() } else { self.read(c, Data(buf[(r.upperBound + length)...])) }
         })
@@ -579,6 +581,57 @@ extension LocalForwarderTests {
     XCTAssertEqual([r.model, r.mappedTo, r.key], ["claude-haiku-5-5", "deepseek-chat", "其他网关的 key"])
     XCTAssertEqual(r.gateway, .other)
     XCTAssertEqual(r.status, 200)
+  }
+
+  func testA403FromTheCompanyIsSentToTheOtherGatewayAsTheFallbackModelAndSoAreTheNextOnes() async throws {
+    let (a, b, f, port) = try await twoGateways(["claude-opus-5-5"], ["deepseek-v4.1-flash"], port: 48340)
+    defer { f.stop(); withExtendedLifetime((a, b)) {} }
+    let log = RequestLog()
+    f.requestLog = log
+    f.fallback = "deepseek-v4.1-flash"
+    let started = Box<Date>()
+    f.onFallback = { started.set($0) }
+    a.replyStatus = 403
+    let body = #"{"model":"claude-opus-5-5","max_tokens":1}"#
+    // The client gets the other gateway's answer, not the 403.
+    var (status, _) = try await call(port, "POST", "/v1/messages", body: body)
+    XCTAssertEqual(status, 200)
+    XCTAssertEqual(a.bodies, [body])
+    XCTAssertEqual(b.bodies, [#"{"model":"deepseek-v4.1-flash","max_tokens":1}"#])
+    XCTAssertEqual(header("authorization", b.heads[0]), "Authorization: Bearer sk-second")
+    XCTAssertNotNil(started.value)
+    XCTAssertNotNil(f.fallbackUntil)
+    // The next one goes straight there.
+    (status, _) = try await call(port, "POST", "/v1/messages", body: body)
+    XCTAssertEqual(status, 200)
+    XCTAssertEqual(a.bodies.count, 1)
+    XCTAssertEqual(b.bodies.count, 2)
+    let r = Array(log.recent().reversed())
+    XCTAssertEqual(r.map(\.gateway), [.company, .other, .other])
+    XCTAssertEqual(r.map(\.status), [403, 200, 200])
+    XCTAssertEqual(r.map(\.mappedTo), [nil, "deepseek-v4.1-flash", "deepseek-v4.1-flash"])
+    // Turned off: a 403 goes back as it is.
+    f.fallback = nil
+    XCTAssertNil(f.fallbackUntil)
+    (status, _) = try await call(port, "POST", "/v1/messages", body: body)
+    XCTAssertEqual(status, 403)
+    XCTAssertEqual(b.bodies.count, 2)
+  }
+
+  func testOnlyA403FallsBackAndOnlyForAModelOfTheCompany() async throws {
+    let (a, b, f, port) = try await twoGateways(["claude-opus-5-5"], ["deepseek-v4.1-flash"], port: 48360)
+    defer { f.stop(); withExtendedLifetime((a, b)) {} }
+    f.fallback = "deepseek-v4.1-flash"
+    a.replyStatus = 500
+    let (status, _) = try await call(port, "POST", "/v1/messages", body: #"{"model":"claude-opus-5-5"}"#)
+    XCTAssertEqual(status, 500)
+    XCTAssertTrue(b.heads.isEmpty)
+    XCTAssertNil(f.fallbackUntil)
+    // A request with no model (a GET): no fallback either.
+    a.replyStatus = 403
+    let (s2, _) = try await call(port, "GET", "/v1/billing/usage")
+    XCTAssertEqual(s2, 403)
+    XCTAssertTrue(b.heads.isEmpty)
   }
 
   func testAGatewayMustBeHTTP() {

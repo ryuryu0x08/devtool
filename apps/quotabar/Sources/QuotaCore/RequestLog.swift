@@ -50,13 +50,15 @@ public final class RequestLog: @unchecked Sendable {
 
   /// Records a request taken; its id, for `finish`.
   @discardableResult
-  public func add(method: String, path: String, model: String?, mappedTo: String? = nil, gateway: RequestRecord.Gateway, key: String?, at: Date = Date()) -> Int {
+  public func add(method: String, path: String, model: String?, mappedTo: String? = nil, gateway: RequestRecord.Gateway, key: String?, note: String? = nil, at: Date = Date()) -> Int {
     lock.lock()
     defer { lock.unlock() }
     let id = next
     next += 1
     let bare = String(path.prefix { $0 != "?" && $0 != "#" })
-    records.append(RequestRecord(id: id, at: at, method: method, path: bare, model: model, mappedTo: mappedTo, gateway: gateway, key: key))
+    var r = RequestRecord(id: id, at: at, method: method, path: bare, model: model, mappedTo: mappedTo, gateway: gateway, key: key)
+    r.note = note
+    records.append(r)
     prune(at)
     return id
   }
@@ -68,7 +70,7 @@ public final class RequestLog: @unchecked Sendable {
     guard let i = records.lastIndex(where: { $0.id == id }), records[i].status == nil else { return }
     records[i].status = status
     records[i].ms = max(0, Int((at.timeIntervalSince(records[i].at) * 1000).rounded()))
-    records[i].note = note
+    if let note { records[i].note = note }
   }
 
   /// The requests of the last `keep` seconds, newest first.

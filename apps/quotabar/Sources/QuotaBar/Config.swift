@@ -75,6 +75,10 @@ struct Config: Codable, Equatable {
   /// Models sent on as others (Desktop offers only the models it knows: one of them can stand
   /// for a model of the other gateway).
   var modelMap: [ModelMapping] = []
+  /// When the company's gateway answers 403 (quota used up), send the request to the other
+  /// gateway as `fallbackModel` instead (and the next ones, for a while).
+  var autoFallback = false
+  var fallbackModel = ""
 
   /// The mappings filled in, by the model asked for (a later one for the same model wins).
   var renames: [String: ModelRoutes.Rename] {
@@ -98,7 +102,7 @@ struct Config: Codable, Equatable {
   init() {}
 
   private enum CodingKeys: String, CodingKey {
-    case url, interval, people, retired, settingsPath, claudeDir, desktopDir, baseURL, desktopRestart, forward, forwardPort, ours, desktopPrevious, swapKeys, desktopPerson, cookieSync, cookieBrowser, cookieURL, barStyle, otherURL, otherKey, modelMap, keys
+    case url, interval, people, retired, settingsPath, claudeDir, desktopDir, baseURL, desktopRestart, forward, forwardPort, ours, desktopPrevious, swapKeys, desktopPerson, cookieSync, cookieBrowser, cookieURL, barStyle, otherURL, otherKey, modelMap, autoFallback, fallbackModel, keys
   }
   private struct OldKey: Decodable { var id: String; var key: String }
 
@@ -129,6 +133,8 @@ struct Config: Codable, Equatable {
     otherURL = try c.decodeIfPresent(String.self, forKey: .otherURL) ?? ""
     otherKey = try c.decodeIfPresent(String.self, forKey: .otherKey) ?? ""
     modelMap = (try? c.decodeIfPresent([ModelMapping].self, forKey: .modelMap)) ?? []
+    autoFallback = try c.decodeIfPresent(Bool.self, forKey: .autoFallback) ?? false
+    fallbackModel = try c.decodeIfPresent(String.self, forKey: .fallbackModel) ?? ""
     let b = try c.decodeIfPresent(String.self, forKey: .baseURL) ?? ""
     baseURL = b.isEmpty ? Config.defaultBaseURL : b
     desktopRestart = (try? c.decodeIfPresent(DesktopRestart.self, forKey: .desktopRestart)) ?? .ask
@@ -161,6 +167,8 @@ struct Config: Codable, Equatable {
     try c.encode(otherURL, forKey: .otherURL)
     try c.encode(otherKey, forKey: .otherKey)
     try c.encode(modelMap, forKey: .modelMap)
+    try c.encode(autoFallback, forKey: .autoFallback)
+    try c.encode(fallbackModel, forKey: .fallbackModel)
     try c.encode(baseURL, forKey: .baseURL)
     try c.encode(desktopRestart, forKey: .desktopRestart)
   }

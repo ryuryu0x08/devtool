@@ -41,6 +41,8 @@ final class Store {
   private(set) var desktopLacks: [String] = []
   /// Both gateways' model lists, when a other gateway is set.
   private(set) var gatewayModels = GatewayModels()
+  /// The company's gateway answered 403 (quota used up): requests go to the other gateway until then.
+  private(set) var fallingBackUntil: Date?
 
   @ObservationIgnored private var loop: Task<Void, Never>?
   @ObservationIgnored private var cookieLoop: Task<Void, Never>?
@@ -66,6 +68,7 @@ final class Store {
     forwarding.onStop = { [weak self] why in self?.forwarderStopped(why) }
     forwarding.onRequest = { [weak self] in self?.heardDesktop() }
     forwarding.onModels = { [weak self] mine, theirs in self?.setModels(company: mine, other: theirs) }
+    forwarding.onFallback = { [weak self] until in self?.fellBack(until: until) }
     load()
     applyRoutes()
     findDesktop()
@@ -525,6 +528,37 @@ final class Store {
     forwarding.key = forwarderKey
     forwarding.second = otherGateway
     forwarding.keyNames = keyNames
+    forwarding.fallback = fallbackModelNow
+    if fallbackModelNow == nil { fallingBackUntil = nil }
+  }
+
+  /// The model the forwarder falls back to on a 403, when that is on and can be done.
+  var fallbackModelNow: String? {
+    let m = config.fallbackModel.trimmingCharacters(in: .whitespaces)
+    return config.autoFallback && otherGateway != nil && !m.isEmpty ? m : nil
+  }
+
+  /// Saves the fallback (on or off, and the model) as set.
+  func setFallback(on: Bool, model: String) {
+    guard on != config.autoFallback || model != config.fallbackModel else { return }
+    config.autoFallback = on
+    config.fallbackModel = model
+    saveConfig()
+  }
+
+  /// A 403 from the company's gateway started the fallback: said once, shown until `until`.
+  private func fellBack(until: Date) {
+    let first = fallingBackUntil == nil
+    fallingBackUntil = until
+    if first, let m = fallbackModelNow {
+      notice = Notice(text: "公司额度用尽 (403), 已改用其他网关的 \(m); \(until.formatted(date: .omitted, time: .shortened)) 再试公司网关", bad: true)
+    }
+    // Back to the company's once the time is up (the next 403 starts it again).
+    Task { [weak self] in
+      try? await Task.sleep(for: .seconds(max(0, until.timeIntervalSinceNow) + 1))
+      guard let self, let u = self.fallingBackUntil, u <= Date() else { return }
+      self.fallingBackUntil = nil
+    }
   }
 
   /// Who each key is, for the request log: people by name, the other gateway's as such.

@@ -33,6 +33,13 @@ final class Forwarding {
   var routes = ModelRoutes() {
     didSet { forwarder?.routes = routes }
   }
+  /// The model sent to the other gateway when the company's answers 403 (nil: no fallback).
+  var fallback: String? {
+    didSet { forwarder?.fallback = fallback }
+  }
+  /// Told when a 403 started the fallback, and until when.
+  var onFallback: ((Date) -> Void)?
+
   /// The requests of the last 10 minutes, kept across restarts of the forwarder.
   let requests = RequestLog()
   /// Names for keys in the request log (people's, the other gateway's).
@@ -61,6 +68,13 @@ final class Forwarding {
     f.routes = routes
     f.requestLog = requests
     f.keyNames = keyNames
+    f.fallback = fallback
+    f.onFallback = { [weak self, weak f] until in
+      Task { @MainActor in
+        guard let self, let f, self.forwarder === f else { return }
+        self.onFallback?(until)
+      }
+    }
     f.onModels = { [weak self, weak f] mine, theirs in
       Task { @MainActor in
         guard let self, let f, self.forwarder === f else { return }

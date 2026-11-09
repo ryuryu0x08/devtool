@@ -55,6 +55,13 @@ struct SettingsView: View {
           footer("Desktop 只显示它认识的 Claude 模型: 在这里让其中一个代表别的模型. 只改请求里的模型名, 其余不变; Desktop 里显示的还是原名. 模型名以请求记录的「模型」列为准")
         }
         Section {
+          FallbackRows()
+        } header: {
+          header("额度用尽时")
+        } footer: {
+          footer("公司网关回 403 (个人或部门额度用尽) 时, 这个请求换成所选模型发给其他网关; 之后 5 分钟内直接走其他网关, 再回来试公司网关. 换网关后原来的提示词缓存用不上")
+        }
+        Section {
           ForEach(store.people) { p in
             PersonKeyRow(p: p).transition(.opacity)
           }
@@ -422,6 +429,50 @@ private struct ModelField: View {
         .help("从模型列表里选")
     }
     .frame(minWidth: 150, maxWidth: .infinity)
+  }
+}
+
+/// Falling back to the other gateway when the company's quota is used up: on or off, the model,
+/// and whether it is falling back now. Saved as set.
+private struct FallbackRows: View {
+  @Environment(Store.self) private var store
+  @State private var on = false
+  @State private var model = ""
+
+  var body: some View {
+    Group {
+      HStack {
+        Text("自动改用其他网关").font(.ui(13))
+        Spacer()
+        Toggle(isOn: $on) { EmptyView() }
+          .fixedSize()
+      }
+      HStack(spacing: 8) {
+        Text("改用的模型").font(.ui(13)).foregroundStyle(on ? .primary : .secondary)
+        ModelField(text: $model, prompt: "选择或输入", choices: store.gatewayModels.other ?? [])
+          .disabled(!on)
+      }
+      if on && store.otherGateway == nil {
+        status("要先填其他网关", bad: true)
+      } else if on && model.trimmingCharacters(in: .whitespaces).isEmpty {
+        status("还需要选一个模型", bad: true)
+      } else if let until = store.fallingBackUntil, let m = store.fallbackModelNow {
+        status("降级中: 公司额度用尽, 改用 \(m); \(until.formatted(date: .omitted, time: .shortened)) 再试公司网关", bad: true)
+      }
+    }
+    .onAppear {
+      on = store.config.autoFallback
+      model = store.config.fallbackModel
+    }
+    .onChange(of: on) { store.setFallback(on: on, model: model) }
+    .onChange(of: model) { store.setFallback(on: on, model: model) }
+    .animation(.snappy, value: store.fallingBackUntil)
+  }
+
+  private func status(_ s: String, bad: Bool) -> some View {
+    Label { Text(s) } icon: { Icon(bad ? .warning : .checkFilled, size: 11) }
+      .foregroundStyle(bad ? .orange : .green)
+      .font(.ui(11))
   }
 }
 

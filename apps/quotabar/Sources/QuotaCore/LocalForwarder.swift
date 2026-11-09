@@ -69,6 +69,32 @@ public final class LocalForwarder: @unchecked Sendable {
   private let lock = NSLock()
   private var _keyNames: [String: String] = [:]
 
+  private var _fallback: String?
+  private var _fallbackUntil: Date?
+
+  /// When the model API answers 403 (a person's or a department's quota used up), the request is
+  /// sent again to the second gateway as this model, and so are the requests after it for
+  /// `fallbackFor` seconds; nil: the 403 goes back to the client.
+  public var fallback: String? {
+    get { lock.lock(); defer { lock.unlock() }; return _fallback }
+    set {
+      lock.lock()
+      _fallback = newValue.flatMap { $0.isEmpty ? nil : $0 }
+      if _fallback == nil { _fallbackUntil = nil }
+      lock.unlock()
+    }
+  }
+  /// How long the requests skip the model API after a 403 (then it is tried again).
+  public var fallbackFor: TimeInterval = 300
+  /// Until when they do (nil: they don't now).
+  public var fallbackUntil: Date? {
+    lock.lock(); defer { lock.unlock() }
+    guard let u = _fallbackUntil, u > Date() else { return nil }
+    return u
+  }
+  /// Told (on the forwarder's queue) when a 403 started the fallback, and until when.
+  public var onFallback: (@Sendable (Date) -> Void)?
+
   /// Names for keys (a person's, the other gateway's), for the request log; other keys show
   /// their last characters only.
   public var keyNames: [String: String] {
@@ -430,8 +456,30 @@ public final class LocalForwarder: @unchecked Sendable {
       }
     }
     guard let req = rewrite(head) else { return reply(c, 400, "bad request") }
+    // Quota used up at the model API (403): the same request as the fallback model, to the second
+    // gateway; during the fallback, straight there.
+    var onForbidden: (() -> Void)?
+    if let fb = fallback, let gw, let model, model != fb,
+       Self.header("transfer-encoding", in: head)?.lowercased().contains("chunked") != true,
+       let renamed = ModelRoutes.renaming(body, to: fb),
+       let again = rewrite(head, to: gw.up, key: sent ? gw.key : nil, length: renamed.count) {
+      let toFallback = { [weak self] (why: String) in
+        guard let self else { return }
+        self.log?("\(method) \(path): \(why), 模型 \(model) → \(fb) (其他网关)")
+        let id = self.requestLog?.add(method: method, path: path, model: model, mappedTo: fb, gateway: .other, key: sent ? self.label(gw.key) : nil, note: why)
+        self.forward(c, Data(again.utf8) + renamed, to: gw.up, record: id)
+      }
+      if fallbackUntil != nil { return toFallback("公司额度用尽, 降级中") }
+      onForbidden = { [weak self] in
+        guard let self else { return }
+        let until = Date().addingTimeInterval(self.fallbackFor)
+        self.lock.lock(); self._fallbackUntil = until; self.lock.unlock()
+        self.onFallback?(until)
+        toFallback("公司网关 403, 自动降级")
+      }
+    }
     let id = requestLog?.add(method: method, path: path, model: model, gateway: .company, key: label(companyKey))
-    forward(c, Data(req.utf8) + body, to: company, record: id)
+    forward(c, Data(req.utf8) + body, to: company, record: id, onForbidden: onForbidden)
   }
 
   /// GET /v1/models with a second gateway: both lists as one (ModelRoutes.merge), each read with
@@ -516,7 +564,8 @@ public final class LocalForwarder: @unchecked Sendable {
     }
   }
 
-  private func forward(_ c: NWConnection, _ request: Data, to target: Upstream, record: Int?) {
+  /// `onForbidden`: called instead of passing a 403 back (nothing of it reaches the client).
+  private func forward(_ c: NWConnection, _ request: Data, to target: Upstream, record: Int?, onForbidden: (() -> Void)? = nil) {
     // Straight to the API, as curl and the Python forwarder go: Network.framework would otherwise
     // follow the system's proxy (Clash and the like set one), sending this plain-server request
     // to a proxy, which answers it with an empty 400.
@@ -534,7 +583,7 @@ public final class LocalForwarder: @unchecked Sendable {
         self.log?("\(line) → \(target.label) (\(up.currentPath?.remoteEndpoint.map { "\($0)" } ?? "?"))")
         up.send(content: request, completion: .contentProcessed { e in
           if e != nil { return self.close(c, up) }
-          self.replyHead(up, to: c, Data(), record: record)
+          self.replyHead(up, to: c, Data(), record: record, onForbidden: onForbidden)
         })
       case .failed(let e), .waiting(let e):
         // Once connected, the API closing (or failing) is seen while the reply is passed on,
@@ -560,7 +609,7 @@ public final class LocalForwarder: @unchecked Sendable {
   }
 
   /// Reads the reply's head, passes it on rewritten, then the rest as it comes.
-  private func replyHead(_ up: NWConnection, to c: NWConnection, _ got: Data, record: Int?) {
+  private func replyHead(_ up: NWConnection, to c: NWConnection, _ got: Data, record: Int?, onForbidden: (() -> Void)? = nil) {
     up.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, complete, error in
       guard let self else { return }
       var buf = got
@@ -571,6 +620,11 @@ public final class LocalForwarder: @unchecked Sendable {
         let status = head.components(separatedBy: "\r\n").first ?? ""
         let code = Int(status.split(separator: " ").dropFirst().first ?? "") ?? 0
         self.log?(status + (code >= 400 ? " — " + String(decoding: buf[r.upperBound...].prefix(300), as: UTF8.self) : ""))
+        if code == 403, let onForbidden {
+          if let record { self.requestLog?.finish(record, status: code, note: "额度用尽, 改发其他网关") }
+          up.cancel()
+          return onForbidden()
+        }
         if let record { self.requestLog?.finish(record, status: code) }
         self.send(Data(head.utf8) + buf[r.upperBound...], to: c) { ok in
           guard ok else { return self.close(up, c) }
@@ -582,7 +636,7 @@ public final class LocalForwarder: @unchecked Sendable {
         if let record { self.requestLog?.finish(record, status: 0, note: "没有收到回复") }
         self.send(buf, to: c) { _ in self.finish(up, c) }
       } else {
-        self.replyHead(up, to: c, buf, record: record)
+        self.replyHead(up, to: c, buf, record: record, onForbidden: onForbidden)
       }
     }
   }
