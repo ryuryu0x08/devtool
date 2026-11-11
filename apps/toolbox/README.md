@@ -195,24 +195,37 @@ cd devtool/apps/toolbox/desktop
 - 窗口大小和位置下次打开时保持；再次打开 App 会显示已经开着的那个。
 - 没有系统标题栏：顶部一条由工具箱自己画，颜色跟主题一致，拖动它移动窗口、双击放大。macOS 的红黄绿按钮在左上角，Windows / Linux 的最小化、最大化、关闭在右上角，颜色同样跟主题。
 - 页面和网页一样运行在沙盒里，拿不到本机文件和系统命令；只开放复制粘贴需要的权限。
+- macOS：点关闭（或 ⌘W）只是隐藏窗口，点 Dock 图标立刻回来，页面保持原样、不重新加载；⌘Q 或 Dock 图标右键「退出」才真正退出。
+
+检查更新和自动更新（macOS，用 `build.sh` 编译的版本）：
+
+- `build.sh` 把仓库目录和当前提交写进 App（`build-info.json`）。设置页「更新」显示当前版本，可以检查更新、更新、立即重启。
+- 更新来自 `toolbox-stable` 分支：main 上的提交在 macOS、Windows、Linux 都编译并通过全部测试后，CI 才把它移过去。只统计改到工具箱的提交（`apps/toolbox`、`packages/ui`、根目录的 `package.json` / `package-lock.json`）。
+- 更新 = 在你的仓库里 fetch 并快进到 `toolbox-stable`（有本地改动或提交挡住时停下并显示 git 的原因），再跑一次 `build.sh`（几分钟），新 App 在退出或「立即重启」时替换 `/Applications` 里的旧 App。编译输出在 App 数据目录的 `update-build.log`。
+- 「自动更新」开启后：启动 30 秒后和之后每 6 小时检查一次，有新版本就在后台编译，下次退出时换上。默认关闭。
+- 仓库是 ssh 地址且 ssh 失败时，改用 https 拉取（公开仓库不需要密钥）。
+- Windows / Linux 和 CI 出的安装包不能自动更新，设置页会说明；请重新下载安装包或运行 `build.sh`。
 
 ```bash
 npm run start -w @devtool/toolbox-desktop     # 开发：构建工具箱并在窗口里打开
 npm run pack -w @devtool/toolbox-desktop      # 编译出 App（desktop/release/ 下，不打安装包）
 npm run dist -w @devtool/toolbox-desktop      # 安装包
-npm run test:e2e -w @devtool/toolbox-desktop  # 桌面 App 自身：来源、链接、第二次打开、存储、权限、标题栏
+npm run test:e2e -w @devtool/toolbox-desktop  # 桌面 App 自身：来源、链接、第二次打开、存储、权限、标题栏、关闭即隐藏、更新
+npm test -w @devtool/toolbox-desktop          # 更新逻辑（临时 git 仓库：统计提交、快进、替换 App）
 npm run test:e2e:desktop -w @devtool/toolbox  # 工具箱的全部端到端测试，在桌面 App 里跑（先 pack；Linux 需要 xvfb-run）
 ```
 
 ```
 desktop/
   main.cjs        窗口：从 app://toolbox/ 加载构建产物，外部链接、权限、只运行一个、窗口大小、隐藏系统标题栏
-  preload.cjs     页面能拿到的全部：系统名称（画标题栏用），以及把标题栏颜色告诉窗口
+  preload.cjs     页面能拿到的全部：系统名称（画标题栏用）、把标题栏颜色告诉窗口、更新的状态和操作
+  update.cjs      更新：fetch toolbox-stable、快进、build.sh、退出后替换 App
   package.json    依赖（Electron、electron-builder）和打包设置
   build.sh        在本机编译、安装、打开
   adhoc-sign.cjs  macOS：打包后做临时签名（Apple 芯片只运行签过名的程序）
   icon.svg        图标源文件；icons/ 由它生成（npx tauri icon desktop/icon.svg -o desktop/icons，只留 icon.icns / .ico / .png）
   e2e/            桌面 App 自身的测试
+  test/           更新逻辑的测试（node --test）
 ```
 
 ## 开发

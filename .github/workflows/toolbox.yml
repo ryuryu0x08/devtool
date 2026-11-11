@@ -1,6 +1,7 @@
 # Checks the toolbox (apps/toolbox): types, unit tests, the build, and the end-to-end tests in
 # Chromium against the build. Then its desktop app (apps/toolbox/desktop) on macOS, Windows and
 # Linux: built, the same end-to-end tests run in it, and its installers attached to the run.
+# All passed on main: the toolbox-stable branch moves to it (installed apps update from there).
 name: toolbox
 on:
   push:
@@ -59,6 +60,9 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y xvfb
       - run: npm ci
       - run: npm run typecheck -w @devtool/toolbox-desktop
+      # The updater (fetching, moving the clone forward, swapping the app): git and bash, not Windows.
+      - if: runner.os != 'Windows'
+        run: npm test -w @devtool/toolbox-desktop
       # The packager downloads its tools from GitHub's releases, which now and then answer 5xx:
       # tried again, a minute apart.
       - name: Build (the installers, and the app beside them)
@@ -113,3 +117,29 @@ jobs:
           path: |
             apps/toolbox/test-results
             apps/toolbox/desktop/test-results
+
+  # Every check passed on every system: installed apps (build.sh, macOS) may update to this commit.
+  stable:
+    needs: [check, desktop]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Mark as stable
+        run: |
+          git fetch --quiet origin toolbox-stable || true
+          if git merge-base --is-ancestor FETCH_HEAD HEAD 2>/dev/null || ! git rev-parse -q --verify FETCH_HEAD >/dev/null; then
+            # GitHub now and then answers a push with a server error: tried again, waiting longer each time.
+            for wait in 2 4 8 16 0; do
+              git push origin HEAD:refs/heads/toolbox-stable && exit 0
+              [ "$wait" = 0 ] && exit 1
+              sleep "$wait"
+            done
+          else
+            echo "toolbox-stable is ahead (a newer run); left as it is"
+          fi

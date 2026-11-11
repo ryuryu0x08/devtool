@@ -1,7 +1,8 @@
 // The desktop app as a user meets it: it opens the toolbox from its own origin and serves only
 // the build; storage and the window size stay between launches; other sites open in the system
 // browser and the window stays on the toolbox; a second launch shows the first one; only the
-// permissions the toolbox uses are granted; the title bar is the page's own, in its theme.
+// permissions the toolbox uses are granted; the title bar is the page's own, in its theme; on macOS
+// closing the window hides it; the settings show the app's updates.
 import { _electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
 import { spawn } from 'node:child_process';
 
@@ -143,10 +144,45 @@ test('no system title bar: the page draws the strip at the top, in the theme’s
   const bridge = await page.evaluate(() => {
     const d = (window as unknown as { toolboxDesktop: { titleBar(a: string, b: string): void } }).toolboxDesktop;
     d.titleBar('red; background: url(x)', '#000000');
-    return { keys: Object.keys(d).sort(), node: typeof (window as unknown as { require?: unknown }).require };
+    const update = (d as unknown as { update: object }).update;
+    return { keys: Object.keys(d).sort(), update: Object.keys(update).sort(), node: typeof (window as unknown as { require?: unknown }).require };
   });
-  expect(bridge).toEqual({ keys: ['platform', 'titleBar'], node: 'undefined' });
+  expect(bridge).toEqual({ keys: ['platform', 'titleBar', 'update'], update: ['check', 'get', 'install', 'onState', 'restart', 'setAuto'], node: 'undefined' });
   await page.waitForTimeout(300);
   expect(await colors()).toEqual({ bg: '#f6f6f4', fg: '#1b1b1d' });
+  await app.close();
+});
+
+test('macOS: closing the window only hides it; the Dock icon shows it again as it was; quitting quits', async ({}, info) => {
+  test.skip(process.platform !== 'darwin', 'macOS only: elsewhere closing the window quits');
+  const { app, page } = await launch(info.outputPath('data'));
+  await page.evaluate(() => ((window as unknown as { kept: number }).kept = 1));
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
+  const shown = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map((w) => w.isVisible()));
+  await expect.poll(shown).toEqual([false]);
+  // The Dock icon clicked.
+  await app.evaluate(({ app }) => app.emit('activate'));
+  await expect.poll(shown).toEqual([true]);
+  // The same page, not loaded anew.
+  expect(await page.evaluate(() => (window as unknown as { kept: number }).kept)).toBe(1);
+  await app.close();
+});
+
+test('the settings show the app’s updates: only a macOS app built by build.sh updates itself', async ({}, info) => {
+  const { app, page } = await launch(info.outputPath('data'));
+  const state = await page.evaluate(() => (window as unknown as { toolboxDesktop: { update: { get(): Promise<{ state: string; reason: string | null }> } } }).toolboxDesktop.update.get());
+  await page.locator('.side-link').click();
+  if (process.platform !== 'darwin') {
+    expect(state).toMatchObject({ state: 'unsupported', reason: 'platform' });
+    await expect(page.locator('[data-update="unsupported"]')).toContainText(/macOS/);
+  } else if (state.state === 'unsupported') {
+    expect(state.reason).toBe('not-built-here');
+    await expect(page.locator('[data-update="unsupported"]')).toContainText('build.sh');
+  } else {
+    // Built by build.sh: the check button, and automatic updates off until turned on (kept).
+    await expect(page.locator('.settings .btn', { hasText: /^(检查更新|Check for updates)$/ })).toBeVisible();
+    await page.locator('.settings .seg button', { hasText: /^(开|On)$/ }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { toolboxDesktop: { update: { get(): Promise<{ auto: boolean }> } } }).toolboxDesktop.update.get().then((s) => s.auto))).toBe(true);
+  }
   await app.close();
 });

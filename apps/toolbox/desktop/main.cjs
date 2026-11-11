@@ -10,11 +10,19 @@
 // No system title bar: the page draws its own strip at the top (html.desktop in its styles), in the
 // theme's colours. macOS keeps its window buttons at the top left; Windows and Linux theirs at the
 // top right, coloured as the page says.
+//
+// macOS: closing the window (its button, ⌘W) only hides it, as Mac apps do: the Dock icon shows it
+// again as it was, without loading the page anew. Quitting (⌘Q, the Dock's Quit) quits.
+//
+// Updates (macOS, an app built by build.sh from a git clone): see update.cjs. The page's settings
+// show the state and ask for a check, an update, a restart; with automatic updates on, a newer
+// version is built in the background and put in place when the app quits.
 
 const { app, BrowserWindow, ipcMain, nativeTheme, net, protocol, session, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+const updater = require('./update.cjs');
 
 const ORIGIN = 'app://toolbox';
 const WEB = path.join(__dirname, 'web');
@@ -64,6 +72,8 @@ function savedBounds() {
 }
 
 let win = null;
+/** Quitting (⌘Q, the Dock's Quit, an update's restart): the window closes for real. */
+let quitting = false;
 
 /** Height of the title bar strip the page draws (its styles use the same: --titlebar). */
 const BAR = 36;
@@ -88,15 +98,123 @@ function open() {
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false, spellcheck: false },
   });
   win.once('ready-to-show', () => win.show());
-  win.on('close', () => {
+  win.on('close', (e) => {
     try {
       fs.writeFileSync(boundsFile(), JSON.stringify(win.getNormalBounds()));
     } catch {
       /* not kept this time */
     }
+    if (!isMac || quitting) return;
+    // Hidden, not closed: the page stays as it is for the Dock icon to show again.
+    e.preventDefault();
+    if (win.isFullScreen()) {
+      win.once('leave-full-screen', () => win.hide());
+      win.setFullScreen(false);
+    } else win.hide();
   });
   win.on('closed', () => (win = null));
   win.loadURL(ORIGIN + '/');
+}
+
+// ---- Updates ----
+
+const info = updater.readInfo(__dirname);
+const bundle = isMac ? updater.bundleOf(process.execPath) : null;
+/** Why this app can't update itself; null: it can. */
+const unsupported = !isMac ? 'platform' : !info || !bundle || !fs.existsSync(path.join(info.sourceDir, '.git')) ? 'not-built-here' : null;
+const updateFile = () => path.join(app.getPath('userData'), 'update.json');
+function savedAuto() {
+  try {
+    return JSON.parse(fs.readFileSync(updateFile(), 'utf8')).auto === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * What the page shows. state: unsupported | idle | checking | none (up to date) | available |
+ * building | ready (built: put in place on quit or restart) | failed.
+ */
+let update = {
+  state: unsupported ? 'unsupported' : 'idle',
+  reason: unsupported,
+  commit: info?.commit ?? null,
+  built: info?.built ?? null,
+  sourceDir: info?.sourceDir ?? null,
+  auto: false,
+  count: 0,
+  subject: null,
+  error: null,
+  checked: null,
+};
+/** The Toolbox.app built by an update, to put in place. */
+let fresh = null;
+let swapped = false;
+
+function setUpdate(change) {
+  update = { ...update, ...change };
+  for (const w of BrowserWindow.getAllWindows()) w.webContents.send('update-state', update);
+}
+
+async function check() {
+  if (unsupported || ['checking', 'building', 'ready'].includes(update.state)) return update;
+  setUpdate({ state: 'checking', error: null });
+  try {
+    const { count, subject } = await updater.newer(info.sourceDir, info.commit);
+    setUpdate({ state: count ? 'available' : 'none', count, subject, checked: Date.now() });
+    if (count && update.auto) install();
+  } catch (e) {
+    setUpdate({ state: 'failed', error: e.message, checked: Date.now() });
+  }
+  return update;
+}
+
+async function install() {
+  if (update.state !== 'available') return update;
+  setUpdate({ state: 'building', error: null });
+  try {
+    await updater.fastForward(info.sourceDir);
+    fresh = await updater.build(info.sourceDir, path.join(app.getPath('userData'), 'update-build.log'));
+    setUpdate({ state: 'ready' });
+  } catch (e) {
+    setUpdate({ state: 'failed', error: e.message });
+  }
+  return update;
+}
+
+function swap(reopen) {
+  if (swapped || !fresh || !bundle) return;
+  swapped = true;
+  updater.swapAfterQuit(process.pid, bundle, fresh, reopen);
+}
+
+/** The page's asks; only from the toolbox's own page. */
+function onUpdate(e, action, arg) {
+  if (!e.senderFrame?.url.startsWith(ORIGIN + '/')) return null;
+  switch (action) {
+    case 'get':
+      return update;
+    case 'check':
+      return check();
+    case 'install':
+      return install();
+    case 'restart':
+      if (update.state !== 'ready') return update;
+      swap(true);
+      app.quit();
+      return update;
+    case 'auto':
+      try {
+        fs.writeFileSync(updateFile(), JSON.stringify({ auto: arg === true }));
+      } catch {
+        /* not kept this time */
+      }
+      setUpdate({ auto: arg === true });
+      if (update.auto && update.state === 'available') install();
+      return update;
+    default:
+      return null;
+  }
 }
 
 function show() {
@@ -135,14 +253,27 @@ if (!app.requestSingleInstanceLock()) {
     w.titleBarColors = { bg, fg }; // what was last applied (the tests read it)
   });
 
+  ipcMain.handle('update', onUpdate);
+
+  // Quitting: the window closes for real, and a built update takes the old app's place.
+  app.on('before-quit', () => {
+    quitting = true;
+    if (update.state === 'ready') swap(false);
+  });
+
   app.whenReady().then(() => {
     protocol.handle('app', serve);
     const s = session.defaultSession;
     s.setPermissionRequestHandler((_wc, permission, done) => done(ALLOWED.has(permission)));
     s.setPermissionCheckHandler((_wc, permission) => ALLOWED.has(permission));
     open();
-    // macOS: the Dock icon clicked with no window open.
+    // macOS: the Dock icon clicked (the window hidden, or none).
     app.on('activate', show);
+    if (!unsupported) {
+      update.auto = savedAuto();
+      setTimeout(check, 30_000);
+      setInterval(check, 6 * 3600_000);
+    }
   });
 
   app.on('window-all-closed', () => {

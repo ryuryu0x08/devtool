@@ -1,6 +1,31 @@
-// The desktop app's bridge (apps/toolbox/desktop/preload.cjs): which system it runs on, and where
-// to send the title bar's colours. Absent in a browser.
-interface Desktop { platform: string; titleBar(bg: string, fg: string): void }
+// The desktop app's bridge (apps/toolbox/desktop/preload.cjs): which system it runs on, where to
+// send the title bar's colours, and the app's updates. Absent in a browser.
+
+/** The desktop app's update (see apps/toolbox/desktop/main.cjs). */
+export interface UpdateState {
+  state: 'unsupported' | 'idle' | 'checking' | 'none' | 'available' | 'building' | 'ready' | 'failed';
+  /** Why it can't update itself: not macOS, or not built by build.sh from a git clone. */
+  reason: 'platform' | 'not-built-here' | null;
+  commit: string | null;
+  built: string | null;
+  auto: boolean;
+  /** New commits that change the app; the newest one's subject. */
+  count: number;
+  subject: string | null;
+  error: string | null;
+}
+
+interface Updates {
+  get(): Promise<UpdateState>;
+  check(): Promise<UpdateState>;
+  install(): Promise<UpdateState>;
+  restart(): Promise<UpdateState>;
+  setAuto(on: boolean): Promise<UpdateState>;
+  /** Called on each change; returns the unsubscribe. */
+  onState(fn: (s: UpdateState) => void): () => void;
+}
+
+interface Desktop { platform: string; titleBar(bg: string, fg: string): void; update?: Updates }
 
 export const desktop: Desktop | null = (window as unknown as { toolboxDesktop?: Desktop }).toolboxDesktop ?? null;
 

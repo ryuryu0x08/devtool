@@ -32,6 +32,13 @@ NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
 echo "==> 安装 JS 依赖 (仓库根目录; 第一次会下载 Electron, 约 100 MB)"
 (cd "$ROOT" && npm install --no-audit --no-fund --loglevel=error)
 
+# Where the app was built from: its update (macOS) fetches into this clone and builds again.
+if COMMIT="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null)"; then
+  printf '{"sourceDir":%s,"commit":"%s","built":"%s"}\n' "$(node -p 'JSON.stringify(process.argv[1])' "$ROOT")" "$COMMIT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > build-info.json
+else
+  rm -f build-info.json
+fi
+
 if [[ "$OS" == Darwin ]]; then
   echo "==> 编译"
   (cd "$ROOT" && npm run pack -w @devtool/toolbox-desktop)
