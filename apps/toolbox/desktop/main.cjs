@@ -7,6 +7,10 @@
 // name and takes the title bar's colours, nothing more). Links to other sites open in the system
 // browser; the window itself never leaves the toolbox.
 //
+// The page's own requests to other sites (the LLM tester calling an API) aren't held to the
+// browser's cross-origin rules: an API that doesn't allow browsers (no CORS headers, a preflight it
+// refuses) works as it does from a command line.
+//
 // No system title bar: the page draws its own strip at the top (html.desktop in its styles), in the
 // theme's colours. macOS keeps its window buttons at the top left; Windows and Linux theirs at the
 // top right, coloured as the page says.
@@ -52,6 +56,42 @@ async function serve(req) {
     return missing();
   }
   return net.fetch(pathToFileURL(file).toString());
+}
+
+/**
+ * The page's own requests to http(s) addresses: no Origin sent (as from a command line), and the
+ * reply readable by the page whatever its CORS headers say. A preflight that the API refuses or
+ * doesn't know (404, 405) passes. Requests are told apart by their Origin: the page's is
+ * app://toolbox; a plugin's frame (origin "null") keeps the browser's rules.
+ */
+function lowerCORS(s) {
+  const page = new Map(); // request id → its preflight's asked headers and method, or null
+  const filter = { urls: ['http://*/*', 'https://*/*'] };
+  s.webRequest.onBeforeSendHeaders(filter, (d, done) => {
+    const h = d.requestHeaders;
+    const origin = Object.keys(h).find((k) => k.toLowerCase() === 'origin');
+    if (!origin || h[origin] !== ORIGIN) return done({});
+    const get = (name) => h[Object.keys(h).find((k) => k.toLowerCase() === name)];
+    const method = get('access-control-request-method');
+    page.set(d.id, d.method === 'OPTIONS' && method ? { method, headers: get('access-control-request-headers') || '*' } : null);
+    delete h[origin];
+    done({ requestHeaders: h });
+  });
+  s.webRequest.onHeadersReceived(filter, (d, done) => {
+    if (!page.has(d.id)) return done({});
+    const pre = page.get(d.id);
+    page.delete(d.id);
+    const h = {};
+    for (const [k, v] of Object.entries(d.responseHeaders || {})) if (!k.toLowerCase().startsWith('access-control-')) h[k] = v;
+    h['Access-Control-Allow-Origin'] = [ORIGIN];
+    h['Access-Control-Allow-Credentials'] = ['true'];
+    h['Access-Control-Expose-Headers'] = ['*'];
+    if (!pre) return done({ responseHeaders: h });
+    h['Access-Control-Allow-Methods'] = [pre.method];
+    h['Access-Control-Allow-Headers'] = [pre.headers];
+    done({ responseHeaders: h, statusLine: 'HTTP/1.1 204 No Content' });
+  });
+  for (const ev of ['onErrorOccurred', 'onCompleted']) s.webRequest[ev](filter, (d) => page.delete(d.id));
 }
 
 /** Permissions the toolbox uses (copying, pasting); everything else is refused. */
@@ -264,6 +304,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     protocol.handle('app', serve);
     const s = session.defaultSession;
+    lowerCORS(s);
     s.setPermissionRequestHandler((_wc, permission, done) => done(ALLOWED.has(permission)));
     s.setPermissionCheckHandler((_wc, permission) => ALLOWED.has(permission));
     open();

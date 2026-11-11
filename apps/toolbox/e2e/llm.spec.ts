@@ -110,7 +110,8 @@ test('errors say what happened: HTTP status with the endpoint’s message; an un
   await expect(page.locator('.llm-err')).toHaveText('HTTP 401：invalid x-api-key');
   // A new message after a failure: the failed reply is not sent, the question before it is.
   await say(page, 'second');
-  await expect(page.locator('.llm-err').last()).toContainText('CORS');
+  // (The browser names CORS as a cause; the desktop app has no cross-origin rules for it.)
+  await expect(page.locator('.llm-err').last()).toContainText('连不上接口');
   expect(seen[1].postDataJSON().messages).toEqual([{ role: 'user', content: 'hi' }, { role: 'user', content: 'second' }]);
   // Regenerate replaces the failed reply.
   await page.getByRole('button', { name: '重新生成' }).click();
@@ -161,4 +162,25 @@ test('the official Anthropic host (the default) gets the key as Authorization on
   await expect(page.locator('.llm-msg.assistant')).toContainText('ok');
   expect(headers['authorization']).toBe('Bearer sk-official');
   expect(headers['x-api-key']).toBeUndefined();
+});
+
+test('listing the models: they fill the model box; an endpoint that never answers is named after 30 s', async ({ page }) => {
+  await page.clock.install();
+  let answer = true;
+  await page.route('https://api.test.example/**', async (route) => {
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS });
+    if (!answer) return; // never answered
+    return route.fulfill({ status: 200, headers: { ...CORS, 'content-type': 'application/json' }, body: JSON.stringify({ data: [{ id: 'model-a', type: 'model' }, { id: 'model-b', type: 'model' }], has_more: false }) });
+  });
+  await setup(page, 'Anthropic', 'https://api.test.example');
+  await page.getByRole('button', { name: '列出模型' }).click();
+  await expect(page.locator('.llm-note')).toContainText('找到 2 个模型');
+  expect(await page.locator('#llm-models option').evaluateAll((o) => o.map((x) => (x as HTMLOptionElement).value))).toEqual(['model-a', 'model-b']);
+  answer = false;
+  await page.getByRole('button', { name: '列出模型' }).click();
+  await expect(page.locator('.llm-note')).toHaveText('正在获取…');
+  await page.clock.runFor(29_000);
+  await expect(page.locator('.llm-note')).toHaveText('正在获取…');
+  await page.clock.runFor(2_000);
+  await expect(page.locator('.llm-note .llm-err')).toContainText('30 秒内没有回复');
 });

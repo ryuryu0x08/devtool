@@ -48,6 +48,8 @@ export interface Turn {
 
 export type LlmError =
   | { kind: 'connect'; detail: string }
+  /** Nothing came back in time (the request may have reached the endpoint). */
+  | { kind: 'timeout'; secs: number }
   | { kind: 'http'; status: number; detail: string }
   | { kind: 'other'; detail: string };
 
@@ -56,7 +58,11 @@ export interface Delta { text?: string; thinking?: string }
 /** The turns to send: a failed reply is left out (the question before it stays). */
 const sendable = (turns: Turn[]) => turns.filter((t) => t.role === 'user' || (!t.error && (t.text || t.blocks?.length)));
 
-export function toError(e: unknown): LlmError {
+/** How long listing the models may take. */
+export const LIST_TIMEOUT_MS = 30_000;
+
+export function toError(e: unknown, timeoutMs = LIST_TIMEOUT_MS): LlmError {
+  if (e instanceof Anthropic.APIConnectionTimeoutError || e instanceof OpenAI.APIConnectionTimeoutError) return { kind: 'timeout', secs: Math.round(timeoutMs / 1000) };
   const conn = e instanceof Anthropic.APIConnectionError || e instanceof OpenAI.APIConnectionError;
   if (conn) return { kind: 'connect', detail: String((e as Error).message ?? '') };
   if ((e instanceof Anthropic.APIError || e instanceof OpenAI.APIError) && typeof e.status === 'number') {
@@ -73,10 +79,10 @@ export const isAbort = (e: unknown) => e instanceof Anthropic.APIUserAbortError 
 
 /** The SDK sends the key as "Authorization: Bearer"; a relay or gateway in front of another base URL
  *  may read only "x-api-key", so it gets that too. No retries: a tester shows each failure. */
-function anthropic(cfg: LlmConfig) {
+function anthropic(cfg: LlmConfig, timeout?: number) {
   const baseURL = cfg.baseURL || DEFAULT_BASE.anthropic;
   const official = baseURL.replace(/\/+$/, '') === DEFAULT_BASE.anthropic;
-  return new Anthropic({ apiKey: cfg.apiKey, baseURL, dangerouslyAllowBrowser: true, maxRetries: 0, ...(official ? {} : { defaultHeaders: { 'x-api-key': cfg.apiKey } }) });
+  return new Anthropic({ apiKey: cfg.apiKey, baseURL, dangerouslyAllowBrowser: true, maxRetries: 0, ...(timeout ? { timeout } : {}), ...(official ? {} : { defaultHeaders: { 'x-api-key': cfg.apiKey } }) });
 }
 
 /** Streams the assistant's reply to `turns` (which end with the user's message). `onDelta` gets
@@ -146,18 +152,18 @@ export async function reply(cfg: LlmConfig, turns: Turn[], onDelta: (d: Delta) =
     });
   } catch (e) {
     if (isAbort(e)) return done({ stopped: true });
-    return done({ stopped: true, error: toError(e) });
+    return done({ stopped: true, error: toError(e, 600_000) });
   }
 }
 
-/** The models the endpoint lists (at most 500). */
-export async function listModels(cfg: LlmConfig): Promise<string[]> {
+/** The models the endpoint lists (at most 500); each page must come within `timeout` ms. */
+export async function listModels(cfg: LlmConfig, timeout = LIST_TIMEOUT_MS): Promise<string[]> {
   const out: string[] = [];
   if (cfg.provider === 'anthropic') {
-    const client = anthropic(cfg);
+    const client = anthropic(cfg, timeout);
     for await (const m of client.models.list()) { out.push(m.id); if (out.length >= 500) break; }
   } else {
-    const client = new OpenAI({ apiKey: cfg.apiKey, baseURL: cfg.baseURL || DEFAULT_BASE.openai, dangerouslyAllowBrowser: true, maxRetries: 0 });
+    const client = new OpenAI({ apiKey: cfg.apiKey, baseURL: cfg.baseURL || DEFAULT_BASE.openai, dangerouslyAllowBrowser: true, maxRetries: 0, timeout });
     for await (const m of client.models.list()) { out.push(m.id); if (out.length >= 500) break; }
   }
   return out;

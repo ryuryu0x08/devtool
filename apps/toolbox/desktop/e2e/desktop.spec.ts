@@ -2,9 +2,11 @@
 // the build; storage and the window size stay between launches; other sites open in the system
 // browser and the window stays on the toolbox; a second launch shows the first one; only the
 // permissions the toolbox uses are granted; the title bar is the page's own, in its theme; on macOS
-// closing the window hides it; the settings show the app's updates.
+// closing the window hides it; the settings show the app's updates; an API without CORS works.
 import { _electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 
 const APP = process.env.TOOLBOX_APP!;
 
@@ -185,4 +187,32 @@ test('the settings show the app’s updates: only a macOS app built by build.sh 
     await expect.poll(() => page.evaluate(() => (window as unknown as { toolboxDesktop: { update: { get(): Promise<{ auto: boolean }> } } }).toolboxDesktop.update.get().then((s) => s.auto))).toBe(true);
   }
   await app.close();
+});
+
+test('the page calls an API that doesn’t allow browsers (no CORS headers, preflight refused) as a command line would', async ({}, info) => {
+  const seen: string[] = [];
+  const api = createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    req.on('end', () => {
+      seen.push(`${req.method} ${req.url} origin=${req.headers.origin ?? '-'} key=${req.headers['x-api-key'] ?? '-'} body=${body}`);
+      if (req.method === 'OPTIONS') return res.writeHead(404).end();
+      if (req.url === '/empty') return res.writeHead(204).end();
+      res.writeHead(201, { 'content-type': 'application/json', 'x-request-id': 'r1' }).end(JSON.stringify({ data: [{ id: 'model-a' }] }));
+    });
+  });
+  await new Promise<void>((r) => api.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${(api.address() as AddressInfo).port}`;
+  const { app, page } = await launch(info.outputPath('data'));
+  const got = await page.evaluate(async (base) => {
+    const r = await fetch(base + '/v1/models?limit=5', { method: 'POST', headers: { 'x-api-key': 'k1', 'content-type': 'application/json' }, body: '{"a":1}' });
+    const e = await fetch(base + '/empty', { headers: { 'x-api-key': 'k2' } });
+    return { status: r.status, id: r.headers.get('x-request-id'), json: await r.json(), empty: e.status };
+  }, base);
+  expect(got).toEqual({ status: 201, id: 'r1', json: { data: [{ id: 'model-a' }] }, empty: 204 });
+  // The API got no browser origin; its 404 to the preflight didn't stop the request.
+  expect(seen.filter((l) => !l.startsWith('OPTIONS'))).toEqual(['POST /v1/models?limit=5 origin=- key=k1 body={"a":1}', 'GET /empty origin=- key=k2 body=']);
+  expect(seen.every((l) => l.includes('origin=-'))).toBe(true);
+  await app.close();
+  api.close();
 });

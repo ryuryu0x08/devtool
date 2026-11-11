@@ -11,6 +11,7 @@ import { Hl } from '../components/Hl';
 import { useOpt } from '../components/Panes';
 import { useZoom } from '../components/Zoom';
 import type { HlLang } from '../lib/highlight';
+import { desktop } from '../lib/desktop';
 import { DEFAULT_BASE, listModels, reply, toError, type LlmConfig, type LlmError, type Provider, type Turn } from '../lib/llm';
 
 /** Kept while the page is open, so switching tools doesn't lose the chat or an unsaved key. */
@@ -131,7 +132,7 @@ export default function Llm() {
       setNote(ids.length ? f(L.models, { n: ids.length }) : L.noModels);
     } catch (e) { setNote(<span className="llm-err">{errText(toError(e))}</span>); }
   };
-  const errText = (e: LlmError) => (e.kind === 'connect' ? L.connect : e.kind === 'http' ? f(L.http, { s: e.status, d: e.detail }) : f(L.other, { d: e.detail }));
+  const errText = (e: LlmError) => (e.kind === 'connect' ? (desktop ? L.connectApp : L.connect) : e.kind === 'timeout' ? f(L.timeout, { s: e.secs }) : e.kind === 'http' ? f(L.http, { s: e.status, d: e.detail }) : f(L.other, { d: e.detail }));
 
   const meta = (t: Turn) => {
     const s = t.stats;
