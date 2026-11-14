@@ -5,6 +5,10 @@ import { _electron, expect, test as base, type ElectronApplication, type Locator
 
 /** Host of the stand-in LLM endpoint in e2e/llm.spec.ts. */
 export const STAND_IN_API = 'https://api.test.example/';
+/** The stand-in proxy backend in e2e/proxy.spec.ts. */
+export const STAND_IN_PROXY = 'http://127.0.0.1:18765';
+/** Stand-ins whose requests fail on purpose (the browser logs each failure as an error). */
+const STAND_INS = [STAND_IN_API, STAND_IN_PROXY];
 
 /**
  * The desktop app's executable (playwright.desktop.config.ts sets it): each test then runs in a
@@ -64,8 +68,8 @@ async function checked(page: Page, use: (p: Page) => Promise<void>) {
   {
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(String(e)));
-    // The browser logs a failed request as an error; the stand-in API used by the LLM tests fails on purpose.
-    page.on('console', (m) => { if (m.type() === 'error' && !m.location().url.startsWith(STAND_IN_API)) errors.push(m.text()); });
+    // The browser logs a failed request as an error; the stand-ins fail on purpose.
+    page.on('console', (m) => { if (m.type() === 'error' && !STAND_INS.some((u) => m.location().url.startsWith(u))) errors.push(m.text()); });
     await use(page);
     expect(errors, 'page errors').toEqual([]);
     const text = await page.evaluate(() => {

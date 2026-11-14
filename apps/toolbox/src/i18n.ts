@@ -4,7 +4,7 @@ import { enT, zhT } from './i18n-tools';
 /** A built-in tool, or a local plugin ("p:<id>"). */
 export type ToolId = BuiltinId | `p:${string}`;
 export type BuiltinId = 'ts' | 'cron' | 'qrgen' | 'qrscan' | 'json' | 'toml' | 'yaml' | 'xml' | 'sql' | 'schema' | 'diff' | 'tdiff'
-  | 'b64' | 'hash' | 'url' | 'uni' | 'html' | 'hex' | 'base' | 'gzip' | 'esc' | 'urlp' | 'jwt' | 'color' | 'regex' | 'case' | 'count' | 'proc' | 'uuid' | 'llm' | 'local';
+  | 'b64' | 'hash' | 'url' | 'uni' | 'html' | 'hex' | 'base' | 'gzip' | 'esc' | 'urlp' | 'jwt' | 'color' | 'regex' | 'case' | 'count' | 'proc' | 'uuid' | 'llm' | 'proxy' | 'local';
 export type CatId = 'time' | 'qr' | 'fmt' | 'diff' | 'enc' | 'web' | 'text' | 'gen' | 'ai' | 'local';
 export type Lang = 'zh' | 'en';
 
@@ -44,6 +44,7 @@ export const TOOLS: Tool[] = [
   { id: 'urlp', cat: 'web', icon: '/?', zh: ['URL 解析', 'URL 解析', '拆分链接 · 编辑查询参数'], en: ['URL Parser', 'URL Parser', 'Split a link · edit its query'], kw: 'url parse query params link 链接 解析 参数 jx lj' },
   { id: 'jwt', cat: 'web', icon: 'JWT', zh: ['JWT 解码', 'JWT', '头部 · 载荷 · 过期时间 · 签名校验'], en: ['JWT Decoder', 'JWT', 'Header · payload · expiry · signature'], kw: 'jwt token bearer jws oauth 解码 令牌 jm lp' },
   { id: 'color', cat: 'web', icon: '●', zh: ['颜色转换', '颜色', 'HEX · RGB · HSL · OKLCH · 对比度'], en: ['Color', 'Color', 'HEX · RGB · HSL · OKLCH · contrast'], kw: 'color colour hex rgb hsl oklch contrast wcag 颜色 色值 对比度 ys dbd' },
+  { id: 'proxy', cat: 'web', icon: '⇆', zh: ['代理抓包', '代理抓包', '抓 HTTP(S) 请求 · 系统代理 · 证书 · 脚本'], en: ['Proxy & Capture', 'Proxy', 'Capture HTTP(S) · system proxy · certificate · scripts'], kw: 'proxy capture mitm mitmproxy bmitmproxy charles fiddler https certificate ca packet sniff 代理 抓包 证书 脚本 dl zb dlzb zhuabao daili' },
   { id: 'regex', cat: 'text', icon: '.*', zh: ['正则表达式测试', '正则测试', '匹配 · 分组 · 替换'], en: ['Regex Tester', 'Regex', 'Matches · groups · replace'], kw: 'regex regexp regular expression match replace 正则 匹配 zz zzbds' },
   { id: 'case', cat: 'text', icon: 'Aa', zh: ['命名转换', '命名转换', 'camelCase · snake_case · kebab-case…'], en: ['Case Converter', 'Case', 'camelCase · snake_case · kebab-case…'], kw: 'case camel snake kebab pascal upper lower 命名 大小写 驼峰 下划线 mm dxx tf' },
   { id: 'count', cat: 'text', icon: 'Σ', zh: ['字数统计', '字数统计', '字符 · 字节 · 行 · 词'], en: ['Word Count', 'Word Count', 'Characters · bytes · lines · words'], kw: 'count word character length bytes 字数 统计 字符 长度 zs tj' },

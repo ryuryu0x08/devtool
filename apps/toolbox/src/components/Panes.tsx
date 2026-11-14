@@ -116,7 +116,11 @@ export function errStatus(T: ReturnType<typeof useApp>['T'], info?: ErrInfo | nu
 }
 
 export function download(bytes: Uint8Array, name: string, mime = 'application/octet-stream') {
-  const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mime }));
+  downloadBlob(new Blob([bytes as BlobPart], { type: mime }), name);
+}
+
+export function downloadBlob(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = name;

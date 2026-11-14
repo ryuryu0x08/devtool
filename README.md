@@ -4,7 +4,7 @@
 
 | 产品 | 目录 | 是什么 | 技术 |
 |---|---|---|---|
-| 工具箱 | [`apps/toolbox`](apps/toolbox) | 工具箱：格式化、编解码、时间戳、对比、二维码等；网页版 PC 和手机都能用，也有桌面 App（macOS、Windows、Linux） | React + Vite；桌面版 Electron |
+| 工具箱 | [`apps/toolbox`](apps/toolbox) | 工具箱：格式化、编解码、时间戳、对比、二维码、代理抓包等；网页版 PC 和手机都能用，也有桌面 App（macOS、Windows、Linux） | React + Vite；桌面版 Electron |
 | QuotaBar | [`apps/quotabar`](apps/quotabar) | macOS 菜单栏 App：多个 key 的用量，一键切换 Claude Code / Desktop 用的 key | SwiftUI |
 | 接口中继 | [`apps/relay`](apps/relay) | 桌面 App（macOS、Windows、Linux）：给使用者发 token，把 Anthropic / OpenAI 请求转到配置好的上游接口和 key | Tauri（Rust + React） |
 
@@ -30,7 +30,7 @@ package.json        npm workspaces；根目录的 dev / build / test 等命令�
 
 - 每个产品的代码、测试、CI 脚本和说明都在自己的目录里；只有多个产品共用的东西放在产品目录外面。
 - CI 文件按产品命名，`paths` 只写自己的目录。
-- 名字不混用：工具箱的「本地转发程序」（`apps/toolbox/scripts/local-proxy.py`，给浏览器插件解决跨域）、QuotaBar 的「本地转发」（让 Desktop 连 http 接口、换 key）、「接口中继」（独立的桌面 App）是三样东西。
+- 名字不混用：工具箱的「本地转发程序」（`apps/toolbox/scripts/local-proxy.py`，给浏览器插件解决跨域）、工具箱的「代理抓包」工具（抓 HTTP(S) 请求，后端是 mitmproxy-addons 的 bmitmproxy）、QuotaBar 的「本地转发」（让 Desktop 连 http 接口、换 key）、「接口中继」（独立的桌面 App）是四样东西。
 
 ## 开发
 

@@ -9,7 +9,7 @@ import { Seg } from '../components/Seg';
 import { CopyBlock } from '../components/Kv';
 import { Hl } from '../components/Hl';
 import { useOpt } from '../components/Panes';
-import { useZoom } from '../components/Zoom';
+import { useFillHeight } from '../components/useFillHeight';
 import type { HlLang } from '../lib/highlight';
 import { desktop } from '../lib/desktop';
 import { DEFAULT_BASE, listModels, reply, toError, type LlmConfig, type LlmError, type Provider, type Turn } from '../lib/llm';
@@ -39,7 +39,6 @@ const secs = (ms?: number) => (ms === undefined ? '' : (ms / 1000).toFixed(ms < 
 export default function Llm() {
   const { T } = useApp();
   const L = T.llm;
-  const z = useZoom()[0] / 100;
   const [provider, setProvider] = useOpt<Provider>('llm.provider', 'anthropic', ['anthropic', 'openai']);
   const [base, setBase] = useOpt<string>('llm.' + provider + '.base', '');
   const [model, setModel] = useOpt<string>('llm.' + provider + '.model', '');
@@ -55,7 +54,6 @@ export default function Llm() {
   const abort = useRef<AbortController | null>(null);
   const log = useRef<HTMLDivElement>(null);
   const chat = useRef<HTMLElement>(null);
-  const [height, setHeight] = useState(0);
 
   const setTurns = (t: Turn[]) => { mem.turns = t; setTurnsState(t); };
   const setKey = (v: string) => { mem.key[provider] = v; setKeyState(v); if (remember) writeKey(provider, v); };
@@ -72,20 +70,7 @@ export default function Llm() {
   };
 
   // The chat fills the window below its top, down to the page's bottom margin.
-  useLayoutEffect(() => {
-    const el = chat.current, area = el?.closest<HTMLElement>('.content');
-    if (!el) return;
-    const measure = () => {
-      const pad = area ? parseFloat(getComputedStyle(area).paddingBottom) || 0 : 0;
-      const h = Math.floor(Math.max(360, (innerHeight - (el.getBoundingClientRect().top + scrollY)) / z - pad));
-      setHeight((o) => (Math.abs(o - h) < 2 ? o : h));
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(area ?? el);
-    addEventListener('resize', measure);
-    return () => { ro.disconnect(); removeEventListener('resize', measure); };
-  }, [z]);
+  const height = useFillHeight(chat);
 
   // New text keeps the chat scrolled to the end, unless the reader scrolled up.
   const atEnd = useRef(true);

@@ -6,6 +6,7 @@ import { fmtWall, tzParts, type TsUnit } from './lib/time';
 import type { Ec, FoundCode } from './lib/qr';
 import type { Eol } from './lib/data';
 import type { HashFmt } from './lib/hash';
+import { openedForProxy } from './lib/proxy/connection';
 
 /** Behaviour switches (editor props in the design prototype). */
 export const CONFIG = { smartPaste: true, rememberInputs: true, defaultView: 'tree' as 'tree' | 'text' };
@@ -30,8 +31,8 @@ export interface State {
   pq: string;
   pi: number;
   toast: string;
-  /** Inputs (and tool) to restore if the user undoes the last replacement. */
-  undo: Partial<State> | null;
+  /** What the toast's Undo does: inputs (and tool) to restore after a replacement, or a tool's own undo. */
+  undo: Partial<State> | (() => void) | null;
   tz: string;
   tzRecent: string[];
   tzOpen: boolean;
@@ -172,7 +173,7 @@ export function initState(): State {
   let sysDark = false;
   try { sysDark = matchMedia('(prefers-color-scheme: dark)').matches; } catch { /* old browser */ }
   return {
-    tool: (TOOLS.some((t) => t.id === saved) || (typeof saved === 'string' && storedIds().includes(pluginOfTool(saved) ?? '')) ? saved : 'ts') as ToolId,
+    tool: (openedForProxy() ? 'proxy' : TOOLS.some((t) => t.id === saved) || (typeof saved === 'string' && storedIds().includes(pluginOfTool(saved) ?? '')) ? saved : 'ts') as ToolId,
     settings: false,
     wide: window.innerWidth >= WIDE_MIN,
     side: pr.side !== false,
@@ -254,7 +255,8 @@ export interface Ctx {
   isMac: boolean;
   go: (id: ToolId) => void;
   copy: (text: string, msg?: string) => void;
-  toast: (msg: string, ms?: number) => void;
+  /** A message at the bottom; with `undo`, it has an Undo button that runs it. */
+  toast: (msg: string, ms?: number, undo?: () => void) => void;
   /** Apply a patch that replaces inputs; if non-empty input is lost, offer to undo it. */
   replace: (patch: Partial<State>, msg?: string) => void;
   toolName: (id: ToolId) => string;

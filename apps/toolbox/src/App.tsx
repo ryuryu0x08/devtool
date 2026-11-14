@@ -46,6 +46,7 @@ import { Schema, SqlFmt, XmlFmt, YamlFmt } from './tools/FormatTools';
 import { CaseConv, Count, Regex, TextDiff, TextProc } from './tools/TextTools';
 import { Uuid } from './tools/GenTools';
 import { Color, Cron } from './tools/CronColor';
+import { offerConnection, takeAddressConnection } from './lib/proxy/connection';
 
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg|ico|avif|heic|heif|tiff?)$/i;
 /** Dropped files read as text (then routed by extension or content). */
@@ -56,6 +57,7 @@ const FILE_KEYS: (keyof State)[] = ['hashFile', 'b64File', 'hexFile', 'gzFile'];
 // Loaded when opened: the API SDKs and Markdown renderer it needs are large.
 const Llm = lazy(() => import('./tools/Llm'));
 const Local = lazy(() => import('./tools/Local'));
+const Proxy = lazy(() => import('./tools/Proxy'));
 const PluginFrames = lazy(() => import('./components/PluginFrames'));
 /** Local plugins exist (they run while the page is open, whichever tool is shown). */
 const hasPlugins = () => { try { return (localStorage.getItem('tb.plugins') ?? '[]') !== '[]'; } catch { return false; } };
@@ -92,7 +94,7 @@ export function App() {
   const zoom = ZOOMS.includes(S.o['ui.zoom'] as number) ? (S.o['ui.zoom'] as number) : 100;
 
   const toastTimer = useRef<number | undefined>(undefined);
-  const toast = useCallback((msg: string, ms = 1500, undo: Partial<State> | null = null) => {
+  const toast = useCallback((msg: string, ms = 1500, undo: State['undo'] = null) => {
     clearTimeout(toastTimer.current);
     set({ toast: msg, undo });
     toastTimer.current = window.setTimeout(() => set({ toast: '', undo: null }), ms);
@@ -148,6 +150,15 @@ export function App() {
     set({ tool: id, settings: false, palette: false, pq: '', pi: 0, tzOpen: false });
     if (!ref.current.wide) window.scrollTo(0, 0);
   }, []);
+
+  // The link `bmitmproxy serve` prints (…/#proxy?api=…&token=…): saved, taken out of the address,
+  // and the proxy tool opened. Also when the page is already open in this tab.
+  useEffect(() => {
+    const take = () => { if (takeAddressConnection()) go('proxy'); };
+    take();
+    addEventListener('hashchange', take);
+    return () => removeEventListener('hashchange', take);
+  }, [go]);
 
   /** Guess which tool a piece of pasted text belongs to. */
   const detect = useCallback((text: string): ReturnType<Ctx['detect']> => {
@@ -292,6 +303,11 @@ export function App() {
       case 'tdiff':
         fillTd(raw, note);
         return true;
+      case 'proxy':
+        // The token, or the link `bmitmproxy serve` prints: connects the tool. Other text goes by its content.
+        if (!offerConnection(raw)) return false;
+        toast(t.px.got);
+        return true;
     }
     // Text tools take any text; the two-way ones pick their direction from it.
     const twoWay: Partial<Record<ToolId, [keyof State, boolean]>> = {
@@ -322,7 +338,7 @@ export function App() {
     const ty = typed[s.tool];
     if (ty && ty[1]()) { replace({ [ty[0]]: one }, msg()); return true; }
     return false;
-  }, [detect, fillDiff, fillTd, replace]);
+  }, [detect, fillDiff, fillTd, replace, toast]);
 
   const handleFiles = useCallback((files: File[]) => {
     const s0 = ref.current, t = dictFor(s0.lang);
@@ -561,6 +577,7 @@ export function App() {
             {S.tool === 'color' && <Color />}
             {S.tool === 'llm' && <Suspense fallback={null}><Llm /></Suspense>}
             {S.tool === 'local' && <Suspense fallback={null}><Local /></Suspense>}
+            {S.tool === 'proxy' && <Suspense fallback={null}><Proxy /></Suspense>}
             </ToolBoundary>}
             {(framesOn || pluginOfTool(S.tool)) && <Suspense fallback={null}><PluginFrames active={S.settings ? null : pluginOfTool(S.tool)} /></Suspense>}
           </div>
@@ -576,7 +593,11 @@ export function App() {
           <div className="toast">
             <Vis text={S.toast} />
             {S.undo && (
-              <button className="toast-undo" onClick={() => { clearTimeout(toastTimer.current); set({ ...S.undo!, toast: '', undo: null }); }}>{T.undo}</button>
+              <button className="toast-undo" onClick={() => {
+                clearTimeout(toastTimer.current);
+                const u = S.undo!;
+                if (typeof u === 'function') { u(); set({ toast: '', undo: null }); } else set({ ...u, toast: '', undo: null });
+              }}>{T.undo}</button>
             )}
           </div>
         )}
