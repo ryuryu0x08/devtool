@@ -46,7 +46,6 @@ import { Schema, SqlFmt, XmlFmt, YamlFmt } from './tools/FormatTools';
 import { CaseConv, Count, Regex, TextDiff, TextProc } from './tools/TextTools';
 import { Uuid } from './tools/GenTools';
 import { Color, Cron } from './tools/CronColor';
-import { offerConnection, takeAddressConnection } from './lib/proxy/connection';
 
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg|ico|avif|heic|heif|tiff?)$/i;
 /** Dropped files read as text (then routed by extension or content). */
@@ -150,15 +149,6 @@ export function App() {
     set({ tool: id, settings: false, palette: false, pq: '', pi: 0, tzOpen: false });
     if (!ref.current.wide) window.scrollTo(0, 0);
   }, []);
-
-  // The link `bmitmproxy serve` prints (…/#proxy?api=…&token=…): saved, taken out of the address,
-  // and the proxy tool opened. Also when the page is already open in this tab.
-  useEffect(() => {
-    const take = () => { if (takeAddressConnection()) go('proxy'); };
-    take();
-    addEventListener('hashchange', take);
-    return () => removeEventListener('hashchange', take);
-  }, [go]);
 
   /** Guess which tool a piece of pasted text belongs to. */
   const detect = useCallback((text: string): ReturnType<Ctx['detect']> => {
@@ -302,11 +292,6 @@ export function App() {
       }
       case 'tdiff':
         fillTd(raw, note);
-        return true;
-      case 'proxy':
-        // The token, or the link `bmitmproxy serve` prints: connects the tool. Other text goes by its content.
-        if (!offerConnection(raw)) return false;
-        toast(t.px.got);
         return true;
     }
     // Text tools take any text; the two-way ones pick their direction from it.

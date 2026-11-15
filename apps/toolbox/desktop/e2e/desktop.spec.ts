@@ -1,8 +1,9 @@
 // The desktop app as a user meets it: it opens the toolbox from its own origin and serves only
 // the build; storage and the window size stay between launches; other sites open in the system
 // browser and the window stays on the toolbox; a second launch shows the first one; only the
-// permissions the toolbox uses are granted; the title bar is the page's own, in its theme; on macOS
-// closing the window hides it; the settings show the app's updates; an API without CORS works.
+// permissions the toolbox uses are granted; the title bar is the page's own, in its theme, and the
+// bridge gives the page nothing more than it should; on macOS closing the window hides it; the
+// settings show the app's updates; an API without CORS works.
 import { _electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -13,7 +14,8 @@ const APP = process.env.TOOLBOX_APP!;
 async function launch(dir: string): Promise<{ app: ElectronApplication; page: Page }> {
   const app = await _electron.launch({
     executablePath: APP,
-    args: [`--user-data-dir=${dir}`, ...(process.getuid?.() === 0 ? ['--no-sandbox'] : [])],
+    // In the background: the window doesn't come in front of, or take the keyboard from, whoever uses the computer
+    args: [`--user-data-dir=${dir}`, '--toolbox-background', ...(process.getuid?.() === 0 ? ['--no-sandbox'] : [])],
   });
   const page = await app.firstWindow();
   await page.waitForSelector('.app');
@@ -92,7 +94,7 @@ test('a second launch shows the first one and quits', async ({}, info) => {
   const dir = info.outputPath('data');
   const { app, page } = await launch(dir);
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].minimize());
-  const second = spawn(APP, [`--user-data-dir=${dir}`, ...(process.getuid?.() === 0 ? ['--no-sandbox'] : [])], { stdio: 'ignore' });
+  const second = spawn(APP, [`--user-data-dir=${dir}`, '--toolbox-background', ...(process.getuid?.() === 0 ? ['--no-sandbox'] : [])], { stdio: 'ignore' });
   const code = await new Promise<number | null>((done) => {
     const t = setTimeout(() => (second.kill(), done(-1)), 15_000);
     second.on('exit', (c) => (clearTimeout(t), done(c)));
@@ -146,10 +148,15 @@ test('no system title bar: the page draws the strip at the top, in the theme’s
   const bridge = await page.evaluate(() => {
     const d = (window as unknown as { toolboxDesktop: { titleBar(a: string, b: string): void } }).toolboxDesktop;
     d.titleBar('red; background: url(x)', '#000000');
-    const update = (d as unknown as { update: object }).update;
-    return { keys: Object.keys(d).sort(), update: Object.keys(update).sort(), node: typeof (window as unknown as { require?: unknown }).require };
+    const { update, capture } = d as unknown as { update: object; capture: object };
+    return { keys: Object.keys(d).sort(), update: Object.keys(update).sort(), capture: Object.keys(capture).sort(), node: typeof (window as unknown as { require?: unknown }).require };
   });
-  expect(bridge).toEqual({ keys: ['platform', 'titleBar', 'update'], update: ['check', 'get', 'install', 'onState', 'restart', 'setAuto'], node: 'undefined' });
+  expect(bridge).toEqual({
+    keys: ['capture', 'platform', 'titleBar', 'update'],
+    update: ['check', 'get', 'install', 'onState', 'restart', 'setAuto'],
+    capture: ['backends', 'checkProxy', 'defaultEntry', 'find', 'fix', 'get', 'inspect', 'onEvent', 'start', 'stop'],
+    node: 'undefined',
+  });
   await page.waitForTimeout(300);
   expect(await colors()).toEqual({ bg: '#f6f6f4', fg: '#1b1b1d' });
   await app.close();

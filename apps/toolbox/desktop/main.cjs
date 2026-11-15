@@ -21,12 +21,16 @@
 // Updates (macOS, an app built by build.sh from a git clone): see update.cjs. The page's settings
 // show the state and ask for a check, an update, a restart; with automatic updates on, a newer
 // version is built in the background and put in place when the app quits.
+//
+// Proxy & Capture (macOS): its backend runs as a program this app starts, finds or stops for the
+// page (capture.cjs, with a driver per backend in backends/). Quitting stops one it started.
 
 const { app, BrowserWindow, ipcMain, nativeTheme, net, protocol, session, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const updater = require('./update.cjs');
+const { Capture, register: registerCapture } = require('./capture.cjs');
 
 const ORIGIN = 'app://toolbox';
 const WEB = path.join(__dirname, 'web');
@@ -35,6 +39,12 @@ const WEB = path.join(__dirname, 'web');
 // which running copy a second launch hands over to, so it is set before that check.
 const dataDir = app.commandLine.getSwitchValue('user-data-dir');
 if (dataDir) app.setPath('userData', path.resolve(dataDir));
+
+// --toolbox-background (the tests): the window works as usual but stays out of the way of whoever
+// is using the computer: shown without coming in front or taking the keyboard, see-through and
+// clicked through; on macOS no Dock icon and not in ⌘Tab.
+const background = app.commandLine.hasSwitch('toolbox-background');
+if (background && process.platform === 'darwin') app.setActivationPolicy('accessory');
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, codeCache: true } },
@@ -137,7 +147,7 @@ function open() {
       : { titleBarOverlay: { color: dark ? '#121211' : '#f6f6f4', symbolColor: dark ? '#ededeb' : '#1b1b1d', height: BAR } }),
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false, spellcheck: false },
   });
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => reveal());
   win.on('close', (e) => {
     try {
       fs.writeFileSync(boundsFile(), JSON.stringify(win.getNormalBounds()));
@@ -257,11 +267,33 @@ function onUpdate(e, action, arg) {
   }
 }
 
+// ---- Proxy & Capture ----
+
+const fromOwnPage = (e) => !!e.senderFrame?.url.startsWith(ORIGIN + '/');
+const capture = new Capture({
+  drivers: { bmitmproxy: require('./backends/bmitmproxy.cjs') },
+  origin: ORIGIN,
+  emit: (event) => { for (const w of BrowserWindow.getAllWindows()) w.webContents.send('capture-event', event); },
+});
+/** The backend this app started has been stopped: quitting may go on. */
+let captureStopped = false;
+
+/** Shown in front with the keyboard; in the background (the tests), shown where it can't be seen or clicked. */
+function reveal() {
+  if (!background) {
+    win.show();
+    win.focus();
+    return;
+  }
+  win.setOpacity(0);
+  win.setIgnoreMouseEvents(true);
+  win.showInactive();
+}
+
 function show() {
   if (!win) return open();
   if (win.isMinimized()) win.restore();
-  win.show();
-  win.focus();
+  reveal();
 }
 
 // One copy: opening it again shows the running one.
@@ -294,10 +326,20 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   ipcMain.handle('update', onUpdate);
+  registerCapture(capture, ipcMain, fromOwnPage);
 
-  // Quitting: the window closes for real, and a built update takes the old app's place.
-  app.on('before-quit', () => {
+  // Quitting: the window closes for real, a backend this app started is stopped first (it puts the
+  // system proxy back), and a built update takes the old app's place.
+  app.on('before-quit', (e) => {
     quitting = true;
+    if (!captureStopped && capture.quitWork) {
+      e.preventDefault();
+      capture.quit().finally(() => {
+        captureStopped = true;
+        app.quit();
+      });
+      return;
+    }
     if (update.state === 'ready') swap(false);
   });
 

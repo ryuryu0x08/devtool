@@ -13,7 +13,8 @@ import { useBackendError } from './errors';
 
 const FORMATS: CertFormat[] = ['pem', 'cer', 'p12'];
 
-export default function Cert({ b, info }: { b: ProxyBackend; info: BackendInfo }) {
+/** onCa: the certificate as it is after a change here (the bar's chip follows it). */
+export default function Cert({ b, info, onCa }: { b: ProxyBackend; info: BackendInfo; onCa?: (ca: CaInfo) => void }) {
   const { T, S, toast } = useApp();
   const P = T.px;
   const errText = useBackendError();
@@ -31,7 +32,9 @@ export default function Cert({ b, info }: { b: ProxyBackend; info: BackendInfo }
     setBusy(true);
     setErr('');
     try {
-      setCa(await (on ? b.trustCa() : b.untrustCa()));
+      const after = await (on ? b.trustCa() : b.untrustCa());
+      setCa(after);
+      onCa?.(after);
       toast(on ? P.trustDone : P.untrustDone, 4000);
     } catch (e) {
       setErr(f(P.trustFailed, { d: errText(e) }));

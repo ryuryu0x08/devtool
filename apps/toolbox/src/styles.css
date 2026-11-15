@@ -327,24 +327,48 @@ body.dragging-move, body.dragging-move * { cursor: grabbing !important; user-sel
 .proxy .px-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .proxy .px-row .field { height: 34px; font-size: 13px; }
 .proxy .px-row .grow { flex: 1 1 260px; min-width: 0; width: auto; }
-.px-pad, .px-connect { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.px-pad { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .px-title { font-weight: 600; font-size: 14px; }
 .px-label { font-size: 12px; color: var(--mut); margin-top: 4px; }
 .px-note { font-size: 13px; color: var(--mut); margin: 0; overflow-wrap: anywhere; }
 .px-faint { font-size: 12px; color: var(--faint); margin: 0; overflow-wrap: anywhere; }
 .px-warn { font-size: 13px; color: var(--chg); overflow-wrap: anywhere; }
 .px-err { font-size: 13px; color: var(--del); overflow-wrap: anywhere; white-space: pre-wrap; }
-.px-cmd code { font: 13px/1.5 'Geist Mono', monospace; word-break: break-all; }
-.px-api { width: 220px; flex: 0 1 220px; }
 .px-check { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--mut); cursor: pointer; white-space: nowrap; }
-.px-head { padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
+/* The slim bar: state, tabs and chips, settings, on / off */
+.px-bar { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 48px; padding: 7px 10px 7px 14px; }
+.px-status { flex: 0 1 auto; min-width: 0; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.px-spacer { flex: 1; }
+.px-link { border: 0; background: transparent; padding: 0 2px; font: inherit; font-size: 12.5px; color: var(--acc); cursor: pointer; white-space: nowrap; }
+.px-link:hover { text-decoration: underline; }
 .px-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
 .px-dot.on { background: var(--add); }
-.px-backend { font-size: 13px; font-weight: 600; }
-.px-spacer { flex: 1; }
-.px-sys { display: flex; flex-direction: column; gap: 6px; }
-.px-bypass summary { cursor: pointer; display: inline; margin-left: 6px; }
-.px-bypass div { margin-top: 4px; font-family: 'Geist Mono', monospace; word-break: break-all; }
+.px-dot.warn { background: var(--chg); }
+.px-dot.bad { background: var(--del); }
+.px-dot.busy { background: var(--acc); animation: px-pulse 1.2s ease-in-out infinite; }
+@keyframes px-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .px-dot.busy { animation: none; } }
+.px-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); font-size: 12.5px; color: var(--ink); cursor: pointer; white-space: nowrap; }
+.px-chip:hover:not(:disabled) { background: var(--sub); border-color: var(--line2); }
+.px-chip.warn { border-color: var(--chg); color: var(--chg); }
+.px-chip:disabled { opacity: 0.6; cursor: default; }
+.px-settings { position: relative; display: flex; }
+.px-icon { position: relative; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 8px; background: transparent; color: var(--mut); cursor: pointer; }
+.px-icon:hover, .px-icon.on { background: var(--sub); color: var(--ink); }
+.px-badge-dot { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--del); box-shadow: 0 0 0 2px var(--card); }
+.px-pop { position: absolute; top: calc(100% + 6px); right: 0; z-index: 40; width: min(460px, calc(100vw - 48px)); padding: 12px; display: flex; flex-direction: column; gap: 10px; overflow: visible; }
+.px-pop-row { display: flex; align-items: center; gap: 10px; }
+.px-pop-row.col { flex-direction: column; align-items: stretch; gap: 6px; }
+.px-pop-row .field { height: 34px; font-size: 13px; }
+.px-pop-label { font-size: 12px; color: var(--mut); }
+.px-entry-check { display: flex; align-items: baseline; gap: 7px; font-size: 12.5px; color: var(--mut); overflow-wrap: anywhere; white-space: pre-wrap; }
+.px-entry-check .px-dot { transform: translateY(-1px); }
+.px-entry-check.none { color: var(--faint); }
+.px-entry-check.bad { color: var(--del); }
+.px-details { margin: -4px 0 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); font: 12px/1.55 'Geist Mono', monospace; color: var(--mut); white-space: pre-wrap; word-break: break-all; max-height: 240px; overflow: auto; }
+/* Off: where the capture will be */
+.px-idle { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; min-height: 320px; }
+.px-idle-text { margin: 0; max-width: 560px; font-size: 13.5px; line-height: 1.6; color: var(--mut); overflow-wrap: anywhere; white-space: pre-wrap; }
 
 .px-cap { display: flex; flex-direction: column; overflow: hidden; min-height: 420px; }
 .px-cap-head { min-height: 48px; padding: 6px 10px; gap: 8px; justify-content: flex-start; }
@@ -353,7 +377,7 @@ body.dragging-move, body.dragging-move * { cursor: grabbing !important; user-sel
 .px-paused { padding: 6px 12px; font-size: 12.5px; background: var(--chgBg); color: var(--chg); }
 .px-cap-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); }
 @media (max-width: 1100px) { .px-cap-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(200px, 1fr) minmax(0, 1fr); } }
-.px-table { display: flex; flex-direction: column; min-height: 0; min-width: 0; border-right: 1px solid var(--line); }
+.px-table { display: flex; flex-direction: column; min-height: 0; min-width: 0; border-right: 1px solid var(--line); overflow: hidden; container-type: inline-size; }
 .px-tbody { flex: 1; min-height: 0; overflow: auto; outline: none; position: relative; }
 .px-tbody:focus-visible { box-shadow: inset 0 0 0 2px var(--accRing); }
 .px-tr {
@@ -371,6 +395,8 @@ body.dragging-move, body.dragging-move * { cursor: grabbing !important; user-sel
 .px-c-status.redirect { color: var(--chg); }
 .px-c-status.client-error, .px-c-status.server-error, .px-c-status.error { color: var(--del); font-weight: 600; }
 .px-c-status.pending { color: var(--faint); }
+/* The columns' smallest widths no longer fit beside the detail: the type goes first */
+@container (max-width: 660px) { .px-tr { grid-template-columns: 92px 60px 44px minmax(80px, 1fr) minmax(80px, 2fr) 64px 64px; } .px-tr > .px-c-type { display: none; } }
 @media (max-width: 760px) { .px-tr { grid-template-columns: 44px 40px minmax(60px, 1fr) minmax(60px, 1.4fr); } .px-c-time, .px-c-type, .px-tr > .px-c-num { display: none; } }
 .px-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; font-size: 13px; color: var(--faint); }
 .px-detail { min-width: 0; min-height: 0; overflow: auto; }

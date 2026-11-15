@@ -6,7 +6,7 @@ import { fmtWall, tzParts, type TsUnit } from './lib/time';
 import type { Ec, FoundCode } from './lib/qr';
 import type { Eol } from './lib/data';
 import type { HashFmt } from './lib/hash';
-import { openedForProxy } from './lib/proxy/connection';
+import { offered } from './lib/desktop';
 
 /** Behaviour switches (editor props in the design prototype). */
 export const CONFIG = { smartPaste: true, rememberInputs: true, defaultView: 'tree' as 'tree' | 'text' };
@@ -173,7 +173,7 @@ export function initState(): State {
   let sysDark = false;
   try { sysDark = matchMedia('(prefers-color-scheme: dark)').matches; } catch { /* old browser */ }
   return {
-    tool: (openedForProxy() ? 'proxy' : TOOLS.some((t) => t.id === saved) || (typeof saved === 'string' && storedIds().includes(pluginOfTool(saved) ?? '')) ? saved : 'ts') as ToolId,
+    tool: (TOOLS.some((t) => t.id === saved && offered(t)) || (typeof saved === 'string' && storedIds().includes(pluginOfTool(saved) ?? '')) ? saved : 'ts') as ToolId,
     settings: false,
     wide: window.innerWidth >= WIDE_MIN,
     side: pr.side !== false,

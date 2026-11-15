@@ -5,10 +5,12 @@ import { _electron, expect, test as base, type ElectronApplication, type Locator
 
 /** Host of the stand-in LLM endpoint in e2e/llm.spec.ts. */
 export const STAND_IN_API = 'https://api.test.example/';
-/** The stand-in proxy backend in e2e/proxy.spec.ts. */
-export const STAND_IN_PROXY = 'http://127.0.0.1:18765';
-/** Stand-ins whose requests fail on purpose (the browser logs each failure as an error). */
-const STAND_INS = [STAND_IN_API, STAND_IN_PROXY];
+/**
+ * Stand-ins whose requests fail on purpose (the browser logs each failure as an error): the LLM
+ * endpoint, and the stand-in proxy backend of e2e/proxy.spec.ts on this computer (ended mid-test).
+ */
+const STAND_INS = [STAND_IN_API, 'http://127.0.0.1:', 'ws://127.0.0.1:'];
+const fromStandIn = (url: string, text: string) => STAND_INS.some((u) => url.startsWith(u) || text.includes(u));
 
 /**
  * The desktop app's executable (playwright.desktop.config.ts sets it): each test then runs in a
@@ -21,6 +23,9 @@ export const HOME = DESKTOP ? 'app://toolbox/' : '/';
 
 /** In the desktop app (rather than the browser). */
 export const IN_DESKTOP = !!DESKTOP;
+
+/** In the macOS desktop app: where the tools offered only there are (i18n.ts TOOLS, `only`). */
+export const IN_MAC_APP = IN_DESKTOP && process.platform === 'darwin';
 
 /** The host the toolbox is served from: a request to any other leaves the page. */
 export const OWN_HOST = DESKTOP ? 'toolbox' : 'localhost';
@@ -35,7 +40,8 @@ const APPS = new WeakMap<Page, ElectronApplication>();
 async function desktopPage(info: TestInfo, e: Emulated) {
   const app = await _electron.launch({
     executablePath: DESKTOP!,
-    args: [`--user-data-dir=${info.outputPath('user-data')}`, `--lang=${e.locale ?? 'zh-CN'}`, ...(process.getuid?.() === 0 ? ['--no-sandbox'] : [])],
+    // In the background: the window doesn't come in front of, or take the keyboard from, whoever uses the computer
+    args: [`--user-data-dir=${info.outputPath('user-data')}`, `--lang=${e.locale ?? 'zh-CN'}`, '--toolbox-background', ...(process.getuid?.() === 0 ? ['--no-sandbox'] : [])],
     env: { ...process.env, TZ: e.timezoneId ?? 'Asia/Shanghai' },
   });
   const page = await app.firstWindow();
@@ -69,7 +75,7 @@ async function checked(page: Page, use: (p: Page) => Promise<void>) {
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(String(e)));
     // The browser logs a failed request as an error; the stand-ins fail on purpose.
-    page.on('console', (m) => { if (m.type() === 'error' && !STAND_INS.some((u) => m.location().url.startsWith(u))) errors.push(m.text()); });
+    page.on('console', (m) => { if (m.type() === 'error' && !fromStandIn(m.location().url, m.text())) errors.push(m.text()); });
     await use(page);
     expect(errors, 'page errors').toEqual([]);
     const text = await page.evaluate(() => {
@@ -153,6 +159,9 @@ export async function pasteOnBlank(page: Page, data: { text?: string; image?: bo
     document.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
   }, data);
 }
+
+/** The desktop app a page is in (its main process); undefined in the browser. */
+export const desktopApp = (page: Page) => APPS.get(page);
 
 export const clipboard = (page: Page) => page.evaluate(() => navigator.clipboard.readText());
 export const activeTool = async (page: Page) => (await page.locator('.nav-item.on').innerText()).replace(/\s+/g, ' ').trim();

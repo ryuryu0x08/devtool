@@ -1,4 +1,4 @@
-// ProxyBackend for mitmproxy-addons (`bmitmproxy serve`, or the bmitmproxy app): mitmweb's REST
+// ProxyBackend for mitmproxy-addons (`bmitmproxy serve`, started by the desktop app): mitmweb's REST
 // API and its /updates WebSocket, plus the /bmitmproxy-api/ endpoints it adds (status, system
 // proxy, certificate, scripts). Every request carries the token as a Bearer header; the WebSocket,
 // which can't send headers, carries it in the address.
@@ -133,20 +133,16 @@ export class MitmproxyBackend implements ProxyBackend {
   }
 
   async info(): Promise<BackendInfo> {
-    const s = await this.json<{ backend: string; version: string; mitmproxy: string; mode: string; proxy_port: number; lan: string[]; onboarding: string }>('/bmitmproxy-api/status').catch((e: unknown) => {
+    const s = await this.json<{ backend: string; version: string; mitmproxy: string; proxy_port: number; lan: string[]; onboarding: string }>('/bmitmproxy-api/status').catch((e: unknown) => {
       // A mitmweb without these endpoints (bmitmproxy before them, or plain mitmweb) answers 404,
       // or 403 from its DNS-rebinding guard for paths it doesn't know.
       if (e instanceof BackendError && e.kind === 'failed' && (e.status === 403 || e.status === 404)) throw new BackendError('incompatible', e.message, e.status);
       throw e;
     });
     return {
-      backend: s.backend, version: s.version, engine: `mitmproxy ${s.mitmproxy}`, mode: s.mode === 'serve' ? 'serve' : 'app',
+      backend: s.backend, version: s.version, engine: `mitmproxy ${s.mitmproxy}`,
       proxyPort: s.proxy_port, lan: s.lan ?? [], onboarding: s.onboarding,
     };
-  }
-
-  async stop() {
-    await this.request('/bmitmproxy-api/shutdown', { method: 'POST' });
   }
 
   watch(onEvent: (e: FlowEvent) => void, onLive: (live: boolean) => void): () => void {
@@ -229,7 +225,7 @@ export class MitmproxyBackend implements ProxyBackend {
   private static systemProxy(s: Json): SystemProxy {
     return {
       supported: Boolean(s.supported), platform: String(s.platform ?? ''), enabled: Boolean(s.enabled),
-      overridden: Boolean(s.overridden), upstream: (s.upstream as string | null) ?? null,
+      takenOver: Boolean(s.taken_over), overridden: Boolean(s.overridden), upstream: (s.upstream as string | null) ?? null,
       bypass: (s.bypass as string[] | undefined) ?? [], proxy: String(s.proxy ?? ''),
     };
   }

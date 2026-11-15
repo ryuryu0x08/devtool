@@ -61,11 +61,19 @@ describe('MitmproxyBackend', () => {
   const reply = (status: number, body: unknown) =>
     new Response(typeof body === 'string' ? body : JSON.stringify(body), { status });
 
+  it('maps the system proxy: in effect here, and taken over (the backend has changed it, not yet put it back)', async () => {
+    const sys = { supported: true, platform: 'macOS', enabled: false, taken_over: true, overridden: true, upstream: 'http://127.0.0.1:7890', bypass: ['localhost'], services: ['Wi-Fi'], proxy: '127.0.0.1:8888' };
+    vi.stubGlobal('fetch', vi.fn(async () => reply(200, sys)));
+    expect(await new MitmproxyBackend('http://127.0.0.1:8081', 't').systemProxy()).toEqual({
+      supported: true, platform: 'macOS', enabled: false, takenOver: true, overridden: true, upstream: 'http://127.0.0.1:7890', bypass: ['localhost'], proxy: '127.0.0.1:8888',
+    });
+  });
+
   it('sends the token and maps the status', async () => {
     const fetch = vi.fn(async () => reply(200, { backend: 'mitmproxy-addons', version: '1.2', mitmproxy: '10.3.1', mode: 'serve', pid: 1, proxy_port: 8888, lan: ['192.168.1.5:8888'], onboarding: 'http://mitm.it' }));
     vi.stubGlobal('fetch', fetch);
     const info = await new MitmproxyBackend('http://127.0.0.1:8081/', 't0k').info();
-    expect(info).toEqual({ backend: 'mitmproxy-addons', version: '1.2', engine: 'mitmproxy 10.3.1', mode: 'serve', proxyPort: 8888, lan: ['192.168.1.5:8888'], onboarding: 'http://mitm.it' });
+    expect(info).toEqual({ backend: 'mitmproxy-addons', version: '1.2', engine: 'mitmproxy 10.3.1', proxyPort: 8888, lan: ['192.168.1.5:8888'], onboarding: 'http://mitm.it' });
     const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('http://127.0.0.1:8081/bmitmproxy-api/status');
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer t0k');

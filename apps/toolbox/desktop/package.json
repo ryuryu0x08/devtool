@@ -32,6 +32,9 @@
       "main.cjs",
       "preload.cjs",
       "update.cjs",
+      "capture.cjs",
+      "sysproxy-mac.cjs",
+      "backends/**/*",
       "build-info.json",
       "web/**/*",
       "package.json"

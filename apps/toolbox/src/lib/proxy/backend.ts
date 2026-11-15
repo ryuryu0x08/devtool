@@ -1,6 +1,8 @@
-// The proxy tool's view of a capture backend: what the window shows and asks for, the same
-// whichever proxy does the work. lib/proxy/mitmproxy.ts is the first implementation
-// (mitmproxy-addons, `bmitmproxy serve`). Times are milliseconds since the epoch.
+// The proxy tool's view of a capture backend once it runs: what the window shows and asks for, the
+// same whichever proxy does the work. lib/proxy/mitmproxy.ts is the first implementation
+// (mitmproxy-addons, `bmitmproxy serve`). Starting and stopping a backend is the desktop app's
+// (apps/toolbox/desktop/capture.cjs, reached through lib/desktop.ts). Times are milliseconds since
+// the epoch.
 
 export type Part = 'request' | 'response';
 export type CertFormat = 'pem' | 'cer' | 'p12';
@@ -59,8 +61,6 @@ export interface BackendInfo {
   backend: string;
   version: string;
   engine: string;
-  /** "serve": started without a window (can be stopped from here); "app": its own window. */
-  mode: 'serve' | 'app';
   proxyPort: number;
   /** Addresses other devices on the local network use ("192.168.1.5:8888"). */
   lan: string[];
@@ -72,8 +72,10 @@ export interface SystemProxy {
   /** This system's proxy settings can be changed by the backend (macOS for now). */
   supported: boolean;
   platform: string;
-  /** The system's HTTP and HTTPS proxies point to this proxy now. */
+  /** The system's HTTP and HTTPS proxies (as in effect now) point to this proxy. */
   enabled: boolean;
+  /** The backend has changed the system's settings and not yet put them back (some may since have been changed by another program). */
+  takenOver: boolean;
   /** Taken over earlier, and since changed by another program (e.g. Clash re-applying its own). */
   overridden: boolean;
   /** Where traffic goes on to: the proxy the system used before ("http://127.0.0.1:7890"). */
@@ -131,8 +133,6 @@ export class BackendError extends Error {
 
 export interface ProxyBackend {
   info(): Promise<BackendInfo>;
-  /** Ends the backend (only when `info().mode` is "serve"); a taken-over system proxy is restored. */
-  stop(): Promise<void>;
 
   /** Live flows: `reset` first, then changes; `onLive` says whether updates are arriving. Returns the stop. */
   watch(onEvent: (e: FlowEvent) => void, onLive: (live: boolean) => void): () => void;
