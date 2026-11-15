@@ -228,7 +228,7 @@ desktop/
   package.json    依赖（Electron、electron-builder）和打包设置
   build.sh        在本机编译、安装、打开
   adhoc-sign.cjs  macOS：打包后做临时签名（Apple 芯片只运行签过名的程序）
-  icon.svg        图标源文件；icons/ 由它生成（npx tauri icon desktop/icon.svg -o desktop/icons，只留 icon.icns / .ico / .png）
+  icons/          icon.icns / .ico / .png，由仓库根目录的 node brand/export-toolbox-icon.mjs 生成
   e2e/            桌面 App 自身的测试
   test/           更新逻辑的测试（node --test）
 ```
@@ -293,9 +293,8 @@ src/
   lib/proxy/           代理抓包：后端接口（backend.ts）、mitmproxy-addons 的实现（mitmproxy.ts）、抓包列表（flows.ts）、连接信息（connection.ts）
 e2e/                   端到端测试（fixtures/ 下是生成测试图片的脚本和图片）
 scripts/mutation.mjs   植入错误测试
-scripts/icons.mjs      由 public/favicon.svg 生成 apple-touch-icon.png（改了图标后运行）
 scripts/local-proxy.py 插件用的本地转发程序（解决跨域，toolbox.proxyCommand 把它内嵌进一行命令）
-public/                网页标签图标（随系统浅色 / 深色切换）和主屏幕图标；应用内 Logo 在 src/components/Logo.tsx，两处形状由测试保证一致
+public/                网页标签图标（随系统浅色 / 深色切换）和主屏幕图标，和桌面 App 的图标一起由 brand/toolbox/mark.mjs 生成（node brand/export-toolbox-icon.mjs）；应用内 Logo 在 src/components/Logo.tsx，和标签图标的形状由测试保证一致
 test/                  第三方一致性测试集
 design/                Claude Design 交付的原型与对话记录
 ```

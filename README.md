@@ -19,6 +19,7 @@ apps/
   relay/            接口中继（core/ 中继本身, src-tauri/ 桌面 App, src/ 窗口, e2e/ 和 ci/ 测试）
 packages/
   ui/               工具箱和接口中继的窗口共用的外观：颜色、字体、按钮、分段控件、卡片
+brand/              图标：toolbox/mark.mjs 是工具箱的图标，export-toolbox-icon.mjs 由它生成工具箱的网页和桌面图标；nav/ 是 6.2 导航页各应用的图标，选定的记在 nav/apps.mjs，export-nav-icons.mjs 导出候选、review 图和选定的图标；lib/ 是画图和导出的共用部分；导出的母版和 review 图在 out/（生成的，不进 git）
 .github/workflows/  每个产品一个，只在自己的目录变动时运行
   toolbox.yml       类型检查、单元测试、构建、端到端测试（Linux + Chromium），再在三个平台出桌面 App 并在里面跑端到端测试
   quotabar.yml      编译、测试、端到端、截图，通过后把 quotabar-stable 移到这个提交（Mac）

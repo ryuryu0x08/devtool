@@ -1,10 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <style>.t{fill:#1b1b1d}.g{stroke:#fff}@media (prefers-color-scheme:dark){.t{fill:#ededeb}.g{stroke:#121211}}</style>
+  <!-- 工具箱: "Dev" and a terminal cursor, drawn by brand/toolbox/mark.mjs; Logo.tsx draws the same shapes. -->
+  <style>.t{fill:#1b1b1d}.g{stroke:#ffffff}@media (prefers-color-scheme:dark){.t{fill:#ededeb}.g{stroke:#121211}}</style>
   <rect class="t" width="32" height="32" rx="7"/>
-  <g class="g" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M12.5 11.5V9.5a1.5 1.5 0 0 1 1.5-1.5h4a1.5 1.5 0 0 1 1.5 1.5v2"/>
-    <rect x="6.5" y="11.5" width="19" height="13" rx="2.5"/>
-    <path d="M6.5 17.2h19"/>
+  <g transform="translate(2.176 19.717) scale(0.035355)">
+    <g class="g" fill="none" stroke-width="46" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M23 0V-232H69A116 116 0 0 1 69 0Z"/>
+      <path d="M253 -78H409A78 78 0 1 0 381.14 -18.25"/>
+      <path d="M467 -156L540 0L613 -156"/>
+    </g>
+    <rect x="664" y="-255" width="118" height="278" rx="14" fill="#3d6df2"/>
   </g>
-  <rect x="14" y="15.2" width="4" height="4" rx="1" fill="#3d6df2"/>
 </svg>

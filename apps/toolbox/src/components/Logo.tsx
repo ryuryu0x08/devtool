@@ -1,25 +1,26 @@
 /**
- * The app mark: a toolbox whose latch is the accent blue. Drawn on a 32 × 32 grid; the tile
- * behind it is the element's own background (.logo). public/favicon.svg uses the same shapes.
+ * The app mark: "Dev" followed by a terminal's block cursor in the accent blue. Drawn on a 32 × 32
+ * grid; the tile behind it is the element's own background (.logo). The shapes come from
+ * brand/toolbox/mark.mjs, which generates public/favicon.svg and the desktop icons from the same ones.
  */
 export const LOGO = {
-  handle: 'M12.5 11.5V9.5a1.5 1.5 0 0 1 1.5-1.5h4a1.5 1.5 0 0 1 1.5 1.5v2',
-  body: { x: 6.5, y: 11.5, width: 19, height: 13, rx: 2.5 },
-  lid: 'M6.5 17.2h19',
-  latch: { x: 14, y: 15.2, width: 4, height: 4, rx: 1 },
-  stroke: 2.2,
+  // The letters are drawn in their own units and placed on the grid by this transform.
+  transform: 'translate(2.176 19.717) scale(0.035355)',
+  letters: ['M23 0V-232H69A116 116 0 0 1 69 0Z', 'M253 -78H409A78 78 0 1 0 381.14 -18.25', 'M467 -156L540 0L613 -156'],
+  cursor: { x: 664, y: -255, width: 118, height: 278, rx: 14 },
+  stroke: 46,
   accent: '#3d6df2',
 };
 
 export function LogoGlyph() {
   return (
     <svg viewBox="0 0 32 32" width="100%" height="100%" aria-hidden="true" style={{ display: 'block' }}>
-      <g fill="none" stroke="currentColor" strokeWidth={LOGO.stroke} strokeLinecap="round" strokeLinejoin="round">
-        <path d={LOGO.handle} />
-        <rect {...LOGO.body} />
-        <path d={LOGO.lid} />
+      <g transform={LOGO.transform}>
+        <g fill="none" stroke="currentColor" strokeWidth={LOGO.stroke} strokeLinecap="round" strokeLinejoin="round">
+          {LOGO.letters.map((d) => <path key={d} d={d} />)}
+        </g>
+        <rect {...LOGO.cursor} fill={LOGO.accent} />
       </g>
-      <rect {...LOGO.latch} fill={LOGO.accent} />
     </svg>
   );
 }
