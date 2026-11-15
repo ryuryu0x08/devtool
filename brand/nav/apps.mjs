@@ -25,7 +25,7 @@ export const APPS = [
   withCurrent(video2gif, '视', '#1F6F9E', 'B'),
   withCurrent(devtool, '工', '#1F6F9E', 'A'),
   withCurrent(s3Manager, 'S', '#0F7B6C', 'A'),
-  withCurrent(grafana, 'Gr', '#1F6F9E', null),
+  withCurrent(grafana, 'Gr', '#1F6F9E', 'B'),
   withCurrent(gitea, 'Gi', '#C2571A', 'A'),
   withCurrent(cicd, 'CI', '#7A4CC2', 'C'),
   withCurrent(subtitles, '字', '#C2571A', 'B'),
