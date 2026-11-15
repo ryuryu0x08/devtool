@@ -267,6 +267,7 @@ describe('fuzz: TOML', () => {
     }
   });
 
+  // 2000 documents × 6 layouts: under a second here, over 5 s on the NAS that builds the page.
   it('formatting keeps every value, literal and comment; output is stable', () => {
     const r = rng(11);
     for (let n = 0; n < 2000; n++) {
@@ -278,7 +279,7 @@ describe('fuzz: TOML', () => {
         expect(formatToml(parseTomlDoc(out), sort, ind)).toBe(out);
       }
     }
-  });
+  }, 30000);
 
   it('verification catches any rewritten literal or dropped comment', () => {
     const r = rng(12);
