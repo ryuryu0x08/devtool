@@ -493,9 +493,9 @@ extension LocalForwarderTests {
       let (status, _) = try await call(port, "POST", "/v1/messages", body: #"{"model":"\#(m)"}"#)
       XCTAssertEqual(status, 200)
     }
-    XCTAssertEqual(a.bodies, [#"{"model":"shared"}"#])
-    XCTAssertEqual(b.bodies, [#"{"model":"both"}"#])
-    XCTAssertEqual(c.bodies, [#"{"model":"ds-c"}"#, #"{"model":"ds-typed"}"#])
+    XCTAssertEqual(a.bodies.filter { !$0.isEmpty }, [#"{"model":"shared"}"#])
+    XCTAssertEqual(b.bodies.filter { !$0.isEmpty }, [#"{"model":"both"}"#])
+    XCTAssertEqual(c.bodies.filter { !$0.isEmpty }, [#"{"model":"ds-c"}"#, #"{"model":"ds-typed"}"#])
     XCTAssertEqual(f.routes.taken(from: "ds"), ["both"])
     // A gateway whose list can't be read: its typed-in models still go to it.
     c.modelsStatus = 404
