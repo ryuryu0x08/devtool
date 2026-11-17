@@ -366,7 +366,7 @@ private final class Counter: @unchecked Sendable {
   var n: Int { lock.lock(); defer { lock.unlock() }; return v }
 }
 
-// MARK: - A second gateway
+// MARK: - Other gateways
 
 extension LocalForwarderTests {
 
@@ -380,8 +380,8 @@ extension LocalForwarderTests {
     try await a.start()
     try await b.start()
     let f = try LocalForwarder(target: URL(string: "http://127.0.0.1:\(a.port)/api")!)
-    f.second = try LocalForwarder.Gateway(url: URL(string: "http://127.0.0.1:\(b.port)/other/")!, key: "sk-second")
-    f.routes = ModelRoutes(company: mine, second: theirs)
+    f.gateways = [try LocalForwarder.Gateway(url: URL(string: "http://127.0.0.1:\(b.port)/other/")!, key: "sk-second")]
+    f.routes = ModelRoutes(company: mine, lists: [.init(id: "other", models: theirs)])
     let p = try await f.start(preferred: port)
     return (a, b, f, p)
   }
@@ -432,8 +432,8 @@ extension LocalForwarderTests {
     (status, _) = try await call(port, "GET", "/v1/models/glm-b")
     XCTAssertEqual(status, 200)
     XCTAssertEqual(b.heads.last?.components(separatedBy: "\r\n")[0], "GET /other/v1/models/glm-b HTTP/1.1")
-    // No second gateway any more: everything to the company's.
-    f.second = nil
+    // No other gateway any more: everything to the company's.
+    f.gateways = []
     (status, _) = try await call(port, "POST", "/v1/messages", body: #"{"model":"glm-b"}"#)
     XCTAssertEqual(status, 200)
     XCTAssertEqual(a.heads.count, 3)
@@ -443,7 +443,7 @@ extension LocalForwarderTests {
     let (a, b, f, port) = try await twoGateways(["claude-a"], ["glm-b"], port: 48220)
     defer { f.stop() }
     let told = Box<[[String]]>()
-    f.onModels = { told.set([$0, $1]) }
+    f.onModels = { told.set([$0, $1["other"] ?? ["(none)"]]) }
     let (status, body) = try await call(port, "GET", "/v1/models?limit=1000")
     XCTAssertEqual(status, 200)
     XCTAssertEqual(ModelRoutes.ids(in: Data(body.utf8)), ["claude-a", "glm-b"])
@@ -473,17 +473,35 @@ extension LocalForwarderTests {
     XCTAssertTrue(body3.contains("authentication_error"), body3)
   }
 
-  func testAModelBothListIsTurnedAwaySayingWhy() async throws {
-    let (a, b, f, port) = try await twoGateways(["claude-a", "shared"], ["glm-b", "shared"], port: 48240)
-    defer { f.stop() }
-    let (status, body) = try await call(port, "POST", "/v1/messages", body: #"{"model":"shared"}"#)
-    XCTAssertEqual(status, 409)
-    XCTAssertTrue(body.contains("shared") && body.contains("invalid_request_error"), body)
-    XCTAssertTrue(a.heads.isEmpty && b.heads.isEmpty)
-    // Listed once.
+  func testAModelSeveralListGoesToTheFirstInOrderAndTypedInModelsCount() async throws {
+    let (a, b, f, port) = try await twoGateways(["claude-a", "shared"], ["glm-b", "shared", "both"], port: 48240)
+    let c = Upstream()
+    c.models = ["ds-c", "both"]
+    c.keepAlive = true
+    try await c.start()
+    defer { f.stop(); withExtendedLifetime((a, b, c)) {} }
+    // A third gateway, with a model typed in that its list leaves out.
+    f.gateways.append(try LocalForwarder.Gateway(id: "ds", name: "DeepSeek", url: URL(string: "http://127.0.0.1:\(c.port)/anthropic")!, key: "sk-ds", models: ["ds-typed"]))
+    let told = Box<[String: [String]]>()
+    f.onModels = { told.set($1) }
     let (_, list) = try await call(port, "GET", "/v1/models")
-    XCTAssertEqual(ModelRoutes.ids(in: Data(list.utf8)), ["claude-a", "shared", "glm-b"])
-    XCTAssertEqual(f.routes.conflicts, ["shared"])
+    XCTAssertEqual(ModelRoutes.ids(in: Data(list.utf8)), ["claude-a", "shared", "glm-b", "both", "ds-c", "ds-typed"])
+    XCTAssertEqual(told.value, ["other": ["glm-b", "shared", "both"], "ds": ["ds-c", "both", "ds-typed"]])
+    XCTAssertEqual(header("authorization", c.heads[0]), "Authorization: Bearer sk-ds")
+    XCTAssertEqual(c.heads[0].components(separatedBy: "\r\n")[0], "GET /anthropic/v1/models HTTP/1.1")
+    for m in ["shared", "both", "ds-c", "ds-typed"] {
+      let (status, _) = try await call(port, "POST", "/v1/messages", body: #"{"model":"\#(m)"}"#)
+      XCTAssertEqual(status, 200)
+    }
+    XCTAssertEqual(a.bodies, [#"{"model":"shared"}"#])
+    XCTAssertEqual(b.bodies, [#"{"model":"both"}"#])
+    XCTAssertEqual(c.bodies, [#"{"model":"ds-c"}"#, #"{"model":"ds-typed"}"#])
+    XCTAssertEqual(f.routes.taken(from: "ds"), ["both"])
+    // A gateway whose list can't be read: its typed-in models still go to it.
+    c.modelsStatus = 404
+    let (_, list2) = try await call(port, "GET", "/v1/models")
+    XCTAssertEqual(ModelRoutes.ids(in: Data(list2.utf8))?.last, "ds-typed")
+    XCTAssertEqual(told.value?["ds"], ["ds-typed"])
   }
 
   func testWithNoKeySentTheSecondGatewaysKeyIsNotAdded() async throws {
@@ -550,10 +568,10 @@ extension LocalForwarderTests {
     _ = try await call(port, "POST", "/v1/messages", body: #"{"model":"claude-a"}"#, key: nil)
     // Newest first.
     let r = Array(log.recent().reversed())
-    XCTAssertEqual(r.map(\.gateway), [.other, .company, .refused, .both, .company])
+    XCTAssertEqual(r.map(\.gateway), [.other("其他网关"), .company, .company, .all, .company])
     XCTAssertEqual(r.map(\.model), ["glm-b", "claude-a", "shared", nil, "claude-a"])
-    XCTAssertEqual(r.map(\.key), ["其他网关的 key", "ye", nil, "ye", nil])
-    XCTAssertEqual(r.map(\.status), [200, 200, 409, 200, 200])
+    XCTAssertEqual(r.map(\.key), ["其他网关的 key", "ye", "ye", "ye", nil])
+    XCTAssertEqual(r.map(\.status), [200, 200, 200, 200, 200])
     XCTAssertEqual(r[0].path, "/v1/messages")
     XCTAssertTrue(r.allSatisfy { $0.ms != nil })
     // A key with no name: its end only.
@@ -568,7 +586,7 @@ extension LocalForwarderTests {
     let log = RequestLog()
     f.requestLog = log
     f.keyNames = ["sk-second": "其他网关的 key"]
-    f.routes = ModelRoutes(company: ["claude-haiku-5-5"], second: ["deepseek-chat"], renames: ["claude-haiku-5-5": .init(toOther: true, model: "deepseek-chat")])
+    f.routes = ModelRoutes(company: ["claude-haiku-5-5"], lists: [.init(id: "other", models: ["deepseek-chat"])], renames: ["claude-haiku-5-5": .init(gateway: "other", model: "deepseek-chat")])
     let body = #"{"model":"claude-haiku-5-5","messages":[{"role":"user","content":"hi"}],"stream":false}"#
     let (status, _) = try await call(port, "POST", "/v1/messages", body: body)
     XCTAssertEqual(status, 200)
@@ -579,8 +597,12 @@ extension LocalForwarderTests {
     XCTAssertEqual(header("authorization", b.heads[0]), "Authorization: Bearer sk-second")
     let r = try XCTUnwrap(log.recent().first)
     XCTAssertEqual([r.model, r.mappedTo, r.key], ["claude-haiku-5-5", "deepseek-chat", "其他网关的 key"])
-    XCTAssertEqual(r.gateway, .other)
+    XCTAssertEqual(r.gateway, .other("其他网关"))
     XCTAssertEqual(r.status, 200)
+    // Mapped to a gateway no longer there: by the lists, as asked.
+    f.routes = ModelRoutes(company: ["claude-haiku-5-5"], renames: ["claude-haiku-5-5": .init(gateway: "gone", model: "deepseek-chat")])
+    _ = try await call(port, "POST", "/v1/messages", body: body)
+    XCTAssertEqual(a.bodies, [body])
   }
 
   func testA403FromTheCompanyIsSentToTheOtherGatewayAsTheFallbackModelUntilTheNextRefresh() async throws {
@@ -588,7 +610,7 @@ extension LocalForwarderTests {
     defer { f.stop(); withExtendedLifetime((a, b)) {} }
     let log = RequestLog()
     f.requestLog = log
-    f.fallback = "deepseek-v4.1-flash"
+    f.fallback = .init(gateway: "other", model: "deepseek-v4.1-flash")
     let told = Box<String>()
     f.onForbiddenKey = { told.set($0 ?? "") }
     a.replyStatus = 403
@@ -607,7 +629,7 @@ extension LocalForwarderTests {
     XCTAssertEqual(a.bodies.count, 1)
     XCTAssertEqual(b.bodies.count, 2)
     let r = Array(log.recent().reversed())
-    XCTAssertEqual(r.map(\.gateway), [.company, .other, .other])
+    XCTAssertEqual(r.map(\.gateway), [.company, .other("其他网关"), .other("其他网关")])
     XCTAssertEqual(r.map(\.status), [403, 200, 200])
     XCTAssertEqual(r.map(\.mappedTo), [nil, "deepseek-v4.1-flash", "deepseek-v4.1-flash"])
     // At the refresh the company's is tried again: quota back, it answers.
@@ -628,7 +650,7 @@ extension LocalForwarderTests {
   func testAKeyTheReadingsSayIsUsedUpGoesStraightToTheOtherGateway() async throws {
     let (a, b, f, port) = try await twoGateways(["claude-opus-5-5"], ["deepseek-v4.1-flash"], port: 48380)
     defer { f.stop(); withExtendedLifetime((a, b)) {} }
-    f.fallback = "deepseek-v4.1-flash"
+    f.fallback = .init(gateway: "other", model: "deepseek-v4.1-flash")
     f.keyNames = ["sk-client": "ye"]
     let log = RequestLog()
     f.requestLog = log
@@ -651,7 +673,7 @@ extension LocalForwarderTests {
   func testOnlyA403FallsBackAndOnlyForAModelOfTheCompany() async throws {
     let (a, b, f, port) = try await twoGateways(["claude-opus-5-5"], ["deepseek-v4.1-flash"], port: 48360)
     defer { f.stop(); withExtendedLifetime((a, b)) {} }
-    f.fallback = "deepseek-v4.1-flash"
+    f.fallback = .init(gateway: "other", model: "deepseek-v4.1-flash")
     a.replyStatus = 500
     let (status, _) = try await call(port, "POST", "/v1/messages", body: #"{"model":"claude-opus-5-5"}"#)
     XCTAssertEqual(status, 500)

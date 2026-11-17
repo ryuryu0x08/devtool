@@ -9,8 +9,8 @@
 // (Connection: close, so that a client keeping connections open doesn't send its next request down
 // this one); its body is passed on as it comes, so streamed replies arrive as they are sent.
 //
-// With a second gateway set, requests go to the gateway whose model list has the model they ask
-// for (ModelRoutes), with that gateway's key; GET /v1/models answers both lists as one.
+// With other gateways set, requests go to the first gateway whose model list has the model they
+// ask for (ModelRoutes), with that gateway's key; GET /v1/models answers all the lists as one.
 import Foundation
 import Network
 
@@ -34,18 +34,40 @@ public final class LocalForwarder: @unchecked Sendable {
 
   /// A gateway besides the model API (`target`): the requests for its models go to it.
   public struct Gateway: Equatable, Sendable {
+    /// Stays the same when its name or address changes (the mappings name it by this).
+    public let id: String
+    /// What the request log and the settings call it.
+    public let name: String
     public let url: URL
-    /// Sent as a Bearer token with each request to it.
+    /// Sent in place of the client's key with each request to it.
     public let key: String
+    /// Models typed in for it: listed as its own besides what its list says (or in place of a
+    /// list it doesn't have).
+    public let models: [String]
     let up: Upstream
 
-    public init(url: URL, key: String) throws {
+    public init(id: String = "other", name: String = "其他网关", url: URL, key: String, models: [String] = []) throws {
+      self.id = id
+      self.name = name
       self.url = url
       self.key = key
+      self.models = models
       up = try Upstream(url)
     }
 
-    public static func == (a: Gateway, b: Gateway) -> Bool { a.url == b.url && a.key == b.key }
+    public static func == (a: Gateway, b: Gateway) -> Bool {
+      a.id == b.id && a.name == b.name && a.url == b.url && a.key == b.key && a.models == b.models
+    }
+  }
+
+  /// Where requests go when the key they go with has no quota left: model `model`, to gateway `gateway`.
+  public struct Fallback: Equatable, Sendable {
+    public var gateway: String
+    public var model: String
+    public init(gateway: String, model: String) {
+      self.gateway = gateway
+      self.model = model
+    }
   }
 
   public let target: URL
@@ -60,26 +82,26 @@ public final class LocalForwarder: @unchecked Sendable {
   /// Told (on the forwarder's queue) when the listener stops by itself after it started (the
   /// system ended it, e.g. around sleep): the port no longer answers. Not called for `stop()`.
   public var onStop: (@Sendable (String) -> Void)?
-  /// Told (on a background queue) of both model lists, when a client asked for them and both
-  /// were read, so that the app shows what it saw.
-  public var onModels: (@Sendable (_ company: [String], _ second: [String]) -> Void)?
+  /// Told (on a background queue) of the model lists, when a client asked for them: the
+  /// company's, and each other gateway's that was read (by its id).
+  public var onModels: (@Sendable (_ company: [String], _ others: [String: [String]]) -> Void)?
   /// Where each request is recorded (the app keeps one across forwarders); nil: nowhere.
   public var requestLog: RequestLog?
   private let company: Upstream
   private let lock = NSLock()
   private var _keyNames: [String: String] = [:]
 
-  private var _fallback: String?
+  private var _fallback: Fallback?
   private var _exhausted: Set<String> = []
   private var _forbidden: Set<String> = []
 
-  /// The model a request for the model API goes to the second gateway as, when the key it goes
-  /// with has no quota left; nil: no fallback (a 403 goes back to the client).
-  public var fallback: String? {
+  /// Where a request for the model API goes, as which model, when the key it goes with has no
+  /// quota left; nil: no fallback (a 403 goes back to the client).
+  public var fallback: Fallback? {
     get { lock.lock(); defer { lock.unlock() }; return _fallback }
     set {
       lock.lock()
-      _fallback = newValue.flatMap { $0.isEmpty ? nil : $0 }
+      _fallback = newValue.flatMap { $0.model.isEmpty ? nil : $0 }
       if _fallback == nil { _forbidden = [] }
       lock.unlock()
     }
@@ -99,26 +121,26 @@ public final class LocalForwarder: @unchecked Sendable {
     lock.lock(); _forbidden = []; lock.unlock()
   }
   /// Told (on the forwarder's queue) when the model API answered 403 and the request went to the
-  /// second gateway instead (the key it went with, if any).
+  /// fallback's gateway instead (the key it went with, if any).
   public var onForbiddenKey: (@Sendable (String?) -> Void)?
 
-  /// Names for keys (a person's, the other gateway's), for the request log; other keys show
+  /// Names for keys (a person's, another gateway's), for the request log; other keys show
   /// their last characters only.
   public var keyNames: [String: String] {
     get { lock.lock(); defer { lock.unlock() }; return _keyNames }
     set { lock.lock(); _keyNames = newValue; lock.unlock() }
   }
   private var _key: String?
-  private var _second: Gateway?
+  private var _gateways: [Gateway] = []
   private var _routes = ModelRoutes()
 
-  /// The second gateway (nil: everything goes to `target`).
-  public var second: Gateway? {
-    get { lock.lock(); defer { lock.unlock() }; return _second }
-    set { lock.lock(); _second = newValue; lock.unlock() }
+  /// The other gateways, in order (none: everything goes to `target`).
+  public var gateways: [Gateway] {
+    get { lock.lock(); defer { lock.unlock() }; return _gateways }
+    set { lock.lock(); _gateways = newValue; lock.unlock() }
   }
 
-  /// Which models go to the second gateway (and which both list).
+  /// Which models go to which gateway.
   public var routes: ModelRoutes {
     get { lock.lock(); defer { lock.unlock() }; return _routes }
     set { lock.lock(); _routes = newValue; lock.unlock() }
@@ -417,64 +439,60 @@ public final class LocalForwarder: @unchecked Sendable {
     return keyNames[key] ?? RequestLog.mask(key)
   }
 
-  /// Where a whole request goes: with a second gateway, by the model it asks for (a model both
-  /// gateways list is turned away, GET /v1/models answers both lists); else to the model API.
-  /// Each is recorded in the request log, with the gateway and the key it went with.
+  /// Where a whole request goes: with other gateways, by the model it asks for (GET /v1/models
+  /// answers all the lists); else to the model API. Each is recorded in the request log, with the
+  /// gateway and the key it went with.
   private func dispatch(_ c: NWConnection, head: String, body: Data) {
     let sent = Self.sentKey(head)
     guard let line = Self.requestLine(head) else { return reply(c, 400, "bad request") }
     let (method, path) = line
     let model = ModelRoutes.model(inPath: path) ?? ModelRoutes.model(in: body)
     let companyKey = sent ? (key ?? Self.clientKey(head)) : nil
+    let gws = gateways
+    let named = { (id: String) in gws.first { $0.id == id } }
+    let chunked = Self.header("transfer-encoding", in: head)?.lowercased().contains("chunked") == true
     // Mapped in the settings: the body's model changes (nothing else), to the gateway chosen.
-    let gw = second
-    if case .renamed(let r) = routes.route(model), let model, !(r.toOther && gw == nil) {
-      let chunked = Self.header("transfer-encoding", in: head)?.lowercased().contains("chunked") == true
-      if !chunked, let renamed = ModelRoutes.renaming(body, to: r.model) {
-        let to = r.toOther ? gw!.up : company
+    if case .renamed(let r) = routes.route(model), let model {
+      let dest = r.gateway.flatMap(named)
+      if r.gateway != nil && dest == nil {
+        log?("\(method) \(path): 模型 \(model) 映射到的网关已不在, 按列表转发")
+      } else if !chunked, let renamed = ModelRoutes.renaming(body, to: r.model) {
+        let to = dest?.up ?? company
         // The key put in, as for any request to that gateway (the company's: ours if set, else
         // the client's goes as it is), and the one that goes, for the log.
-        let put = !sent ? nil : r.toOther ? gw!.key : key
-        let goes = r.toOther ? put : companyKey
+        let put = !sent ? nil : dest?.key ?? key
+        let goes = dest == nil ? companyKey : put
         guard let req = rewrite(head, to: to, key: put, length: renamed.count) else { return reply(c, 400, "bad request") }
-        log?("\(method) \(path): 模型 \(model) → \(r.model) (\(r.toOther ? "其他网关" : "公司网关"))")
-        let id = requestLog?.add(method: method, path: path, model: model, mappedTo: r.model, gateway: r.toOther ? .other : .company, key: label(goes))
+        log?("\(method) \(path): 模型 \(model) → \(r.model) (\(dest?.name ?? "公司网关"))")
+        let id = requestLog?.add(method: method, path: path, model: model, mappedTo: r.model, gateway: dest.map { RequestRecord.Gateway.other($0.name) } ?? .company, key: label(goes))
         return forward(c, Data(req.utf8) + renamed, to: to, record: id)
+      } else {
+        log?("\(method) \(path): 模型 \(model) 有映射, 但请求体改不了 (" + (chunked ? "分块传输" : "不是 JSON 对象") + "), 原样转发")
       }
-      log?("\(method) \(path): 模型 \(model) 有映射, 但请求体改不了 (" + (chunked ? "分块传输" : "不是 JSON 对象") + "), 原样转发")
     }
-    if let second {
+    if !gws.isEmpty {
       if method == "GET" && ModelRoutes.isList(path) {
-        let id = requestLog?.add(method: method, path: path, model: nil, gateway: .both, key: label(companyKey))
-        return listModels(c, head: head, path: path, second: second, record: id)
+        let id = requestLog?.add(method: method, path: path, model: nil, gateway: .all, key: label(companyKey))
+        return listModels(c, head: head, path: path, gateways: gws, record: id)
       }
-      switch routes.route(model) {
-      case .conflict(let m):
-        log?("\(method) \(path): 模型 \(m) 两个网关都有, 未转发")
-        if let id = requestLog?.add(method: method, path: path, model: m, gateway: .refused, key: nil) { requestLog?.finish(id, status: 409, note: "两个网关都有这个模型") }
-        return reply(c, 409, ModelRoutes.conflictReply(m), json: true)
-      case .second:
-        guard let req = rewrite(head, to: second.up, key: sent ? second.key : nil) else { return reply(c, 400, "bad request") }
-        let id = requestLog?.add(method: method, path: path, model: model, gateway: .other, key: sent ? label(second.key) : nil)
-        return forward(c, Data(req.utf8) + body, to: second.up, record: id)
-      case .company, .renamed:
-        // (A mapping that couldn't be applied above: the company's, as sent.)
-        break
+      if case .gateway(let gid) = routes.route(model), let g = named(gid) {
+        guard let req = rewrite(head, to: g.up, key: sent ? g.key : nil) else { return reply(c, 400, "bad request") }
+        let id = requestLog?.add(method: method, path: path, model: model, gateway: .other(g.name), key: sent ? label(g.key) : nil)
+        return forward(c, Data(req.utf8) + body, to: g.up, record: id)
       }
     }
     guard let req = rewrite(head) else { return reply(c, 400, "bad request") }
     // No quota left with the key it goes with (the readings say so, or the model API answered 403
-    // since the last refresh): the same request as the fallback model, to the second gateway. A
-    // 403 not foreseen does the same, and marks the key.
+    // since the last refresh): the same request as the fallback model, to its gateway. A 403 not
+    // foreseen does the same, and marks the key.
     var onForbidden: (() -> Void)?
-    if let fb = fallback, let gw, let model, model != fb,
-       Self.header("transfer-encoding", in: head)?.lowercased().contains("chunked") != true,
-       let renamed = ModelRoutes.renaming(body, to: fb),
+    if let fb = fallback, let gw = named(fb.gateway), let model, !chunked,
+       let renamed = ModelRoutes.renaming(body, to: fb.model),
        let again = rewrite(head, to: gw.up, key: sent ? gw.key : nil, length: renamed.count) {
       let toFallback = { [weak self] (why: String) in
         guard let self else { return }
-        self.log?("\(method) \(path): \(why), 模型 \(model) → \(fb) (其他网关)")
-        let id = self.requestLog?.add(method: method, path: path, model: model, mappedTo: fb, gateway: .other, key: sent ? self.label(gw.key) : nil, note: why)
+        self.log?("\(method) \(path): \(why), 模型 \(model) → \(fb.model) (\(gw.name))")
+        let id = self.requestLog?.add(method: method, path: path, model: model, mappedTo: fb.model, gateway: .other(gw.name), key: sent ? self.label(gw.key) : nil, note: why)
         self.forward(c, Data(again.utf8) + renamed, to: gw.up, record: id)
       }
       if let k = companyKey {
@@ -492,40 +510,59 @@ public final class LocalForwarder: @unchecked Sendable {
     forward(c, Data(req.utf8) + body, to: company, record: id, onForbidden: onForbidden)
   }
 
-  /// GET /v1/models with a second gateway: both lists as one (ModelRoutes.merge), each read with
-  /// that gateway's key; the routes follow what was read. The model API's answer, if not a list
-  /// (a key turned down, say), is passed back as it is; the second's failing leaves its models out.
-  private func listModels(_ c: NWConnection, head: String, path: String, second: Gateway, record: Int?) {
+  /// GET /v1/models with other gateways: all the lists as one (ModelRoutes.merge), each read with
+  /// its gateway's key, with the models typed in for it added; the routes follow what was read.
+  /// The model API's answer, if not a list (a key turned down, say), is passed back as it is;
+  /// another gateway's failing leaves out its models (but those typed in).
+  private func listModels(_ c: NWConnection, head: String, path: String, gateways gws: [Gateway], record: Int?) {
     let sent = Self.sentKey(head)
     let companyAuth = sent ? (key.map { "Bearer " + $0 } ?? Self.header("authorization", in: head)) : nil
-    let secondAuth = sent ? "Bearer " + second.key : nil
     let version = Self.header("anthropic-version", in: head)
     let companyURL = company.url(path)
     Task { [weak self] in
       async let a = ModelLists.get(companyURL, auth: companyAuth, version: version)
-      async let b = ModelLists.get(second.up.url(path), auth: secondAuth, version: version)
-      let (got, theirs) = await (a, b)
+      let theirs = await withTaskGroup(of: (Int, ModelLists.Reply?).self) { group in
+        for (i, g) in gws.enumerated() {
+          let auth = sent ? "Bearer " + g.key : nil
+          group.addTask { (i, await ModelLists.get(g.up.url(path), auth: auth, version: version)) }
+        }
+        var out = [ModelLists.Reply?](repeating: nil, count: gws.count)
+        for await (i, r) in group { out[i] = r }
+        return out
+      }
+      let got = await a
       guard let self else { return }
-      // A model API with no model list (404) lists nothing: the second's models are the list.
+      // A model API with no model list (404) lists nothing: the others' models are the list.
       let mine = got.map { $0.status == 404 ? ModelLists.Reply(status: 200, body: Data(#"{"data":[]}"#.utf8)) : $0 }
-      let theirIDs = theirs.flatMap { (200..<300).contains($0.status) ? ModelRoutes.ids(in: $0.body) : nil }
+      // Each other's list as read (nil: unreadable), with its typed-in models.
+      let lists: [Data?] = zip(gws, theirs).map { g, r in
+        let read = r.flatMap { (200..<300).contains($0.status) && ModelRoutes.ids(in: $0.body) != nil ? $0.body : nil }
+        return ModelRoutes.adding(g.models, to: read)
+      }
       self.queue.async {
-        guard let mine, (200..<300).contains(mine.status), let merged = ModelRoutes.merge(company: mine.body, second: theirIDs == nil ? nil : theirs?.body) else {
+        guard let mine, (200..<300).contains(mine.status), let merged = ModelRoutes.merge(company: mine.body, others: lists) else {
           self.log?("GET \(path): 公司网关 " + (mine.map { "\($0.status)" } ?? "连不上"))
           if let record { self.requestLog?.finish(record, status: mine?.status ?? 502, note: mine == nil ? "连不上公司网关" : nil) }
           if let mine { return self.reply(c, mine.status, mine.body, json: true) }
           return self.reply(c, 502, "QuotaBar 本地转发连不上 \(self.company.label)")
         }
         let myIDs = ModelRoutes.ids(in: mine.body) ?? []
-        if let theirIDs {
-          self.routes = ModelRoutes(company: myIDs, second: theirIDs, renames: self.routes.renames)
-          self.onModels?(myIDs, theirIDs)
-        } else {
-          self.log?("GET \(path): 其他网关 " + (theirs.map { "\($0.status)" } ?? "连不上") + ", 只列公司网关的模型")
+        var read: [String: [String]] = [:]
+        var missing: [String] = []
+        let old = self.routes
+        let listed: [ModelRoutes.Listed] = zip(gws, lists).map { g, l in
+          if let ids = l.flatMap({ ModelRoutes.ids(in: $0) }) {
+            read[g.id] = ids
+            return .init(id: g.id, models: ids)
+          }
+          missing.append(g.name)
+          return .init(id: g.id, models: old.models(of: g.id) ?? [])
         }
-        let r = self.routes
-        self.log?("GET \(path): \(ModelRoutes.ids(in: merged)?.count ?? 0) 个模型" + (r.conflicts.isEmpty ? "" : ", 两边都有: " + r.conflicts.sorted().joined(separator: ", ")))
-        if let record { self.requestLog?.finish(record, status: 200, note: theirIDs == nil ? "其他网关的列表没读到" : nil) }
+        self.routes = ModelRoutes(company: myIDs, lists: listed, renames: old.renames)
+        self.onModels?(myIDs, read)
+        if !missing.isEmpty { self.log?("GET \(path): 读不到 " + missing.joined(separator: ", ") + " 的模型列表") }
+        self.log?("GET \(path): \(ModelRoutes.ids(in: merged)?.count ?? 0) 个模型")
+        if let record { self.requestLog?.finish(record, status: 200, note: missing.isEmpty ? nil : "没读到: " + missing.joined(separator: ", ")) }
         self.reply(c, 200, merged, json: true)
       }
     }

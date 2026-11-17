@@ -174,8 +174,15 @@ c = {"url": "http://127.0.0.1:9931/api/v1/billing/usage", "baseURL": f"http://{i
      "people": [{"id": "b", "name": "yy", "key": "sk-demo-yy"}], "claudeDir": tmp + "/claude", "desktopDir": tmp + "/desktop",
      "ours": ["http://127.0.0.1:47831"]}
 if on == "on":
+    # As an earlier version saved its one other gateway: read as the first of the list.
     c["otherURL"] = "http://127.0.0.1:9932/other/"
     c["otherKey"] = "sk-other"
+if on == "multi":
+    # Two, the second like DeepSeek's (no model list: its model typed in); a mapping to it.
+    c["gateways"] = [{"id": "other", "name": "GLM", "url": "http://127.0.0.1:9932/other/", "key": "sk-other"},
+                     {"id": "ds", "name": "DeepSeek", "url": "http://127.0.0.1:9932/ds", "key": "sk-ds", "models": "ds-typed, glm-other"}]
+    c["modelMap"] = [{"id": "m1", "from": "claude-company", "gateway": "ds", "to": "ds-typed"},
+                     {"id": "m2", "from": "claude-company", "gateway": None, "to": "never"}]
 json.dump(c, open(d + "/config.json", "w"))
 PY
 }
@@ -205,6 +212,27 @@ reply="$(curl -sS -m 20 -H 'Authorization: Bearer sk-demo-yy' -H 'Content-Type: 
 echo "company's model: $reply"
 [[ "$reply" == *'"text": "hi"'* ]] || { echo "the company's model did not go to the model API"; exit 1; }
 echo "OK: one model list of both; each model's requests go to its gateway, the other gateway's with its key"
+quit
+echo "OK: an earlier version's other gateway (otherURL, otherKey) is read as the first of the list"
+
+other_config multi
+build/QuotaBar.app/Contents/MacOS/QuotaBar --requests >>"$TMP/app.log" 2>&1 &
+for _ in $(seq 40); do curl -s -o /dev/null "http://127.0.0.1:47831/" && break; sleep 0.5; done
+models="$(curl -sS -m 20 -H 'Authorization: Bearer sk-demo-yy' -H 'anthropic-version: 2023-06-01' "http://127.0.0.1:47831/v1/models?limit=100")"
+echo "models: $models"
+python3 -c 'import json,sys; ids=[m["id"] for m in json.loads(sys.argv[1])["data"]]; assert ids == ["claude-company", "glm-other", "ds-typed"], ids' "$models"
+reply="$(curl -sS -m 20 -H 'Authorization: Bearer sk-demo-yy' -H 'Content-Type: application/json' -d '{"model":"ds-typed","max_tokens":1}' "http://127.0.0.1:47831/v1/messages")"
+echo "typed-in model: $reply"
+[[ "$reply" == *"from deepseek"* ]] || { echo "the typed-in model did not go to its gateway"; cat "$TMP/app.log"; exit 1; }
+python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); assert s["path"] == "/ds/v1/messages" and s["auth"] == "Bearer sk-ds", s' "$TMP/other.json"
+# glm-other: both list it, the first (GLM) gets it.
+reply="$(curl -sS -m 20 -H 'Authorization: Bearer sk-demo-yy' -H 'Content-Type: application/json' -d '{"model":"glm-other","max_tokens":1}' "http://127.0.0.1:47831/v1/messages")"
+[[ "$reply" == *"from the other gateway"* ]] || { echo "a model two gateways list did not go to the first: $reply"; exit 1; }
+# Mapped twice: the first mapping counts.
+reply="$(curl -sS -m 20 -H 'Authorization: Bearer sk-demo-yy' -H 'Content-Type: application/json' -d '{"model":"claude-company","max_tokens":1}' "http://127.0.0.1:47831/v1/messages")"
+[[ "$reply" == *"from deepseek"* ]] || { echo "the first mapping did not count: $reply"; exit 1; }
+python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); assert json.loads(s["body"])["model"] == "ds-typed", s' "$TMP/other.json"
+echo "OK: several gateways: the first that lists a model gets it; a typed-in model and the first mapping count"
 sleep 2
 mkdir -p build/shots
 screencapture -x build/shots/requests.png || true

@@ -40,26 +40,20 @@ struct SettingsView: View {
         } header: {
           header("公司网关")
         }
-        Section {
-          OtherGatewayRows()
-        } header: {
-          header("其他网关")
-        } footer: {
-          footer("两个网关的模型合在一起供 Claude Code 和 Desktop 选择, 用哪个模型就发给哪个网关; 用量只看公司网关")
-        }
+        GatewaySections()
         Section {
           ModelMapRows()
         } header: {
           header("模型映射")
         } footer: {
-          footer("Desktop 只显示它认识的 Claude 模型: 在这里让其中一个代表别的模型. 只改请求里的模型名, 其余不变; Desktop 里显示的还是原名. 模型名以请求记录的「模型」列为准")
+          footer("Desktop 只显示它认识的 Claude 模型: 在这里让其中一个代表别的模型. 只改请求里的模型名, 其余不变; Desktop 里显示的还是原名. 模型名以请求记录的「模型」列为准. 同一个模型映射了多条时, 最上面的生效")
         }
         Section {
           FallbackRows()
         } header: {
           header("额度用尽时")
         } footer: {
-          footer("看板读到当前 key 额度已用完 (或公司网关回 403, 如部门额度用尽) 时, 请求换成所选模型发给其他网关; 读数显示额度恢复后自动切回. 换网关后原来的提示词缓存用不上")
+          footer("看板读到当前 key 额度已用完 (或公司网关回 403, 如部门额度用尽) 时, 请求换成所选模型发给所选网关; 读数显示额度恢复后自动切回. 换网关后原来的提示词缓存用不上")
         }
         Section {
           ForEach(store.people) { p in
@@ -281,56 +275,117 @@ private struct ForwardRow: View {
   }
 }
 
-/// Another gateway beside the company's: its address and key, and what it lists. Saved as typed.
-/// Set, Claude Code and Desktop go through the forwarder, which sends the requests for its models
-/// to it.
-private struct OtherGatewayRows: View {
+/// The gateways besides the company's, one section each, in order (moved up and down, removed),
+/// and adding one (blank, or DeepSeek's). Saved as typed. With one set, Claude Code and Desktop go
+/// through the forwarder, which sends each request to the first gateway that lists its model.
+private struct GatewaySections: View {
   @Environment(Store.self) private var store
-  @State private var url = ""
-  @State private var key = ""
+  @State private var rows: [GatewayConfig] = []
+  @State private var loaded = false
 
   var body: some View {
     Group {
-      TextField(text: $url, prompt: Text("留空不用")) { Text("模型接口").font(.ui(13)) }
-        .font(.mono(12.5))
-      SecureField(text: $key, prompt: Text("Bearer key")) { Text("Key").font(.ui(13)) }
-        .font(.mono(12.5))
-      status
+      ForEach($rows) { $g in
+        let i = rows.firstIndex { $0.id == g.id } ?? 0
+        Section {
+          GatewayRows(g: $g)
+        } header: {
+          HStack(spacing: 10) {
+            Text("其他网关 \(i + 1) · \(g.label)").font(.ui(12, .semibold))
+            Spacer()
+            Button { move(g.id, by: -1) } label: { Image(systemName: "arrow.up").font(.system(size: 10)) }
+              .disabled(i == 0)
+              .help("往前移: 同名模型优先发给前面的网关")
+            Button { move(g.id, by: 1) } label: { Image(systemName: "arrow.down").font(.system(size: 10)) }
+              .disabled(i == rows.count - 1)
+              .help("往后移")
+            Button { let id = g.id; rows.removeAll { $0.id == id } } label: { Icon(.trash, size: 11) }
+              .help("删除这个网关")
+          }
+          .buttonStyle(.borderless)
+        }
+      }
+      Section {
+        HStack(spacing: 14) {
+          Button { rows.append(GatewayConfig()) } label: { HStack(spacing: 4) { Icon(.plus, size: 11); Text("添加网关") } }
+          Button { rows.append(GatewayConfig(name: "DeepSeek", url: "https://api.deepseek.com/anthropic")) } label: { HStack(spacing: 4) { Icon(.plus, size: 11); Text("DeepSeek 官方") } }
+            .help("填好 DeepSeek 官方的 Anthropic 兼容地址, 再填 key")
+          Spacer()
+        }
+        .buttonStyle(.borderless)
+        .font(.ui(12))
+      } header: {
+        if rows.isEmpty { Text("其他网关").font(.ui(12, .semibold)) }
+      } footer: {
+        Text("各网关的模型合在一起供 Claude Code 和 Desktop 选择, 用哪个模型就发给哪个网关: 公司网关优先, 其余从上到下, 同名模型发给最前面的那个. 用量只看公司网关")
+          .font(.ui(11)).foregroundStyle(.secondary)
+      }
     }
     .onAppear {
-      url = store.config.otherURL
-      key = store.config.otherKey
+      guard !loaded else { return }
+      rows = store.config.gateways
+      loaded = true
     }
-    .task(id: url + "\n" + key) {
+    .task(id: rows) {
       try? await Task.sleep(for: .milliseconds(600))
-      if !Task.isCancelled { save() }
+      if !Task.isCancelled && loaded { store.saveGateways(rows) }
     }
-    .onDisappear { save() }
+    .onDisappear { if loaded { store.saveGateways(rows) } }
     .animation(.snappy, value: store.gatewayModels)
+  }
+
+  private func move(_ id: String, by d: Int) {
+    guard let i = rows.firstIndex(where: { $0.id == id }), rows.indices.contains(i + d) else { return }
+    rows.swapAt(i, i + d)
+  }
+}
+
+/// One gateway: its name, address, key, models typed in, and one line on what it adds.
+private struct GatewayRows: View {
+  @Environment(Store.self) private var store
+  @Binding var g: GatewayConfig
+
+  var body: some View {
+    TextField(text: $g.name, prompt: Text("如 DeepSeek")) { Text("名称").font(.ui(13)) }
+      .font(.ui(12.5))
+    TextField(text: $g.url, prompt: Text("https://...")) { Text("模型接口").font(.ui(13)) }
+      .font(.mono(12.5))
+    SecureField(text: $g.key, prompt: Text("Bearer key")) { Text("Key").font(.ui(13)) }
+      .font(.mono(12.5))
+    TextField(text: $g.models, prompt: Text("可不填; 读不到列表时手动填, 逗号分隔")) { Text("模型").font(.ui(13)) }
+      .font(.mono(12.5))
+      .help("这个网关的模型名, 加在它的模型列表之后 (读不到列表的网关, 比如 DeepSeek 官方, 就靠这里)")
+    status
   }
 
   /// One line: what is missing, what went wrong, or how many models it adds.
   @ViewBuilder private var status: some View {
     let m = store.gatewayModels
-    let u = url.trimmingCharacters(in: .whitespaces), k = key.trimmingCharacters(in: .whitespaces)
+    let u = g.url.trimmingCharacters(in: .whitespaces), k = g.key.trimmingCharacters(in: .whitespaces)
     if u.isEmpty && k.isEmpty {
       EmptyView()
     } else if !Store.usable(u) {
       line("地址需以 http:// 或 https:// 开头", bad: true)
     } else if k.isEmpty {
       line("还需要 key", bad: true)
-    } else if !m.conflicts.isEmpty {
-      line("两边都有: " + m.conflicts.joined(separator: ", ") + ", 用这些模型会报错", bad: true)
-    } else if let e = m.error {
-      line(e, bad: true)
-    } else if let models = m.other {
-      HStack(spacing: 8) {
-        line("已加入 \(models.count) 个模型", bad: false)
-          .help(models.joined(separator: "\n"))
-        Button("请求记录") { Windows.show(.requests, store) }
-          .buttonStyle(.link)
-          .font(.ui(11))
+    } else if let models = m.lists[g.id] {
+      let taken = store.taken(from: g.id)
+      VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: 8) {
+          line("已加入 \(models.count - taken.count) 个模型", bad: false)
+            .help(models.filter { !taken.contains($0) }.joined(separator: "\n"))
+          Button("请求记录") { Windows.show(.requests, store) }
+            .buttonStyle(.link)
+            .font(.ui(11))
+        }
+        if !taken.isEmpty {
+          line("\(taken.count) 个模型前面的网关也有, 发给前面的: " + taken.prefix(3).joined(separator: ", ") + (taken.count > 3 ? " 等" : ""), bad: true)
+            .help(taken.joined(separator: "\n"))
+        }
+        if let e = m.errors[g.id] { line(e, bad: true) }
       }
+    } else if let e = m.errors[g.id] {
+      line(e, bad: true)
     } else {
       HStack(spacing: 6) {
         ProgressView().controlSize(.mini)
@@ -345,10 +400,24 @@ private struct OtherGatewayRows: View {
       .font(.ui(11))
       .textSelection(.enabled)
   }
+}
 
-  private func save() {
-    guard url != store.config.otherURL || key != store.config.otherKey else { return }
-    store.saveOtherGateway(url: url, key: key)
+/// Which gateway: the company's ("") or another, by its id; a menu of their names.
+private struct GatewayPicker: View {
+  @Environment(Store.self) private var store
+  @Binding var id: String
+  var company = true
+
+  var body: some View {
+    let gws = store.config.gateways
+    Picker("网关", selection: $id) {
+      if company { Text("公司").tag("") }
+      ForEach(gws) { g in Text(g.label).tag(g.id) }
+      if !id.isEmpty && !gws.contains(where: { $0.id == id }) { Text("已删除的网关").tag(id) }
+    }
+    .labelsHidden()
+    .pickerStyle(.menu)
+    .fixedSize()
   }
 }
 
@@ -372,11 +441,10 @@ private struct ModelMapRows: View {
           }
           ForEach($rows) { $r in
             GridRow(alignment: .center) {
-              ModelField(text: $r.from, prompt: "如 claude-haiku-5-5", choices: store.gatewayModels.company ?? [])
+              ModelField(text: $r.from, prompt: "填 Desktop 用的模型名", choices: store.gatewayModels.company ?? [])
               Text("→").font(.ui(13)).foregroundStyle(.secondary)
-              Segmented(selection: $r.toOther, options: [(false, "公司"), (true, "其他")])
-                .fixedSize()
-              ModelField(text: $r.to, prompt: "选择或输入", choices: (r.toOther ? store.gatewayModels.other : store.gatewayModels.company) ?? [])
+              GatewayPicker(id: Binding(get: { $r.wrappedValue.gateway ?? "" }, set: { $r.wrappedValue.gateway = $0.isEmpty ? nil : $0 }))
+              ModelField(text: $r.to, prompt: "选择或输入", choices: (r.gateway.map { store.gatewayModels.lists[$0] } ?? store.gatewayModels.company) ?? [])
               Button { rows.removeAll { $0.id == r.id } } label: { Icon(.trash, size: 12) }
                 .buttonStyle(.borderless)
                 .help("删除这条映射")
@@ -385,15 +453,15 @@ private struct ModelMapRows: View {
         }
       }
       HStack {
-        Button { rows.append(ModelMapping()) } label: { HStack(spacing: 4) { Icon(.plus, size: 11); Text("添加映射") } }
+        Button { var m = ModelMapping(); m.gateway = store.config.gateways.first?.id; rows.append(m) } label: { HStack(spacing: 4) { Icon(.plus, size: 11); Text("添加映射") } }
           .buttonStyle(.borderless)
           .font(.ui(12))
         Spacer()
-        if rows.contains(where: { $0.toOther }) && store.otherGateway == nil {
-          Label { Text("映射到其他网关的, 要先填其他网关") } icon: { Icon(.warning, size: 11) }
-            .foregroundStyle(.orange)
-            .font(.ui(11))
-        }
+      }
+      ForEach(problems, id: \.self) { p in
+        Label { Text(p) } icon: { Icon(.warning, size: 11) }
+          .foregroundStyle(.orange)
+          .font(.ui(11))
       }
     }
     .onAppear { rows = store.config.modelMap }
@@ -402,6 +470,24 @@ private struct ModelMapRows: View {
 
   private func heading(_ s: String) -> some View {
     Text(s).font(.ui(11)).foregroundStyle(.secondary)
+  }
+
+  /// What keeps a mapping from being used: not filled in, its gateway gone, or one above for the same model.
+  private var problems: [String] {
+    var out: [String] = []
+    var seen = Set<String>()
+    let ids = Set(store.config.gateways.map(\.id))
+    for (i, r) in rows.enumerated() {
+      let from = r.from.trimmingCharacters(in: .whitespaces)
+      if !r.complete {
+        out.append("第 \(i + 1) 条" + (from.isEmpty ? "左边" : "右边") + "没填 (或两边一样), 不生效")
+      } else if let g = r.gateway, !ids.contains(g) {
+        out.append("第 \(i + 1) 条的网关已删除, 不生效")
+      } else if !seen.insert(from).inserted {
+        out.append("第 \(i + 1) 条: \(from) 上面已经映射过, 这条不生效")
+      }
+    }
+    return out
   }
 }
 
@@ -432,11 +518,12 @@ private struct ModelField: View {
   }
 }
 
-/// Falling back to the other gateway when the company's quota is used up: on or off, the model,
-/// and whether it is falling back now. Saved as set.
+/// Falling back to another gateway when the company's quota is used up: on or off, the gateway
+/// and model, and whether it is falling back now. Saved as set.
 private struct FallbackRows: View {
   @Environment(Store.self) private var store
   @State private var on = false
+  @State private var gateway = ""
   @State private var model = ""
 
   var body: some View {
@@ -448,27 +535,36 @@ private struct FallbackRows: View {
           .fixedSize()
       }
       HStack(spacing: 8) {
-        Text("改用的模型").font(.ui(13)).foregroundStyle(on ? .primary : .secondary)
-        ModelField(text: $model, prompt: "选择或输入", choices: store.gatewayModels.other ?? [])
+        Text("改用").font(.ui(13)).foregroundStyle(on ? .primary : .secondary)
+        GatewayPicker(id: $gateway, company: false)
+          .disabled(!on)
+        ModelField(text: $model, prompt: "选择或输入模型", choices: store.gatewayModels.lists[gateway] ?? [])
           .disabled(!on)
       }
 
-      if on && store.otherGateway == nil {
-        status("要先填其他网关", bad: true)
+      if on && store.config.gateways.isEmpty {
+        status("要先添加其他网关", bad: true)
+      } else if on && !store.otherGateways.contains(where: { $0.id == gateway }) {
+        status("还需要选一个填好地址和 key 的网关", bad: true)
       } else if on && model.trimmingCharacters(in: .whitespaces).isEmpty {
         status("还需要选一个模型", bad: true)
-      } else if let why = store.fallingBack, let m = store.fallbackModelNow {
+      } else if let why = store.fallingBack, let m = store.fallbackLabel {
         status("降级中: \(why), 改用 \(m); 额度恢复后自动切回", bad: true)
       }
     }
     .onAppear {
       on = store.config.autoFallback
+      gateway = store.config.fallbackGateway
+      if !store.config.gateways.contains(where: { $0.id == gateway }), let first = store.config.gateways.first { gateway = first.id }
       model = store.config.fallbackModel
     }
-    .onChange(of: on) { store.setFallback(on: on, model: model) }
-    .onChange(of: model) { store.setFallback(on: on, model: model) }
+    .onChange(of: on) { save() }
+    .onChange(of: gateway) { save() }
+    .onChange(of: model) { save() }
     .animation(.snappy, value: store.fallingBack)
   }
+
+  private func save() { store.setFallback(on: on, gateway: gateway, model: model) }
 
   private func status(_ s: String, bad: Bool) -> some View {
     Label { Text(s) } icon: { Icon(bad ? .warning : .checkFilled, size: 11) }

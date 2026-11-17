@@ -3,12 +3,20 @@ import XCTest
 @testable import QuotaCore
 
 final class ModelRoutesTests: XCTestCase {
-  func testARequestGoesWhereItsModelIsListedAndAModelBothListIsAConflict() {
-    let r = ModelRoutes(company: ["claude-a", "shared"], second: ["glm-b", "shared"])
+  func testARequestGoesToTheFirstGatewayThatListsItsModel() {
+    let r = ModelRoutes(company: ["claude-a", "shared"], lists: [.init(id: "glm", models: ["glm-b", "shared", "both"]), .init(id: "ds", models: ["ds-c", "both"])])
     XCTAssertEqual(r.route("claude-a"), .company)
-    XCTAssertEqual(r.route("glm-b"), .second)
-    XCTAssertEqual(r.route("shared"), .conflict("shared"))
-    XCTAssertEqual(r.conflicts, ["shared"])
+    XCTAssertEqual(r.route("glm-b"), .gateway("glm"))
+    XCTAssertEqual(r.route("ds-c"), .gateway("ds"))
+    // Listed by several: the first in order (the company's first).
+    XCTAssertEqual(r.route("shared"), .company)
+    XCTAssertEqual(r.route("both"), .gateway("glm"))
+    XCTAssertEqual(r.taken(from: "glm"), ["shared"])
+    XCTAssertEqual(r.taken(from: "ds"), ["both"])
+    XCTAssertEqual(r.models(of: "ds"), ["ds-c", "both"])
+    XCTAssertNil(r.models(of: "gone"))
+    // The order turned round: the other one has it.
+    XCTAssertEqual(ModelRoutes(lists: [.init(id: "ds", models: ["both"]), .init(id: "glm", models: ["both"])]).route("both"), .gateway("ds"))
     // Unknown, or none named: the company's.
     XCTAssertEqual(r.route("other"), .company)
     XCTAssertEqual(r.route(nil), .company)
@@ -33,40 +41,38 @@ final class ModelRoutesTests: XCTestCase {
     XCTAssertFalse(ModelRoutes.isList("/v1/messages"))
   }
 
-  func testBothListsAsOneWithAModelBothListOnce() throws {
+  func testAllListsAsOneWithAModelSeveralListOnce() throws {
     let company = Data(#"{"data":[{"id":"claude-a","type":"model","display_name":"A"},{"id":"shared","type":"model"}],"has_more":true,"first_id":"claude-a","last_id":"shared"}"#.utf8)
     let second = Data(#"{"data":[{"id":"glm-b","type":"model"},{"id":"shared","type":"model","display_name":"theirs"}]}"#.utf8)
-    let merged = try XCTUnwrap(ModelRoutes.merge(company: company, second: second))
-    XCTAssertEqual(ModelRoutes.ids(in: merged), ["claude-a", "shared", "glm-b"])
+    let third = Data(#"{"data":[{"id":"ds-c","type":"model"},{"id":"glm-b","type":"model"}]}"#.utf8)
+    let merged = try XCTUnwrap(ModelRoutes.merge(company: company, others: [second, nil, Data("oops".utf8), third]))
+    XCTAssertEqual(ModelRoutes.ids(in: merged), ["claude-a", "shared", "glm-b", "ds-c"])
     let o = try XCTUnwrap(JSONSerialization.jsonObject(with: merged) as? [String: Any])
     XCTAssertEqual(o["has_more"] as? Bool, false)
     XCTAssertEqual(o["first_id"] as? String, "claude-a")
-    XCTAssertEqual(o["last_id"] as? String, "glm-b")
-    // The company's entry for a model both list stays (with its fields).
+    XCTAssertEqual(o["last_id"] as? String, "ds-c")
+    // The first entry for a model several list stays (with its fields).
     let shared = (o["data"] as? [[String: Any]])?.first { $0["id"] as? String == "shared" }
     XCTAssertNil(shared?["display_name"])
-    // The second unreadable or missing: the company's list as it is (has_more set false).
-    XCTAssertEqual(ModelRoutes.ids(in: try XCTUnwrap(ModelRoutes.merge(company: company, second: Data("oops".utf8)))), ["claude-a", "shared"])
-    XCTAssertEqual(ModelRoutes.ids(in: try XCTUnwrap(ModelRoutes.merge(company: company, second: nil))), ["claude-a", "shared"])
+    XCTAssertEqual(ModelRoutes.ids(in: try XCTUnwrap(ModelRoutes.merge(company: company, others: []))), ["claude-a", "shared"])
     // The company's not a list: nothing to merge into.
-    XCTAssertNil(ModelRoutes.merge(company: Data(#"{"error":"x"}"#.utf8), second: second))
+    XCTAssertNil(ModelRoutes.merge(company: Data(#"{"error":"x"}"#.utf8), others: [second]))
   }
 
-  func testTheConflictReplyNamesTheModelInAnErrorClientsRead() throws {
-    let o = try XCTUnwrap(JSONSerialization.jsonObject(with: ModelRoutes.conflictReply("shared")) as? [String: Any])
-    XCTAssertEqual(o["type"] as? String, "error")
-    let e = try XCTUnwrap(o["error"] as? [String: Any])
-    XCTAssertEqual(e["type"] as? String, "invalid_request_error")
-    XCTAssertTrue((e["message"] as? String ?? "").contains("shared"))
+  func testModelsTypedInAreAddedToAListOrStandForOne() throws {
+    let list = Data(#"{"data":[{"id":"a","type":"model"}],"has_more":false}"#.utf8)
+    XCTAssertEqual(ModelRoutes.ids(in: try XCTUnwrap(ModelRoutes.adding(["b", "a", "b"], to: list))), ["a", "b"])
+    XCTAssertEqual(ModelRoutes.ids(in: try XCTUnwrap(ModelRoutes.adding(["x"], to: nil))), ["x"])
+    XCTAssertEqual(ModelRoutes.ids(in: try XCTUnwrap(ModelRoutes.adding([], to: list))), ["a"])
+    XCTAssertNil(ModelRoutes.adding([], to: nil))
   }
 
   func testAMappedModelGoesWhereItsMappingSaysBeforeAnyList() {
-    let r = ModelRoutes(company: ["claude-haiku-5-5", "shared"], second: ["deepseek-chat", "shared"],
-                        renames: ["claude-haiku-5-5": .init(toOther: true, model: "deepseek-chat"), "shared": .init(toOther: false, model: "claude-x")])
-    XCTAssertEqual(r.route("claude-haiku-5-5"), .renamed(.init(toOther: true, model: "deepseek-chat")))
-    // A mapping decides a model both list too.
-    XCTAssertEqual(r.route("shared"), .renamed(.init(toOther: false, model: "claude-x")))
-    XCTAssertEqual(r.route("deepseek-chat"), .second)
+    let r = ModelRoutes(company: ["claude-haiku-5-5", "shared"], lists: [.init(id: "ds", models: ["deepseek-chat", "shared"])],
+                        renames: ["claude-haiku-5-5": .init(gateway: "ds", model: "deepseek-chat"), "shared": .init(gateway: nil, model: "claude-x")])
+    XCTAssertEqual(r.route("claude-haiku-5-5"), .renamed(.init(gateway: "ds", model: "deepseek-chat")))
+    XCTAssertEqual(r.route("shared"), .renamed(.init(gateway: nil, model: "claude-x")))
+    XCTAssertEqual(r.route("deepseek-chat"), .gateway("ds"))
   }
 
   func testOnlyTheTopLevelModelValueChangesEveryOtherByteStays() throws {

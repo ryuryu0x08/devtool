@@ -67,25 +67,24 @@ struct Config: Codable, Equatable {
   /// The portal endpoint reached with the cookies.
   var cookieURL = ProxyUsageAPI.defaultURL
   var barStyle = BarStyle.full
-  /// Another gateway beside the company's (the model API): the requests for the models it lists
-  /// go to it, with this key (Bearer). Empty: none. Set, Claude Code and Desktop go through the
-  /// forwarder. Only the company's has a usage API.
-  var otherURL = ""
-  var otherKey = ""
+  /// Gateways beside the company's (the model API), in order: the requests for the models one
+  /// lists go to the first that lists them (the company's comes before all), with its key. With
+  /// one set, Claude Code and Desktop go through the forwarder. Only the company's has a usage API.
+  var gateways: [GatewayConfig] = []
   /// Models sent on as others (Desktop offers only the models it knows: one of them can stand
-  /// for a model of the other gateway).
+  /// for a model of another gateway).
   var modelMap: [ModelMapping] = []
   /// When the key a request goes with has no quota left (the readings say so, or the company's
-  /// gateway answers 403), send it to the other gateway as `fallbackModel` instead.
+  /// gateway answers 403), send it to gateway `fallbackGateway` as `fallbackModel` instead.
   var autoFallback = false
+  var fallbackGateway = ""
   var fallbackModel = ""
 
-  /// The mappings filled in, by the model asked for (a later one for the same model wins).
+  /// The mappings filled in, by the model asked for (the first one for a model counts).
   var renames: [String: ModelRoutes.Rename] {
     var out: [String: ModelRoutes.Rename] = [:]
-    for m in modelMap {
-      let from = m.from.trimmingCharacters(in: .whitespaces), to = m.to.trimmingCharacters(in: .whitespaces)
-      if !from.isEmpty && !to.isEmpty && from != to { out[from] = ModelRoutes.Rename(toOther: m.toOther, model: to) }
+    for m in modelMap where m.complete && out[m.from.trimmingCharacters(in: .whitespaces)] == nil {
+      out[m.from.trimmingCharacters(in: .whitespaces)] = ModelRoutes.Rename(gateway: m.gateway, model: m.to.trimmingCharacters(in: .whitespaces))
     }
     return out
   }
@@ -102,7 +101,7 @@ struct Config: Codable, Equatable {
   init() {}
 
   private enum CodingKeys: String, CodingKey {
-    case url, interval, people, retired, settingsPath, claudeDir, desktopDir, baseURL, desktopRestart, forward, forwardPort, ours, desktopPrevious, swapKeys, desktopPerson, cookieSync, cookieBrowser, cookieURL, barStyle, otherURL, otherKey, modelMap, autoFallback, fallbackModel, keys
+    case url, interval, people, retired, settingsPath, claudeDir, desktopDir, baseURL, desktopRestart, forward, forwardPort, ours, desktopPrevious, swapKeys, desktopPerson, cookieSync, cookieBrowser, cookieURL, barStyle, otherURL, otherKey, gateways, modelMap, autoFallback, fallbackGateway, fallbackModel, keys
   }
   private struct OldKey: Decodable { var id: String; var key: String }
 
@@ -130,10 +129,17 @@ struct Config: Codable, Equatable {
     let cu = try c.decodeIfPresent(String.self, forKey: .cookieURL) ?? ""
     cookieURL = cu.isEmpty ? ProxyUsageAPI.defaultURL : cu
     barStyle = (try? c.decodeIfPresent(BarStyle.self, forKey: .barStyle)) ?? .full
-    otherURL = try c.decodeIfPresent(String.self, forKey: .otherURL) ?? ""
-    otherKey = try c.decodeIfPresent(String.self, forKey: .otherKey) ?? ""
+    if let g = try? c.decodeIfPresent([GatewayConfig].self, forKey: .gateways) {
+      gateways = g
+    } else {
+      // Earlier versions had one other gateway: it becomes the first, with the id the mappings
+      // and the fallback of those versions meant (GatewayConfig.firstID).
+      let u = try c.decodeIfPresent(String.self, forKey: .otherURL) ?? "", k = try c.decodeIfPresent(String.self, forKey: .otherKey) ?? ""
+      if !u.isEmpty || !k.isEmpty { gateways = [GatewayConfig(id: GatewayConfig.firstID, name: "其他网关", url: u, key: k)] }
+    }
     modelMap = (try? c.decodeIfPresent([ModelMapping].self, forKey: .modelMap)) ?? []
     autoFallback = try c.decodeIfPresent(Bool.self, forKey: .autoFallback) ?? false
+    fallbackGateway = try c.decodeIfPresent(String.self, forKey: .fallbackGateway) ?? GatewayConfig.firstID
     fallbackModel = try c.decodeIfPresent(String.self, forKey: .fallbackModel) ?? ""
     let b = try c.decodeIfPresent(String.self, forKey: .baseURL) ?? ""
     baseURL = b.isEmpty ? Config.defaultBaseURL : b
@@ -164,37 +170,108 @@ struct Config: Codable, Equatable {
     try c.encode(cookieBrowser, forKey: .cookieBrowser)
     try c.encode(cookieURL, forKey: .cookieURL)
     try c.encode(barStyle, forKey: .barStyle)
-    try c.encode(otherURL, forKey: .otherURL)
-    try c.encode(otherKey, forKey: .otherKey)
+    try c.encode(gateways, forKey: .gateways)
     try c.encode(modelMap, forKey: .modelMap)
     try c.encode(autoFallback, forKey: .autoFallback)
+    try c.encode(fallbackGateway, forKey: .fallbackGateway)
     try c.encode(fallbackModel, forKey: .fallbackModel)
     try c.encode(baseURL, forKey: .baseURL)
     try c.encode(desktopRestart, forKey: .desktopRestart)
   }
 }
 
-/// A model Desktop (or Claude Code) asks for, sent on as `to`, to the other gateway (`toOther`)
-/// or the company's.
+/// A gateway besides the company's: its name, address, key (sent as Bearer), and models typed in
+/// for it (for a gateway whose model list can't be read, or leaves some out).
+struct GatewayConfig: Codable, Equatable, Identifiable {
+  /// The id the one other gateway of earlier versions gets.
+  static let firstID = "other"
+
+  var id = UUID().uuidString
+  var name = ""
+  var url = ""
+  var key = ""
+  /// Typed in: names separated by commas, spaces or new lines.
+  var models = ""
+
+  /// Its name, or a stand-in while it has none.
+  var label: String {
+    let n = name.trimmingCharacters(in: .whitespaces)
+    return n.isEmpty ? (URL(string: url)?.host ?? "未命名网关") : n
+  }
+
+  /// The models typed in, each once.
+  var typedModels: [String] {
+    var seen = Set<String>()
+    return models.split(whereSeparator: { $0 == "," || $0 == "，" || $0.isWhitespace }).map(String.init).filter { seen.insert($0).inserted }
+  }
+
+  init(id: String = UUID().uuidString, name: String = "", url: String = "", key: String = "", models: String = "") {
+    self.id = id
+    self.name = name
+    self.url = url
+    self.key = key
+    self.models = models
+  }
+
+  init(from d: Decoder) throws {
+    let c = try d.container(keyedBy: CodingKeys.self)
+    id = try c.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+    name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+    url = try c.decodeIfPresent(String.self, forKey: .url) ?? ""
+    key = try c.decodeIfPresent(String.self, forKey: .key) ?? ""
+    models = try c.decodeIfPresent(String.self, forKey: .models) ?? ""
+  }
+}
+
+/// A model Desktop (or Claude Code) asks for, sent on as `to`, to gateway `gateway` (nil: the
+/// company's).
 struct ModelMapping: Codable, Equatable, Identifiable {
   var id = UUID().uuidString
   var from = ""
-  var toOther = true
+  var gateway: String? = GatewayConfig.firstID
   var to = ""
+
+  /// Both names filled in, and different: in use.
+  var complete: Bool {
+    let f = from.trimmingCharacters(in: .whitespaces), t = to.trimmingCharacters(in: .whitespaces)
+    return !f.isEmpty && !t.isEmpty && f != t
+  }
+
+  init() {}
+
+  private enum CodingKeys: String, CodingKey { case id, from, gateway, toOther, to }
+
+  init(from d: Decoder) throws {
+    let c = try d.container(keyedBy: CodingKeys.self)
+    id = try c.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+    from = try c.decodeIfPresent(String.self, forKey: .from) ?? ""
+    to = try c.decodeIfPresent(String.self, forKey: .to) ?? ""
+    if c.contains(.gateway) {
+      gateway = try c.decodeIfPresent(String.self, forKey: .gateway)
+    } else {
+      // Earlier versions: the other gateway, or the company's.
+      gateway = (try c.decodeIfPresent(Bool.self, forKey: .toOther) ?? true) ? GatewayConfig.firstID : nil
+    }
+  }
+
+  func encode(to e: Encoder) throws {
+    var c = e.container(keyedBy: CodingKeys.self)
+    try c.encode(id, forKey: .id)
+    try c.encode(from, forKey: .from)
+    // Written even when nil (the company's), so that it isn't read as an earlier version's.
+    try c.encode(gateway, forKey: .gateway)
+    try c.encode(to, forKey: .to)
+  }
 }
 
-/// Both gateways' models as last read: what the settings show.
+/// The gateways' models as last read: what the settings show.
 struct GatewayModels: Equatable {
-  /// The ids each gateway lists (nil: not read yet, or it couldn't be).
+  /// The company's models (nil: not read yet, or it couldn't be).
   var company: [String]?
-  var other: [String]?
-  /// Why the other gateway's list couldn't be read, if it couldn't.
-  var error: String?
-  /// Models both list: requests for them are turned away.
-  var conflicts: [String] {
-    guard let company, let other else { return [] }
-    return Set(company).intersection(other).sorted()
-  }
+  /// Each other gateway's, by its id, as read with the ones typed in (absent: not read yet).
+  var lists: [String: [String]] = [:]
+  /// Why a gateway's list couldn't be read, by its id.
+  var errors: [String: String] = [:]
 }
 
 /// A short message after an action: shown for a while, red when something went wrong.

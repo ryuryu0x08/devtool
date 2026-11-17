@@ -100,6 +100,18 @@ dark true
 shot panel-dark --panel-window
 shot dashboard-dark --dashboard
 dark false || true
+# Several gateways (none answering here: each says why), a mapping not filled in, a fallback.
+python3 - "$DIR" <<'PY'
+import json, sys
+p = sys.argv[1] + "/config.json"
+c = json.load(open(p))
+c["gateways"] = [{"id": "other", "name": "GLM", "url": "http://127.0.0.1:9939/other", "key": "sk-x"},
+                 {"id": "ds", "name": "DeepSeek", "url": "https://api.deepseek.invalid/anthropic", "key": "sk-y", "models": "deepseek-chat, deepseek-reasoner"}]
+c["modelMap"] = [{"id": "m1", "from": "", "gateway": "ds", "to": "deepseek-chat"}, {"id": "m2", "from": "claude-haiku-5-5", "gateway": "other", "to": "glm-4"}]
+c["autoFallback"], c["fallbackGateway"], c["fallbackModel"] = True, "ds", "deepseek-chat"
+json.dump(c, open(p, "w"))
+PY
+shot settings-gateways --settings
 ls -la "$SHOTS"
 echo "--- settings.json after the runs:"
 cat "$TMP/settings.json"

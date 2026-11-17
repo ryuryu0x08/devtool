@@ -1,41 +1,58 @@
-// Two gateways behind the local forwarder: the company's (the model API set in QuotaBar) and a
-// second one. A request goes to the gateway whose model list has the model it asks for (the
-// "model" of its JSON body, or the id in GET /v1/models/{id}); anything else goes to the
-// company's. A model both list is a conflict: requests for it are turned away with a message,
-// since which gateway is meant isn't known. GET /v1/models answers both lists as one.
+// Gateways behind the local forwarder: the company's (the model API set in QuotaBar) and others,
+// in an order. A request goes to the first gateway whose model list has the model it asks for (the
+// "model" of its JSON body, or the id in GET /v1/models/{id}): the company's first, then the others
+// in their order; anything else goes to the company's. A model a later gateway also lists stays
+// with the earlier one (the settings show which). GET /v1/models answers all the lists as one.
 // A model mapped in the settings (a model Desktop offers, sent on as another, to the gateway
 // chosen) comes first: only the body's "model" value changes, every other byte stays.
 // Only the rules and the JSON here; the forwarder and the app do the network.
 import Foundation
 
 public struct ModelRoutes: Equatable, Sendable {
-  /// Models the second gateway lists.
-  public private(set) var second: Set<String>
-  /// Models both gateways list.
-  public private(set) var conflicts: Set<String>
+  /// A gateway besides the company's and the models it lists.
+  public struct Listed: Equatable, Sendable {
+    public var id: String
+    public var models: [String]
+    public init(id: String, models: [String]) {
+      self.id = id
+      self.models = models
+    }
+  }
+
+  /// The company's models.
+  public private(set) var company: Set<String>
+  /// The other gateways' lists, in their order.
+  public private(set) var lists: [Listed]
+  /// Each model to the gateway it goes to (the first that lists it); the company's aren't here.
+  private var owner: [String: String]
   /// Models sent on as others (by the model asked for).
   public private(set) var renames: [String: Rename]
 
-  /// A model asked for, sent on as `model` to the other gateway (`toOther`) or the company's.
+  /// A model asked for, sent on as `model` to gateway `gateway` (nil: the company's).
   public struct Rename: Equatable, Sendable {
-    public var toOther: Bool
+    public var gateway: String?
     public var model: String
-    public init(toOther: Bool, model: String) {
-      self.toOther = toOther
+    public init(gateway: String?, model: String) {
+      self.gateway = gateway
       self.model = model
     }
   }
 
-  public init(company: [String] = [], second: [String] = [], renames: [String: Rename] = [:]) {
-    self.second = Set(second)
-    conflicts = Set(company).intersection(second)
+  public init(company: [String] = [], lists: [Listed] = [], renames: [String: Rename] = [:]) {
+    self.company = Set(company)
+    self.lists = lists
     self.renames = renames
+    var owner: [String: String] = [:]
+    for l in lists {
+      for m in l.models where !self.company.contains(m) && owner[m] == nil { owner[m] = l.id }
+    }
+    self.owner = owner
   }
 
   public enum Route: Equatable, Sendable {
-    case company, second
-    /// Both list it.
-    case conflict(String)
+    case company
+    /// The gateway with this id.
+    case gateway(String)
     /// Mapped: sent on as another model, to the gateway chosen.
     case renamed(Rename)
   }
@@ -44,8 +61,17 @@ public struct ModelRoutes: Equatable, Sendable {
   public func route(_ model: String?) -> Route {
     guard let model else { return .company }
     if let r = renames[model] { return .renamed(r) }
-    if conflicts.contains(model) { return .conflict(model) }
-    return second.contains(model) ? .second : .company
+    return owner[model].map { .gateway($0) } ?? .company
+  }
+
+  /// The models gateway `id` was last read to list (nil: not read).
+  public func models(of id: String) -> [String]? {
+    lists.first { $0.id == id }?.models
+  }
+
+  /// The models gateway `id` lists that go elsewhere: a gateway before it (or the company's) lists them too.
+  public func taken(from id: String) -> [String] {
+    (models(of: id) ?? []).filter { owner[$0] != id }
   }
 
   /// The model a request's body asks for: the "model" string of a JSON object; nil otherwise.
@@ -150,15 +176,16 @@ public struct ModelRoutes: Equatable, Sendable {
     return data.compactMap { $0["id"] as? String }
   }
 
-  /// One /v1/models reply of both: the company's entries, then the second's that it doesn't list
-  /// (a model both list appears once). nil when `company` isn't a list; a `second` that isn't
-  /// one adds nothing.
-  public static func merge(company: Data, second: Data?) -> Data? {
+  /// One /v1/models reply of all: the company's entries, then each other's that no list before it
+  /// has (a model several list appears once). nil when `company` isn't a list; one of `others`
+  /// that isn't (or is nil) adds nothing.
+  public static func merge(company: Data, others: [Data?]) -> Data? {
     guard let o = try? JSONSerialization.jsonObject(with: company) as? [String: Any],
           let first = o["data"] as? [[String: Any]] else { return nil }
     var seen = Set(first.compactMap { $0["id"] as? String })
     var all = first
-    if let second, let s = try? JSONSerialization.jsonObject(with: second) as? [String: Any], let more = s["data"] as? [[String: Any]] {
+    for other in others {
+      guard let other, let s = try? JSONSerialization.jsonObject(with: other) as? [String: Any], let more = s["data"] as? [[String: Any]] else { continue }
       for m in more {
         guard let id = m["id"] as? String, !seen.contains(id) else { continue }
         seen.insert(id)
@@ -173,10 +200,24 @@ public struct ModelRoutes: Equatable, Sendable {
     return try? JSONSerialization.data(withJSONObject: out, options: [.sortedKeys])
   }
 
-  /// The error a client gets for a model both gateways list, in the shape Anthropic's clients read.
-  public static func conflictReply(_ model: String) -> Data {
-    let message = "QuotaBar: 模型 \(model) 在公司网关和其他网关都有, 不知道该发给哪个 (先在其中一个网关去掉它)"
-    let o: [String: Any] = ["type": "error", "error": ["type": "invalid_request_error", "message": message]]
-    return (try? JSONSerialization.data(withJSONObject: o, options: [.sortedKeys])) ?? Data(message.utf8)
+  /// A gateway's list with `extra` models (typed in the settings, for a gateway whose list can't
+  /// be read or leaves some out) added after its own; with no list read, the extra ones alone.
+  /// nil when there is neither.
+  public static func adding(_ extra: [String], to list: Data?) -> Data? {
+    var o: [String: Any] = [:]
+    var data: [[String: Any]] = []
+    if let list, let l = try? JSONSerialization.jsonObject(with: list) as? [String: Any], let d = l["data"] as? [[String: Any]] {
+      o = l
+      data = d
+    } else if extra.isEmpty {
+      return nil
+    }
+    let have = Set(data.compactMap { $0["id"] as? String })
+    var added = Set<String>()
+    for m in extra where !have.contains(m) && added.insert(m).inserted {
+      data.append(["id": m, "type": "model", "display_name": m])
+    }
+    o["data"] = data
+    return try? JSONSerialization.data(withJSONObject: o, options: [.sortedKeys])
   }
 }

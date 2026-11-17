@@ -4,15 +4,13 @@
 import Foundation
 
 public struct RequestRecord: Identifiable, Equatable, Sendable {
-  public enum Gateway: String, Sendable {
+  public enum Gateway: Equatable, Sendable {
     /// The company's (the model API).
     case company
-    /// The other gateway.
-    case other
-    /// Both: the model list, read from each.
-    case both
-    /// Neither: turned away here (a model both list).
-    case refused
+    /// Another gateway, by its name.
+    case other(String)
+    /// All of them: the model list, read from each.
+    case all
   }
 
   public let id: Int

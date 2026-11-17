@@ -25,16 +25,16 @@ final class Forwarding {
     set { forwarder?.key = newValue }
   }
 
-  /// The other gateway (nil: none), and which models go to it. Kept here too, so that a
+  /// The other gateways (in order), and which models go to which. Kept here too, so that a
   /// forwarder started later gets them.
-  var second: LocalForwarder.Gateway? {
-    didSet { forwarder?.second = second }
+  var gateways: [LocalForwarder.Gateway] = [] {
+    didSet { forwarder?.gateways = gateways }
   }
   var routes = ModelRoutes() {
     didSet { forwarder?.routes = routes }
   }
-  /// The model sent to the other gateway when the company's answers 403 (nil: no fallback).
-  var fallback: String? {
+  /// Where requests go when the company's answers 403 (nil: no fallback).
+  var fallback: LocalForwarder.Fallback? {
     didSet { forwarder?.fallback = fallback }
   }
   /// Keys the readings say have no quota left.
@@ -43,18 +43,18 @@ final class Forwarding {
   }
   /// The company's gateway is tried again with the keys it answered 403.
   func forgetForbidden() { forwarder?.forgetForbidden() }
-  /// Told when the company's gateway answered 403 and the request went to the other gateway.
+  /// Told when the company's gateway answered 403 and the request went to the fallback's gateway.
   var onForbidden: ((String?) -> Void)?
 
   /// The requests of the last 10 minutes, kept across restarts of the forwarder.
   let requests = RequestLog()
-  /// Names for keys in the request log (people's, the other gateway's).
+  /// Names for keys in the request log (people's, the gateways').
   var keyNames: [String: String] = [:] {
     didSet { forwarder?.keyNames = keyNames }
   }
 
-  /// Told of both model lists the forwarder read when a client asked for them.
-  var onModels: ((_ company: [String], _ other: [String]) -> Void)?
+  /// Told of the model lists the forwarder read when a client asked for them (the others' by id).
+  var onModels: ((_ company: [String], _ others: [String: [String]]) -> Void)?
 
   func stop() {
     attempt += 1
@@ -70,7 +70,7 @@ final class Forwarding {
     let f = try LocalForwarder(target: target)
     f.log = { ForwardLog.write($0) }
     f.key = key
-    f.second = second
+    f.gateways = gateways
     f.routes = routes
     f.requestLog = requests
     f.keyNames = keyNames

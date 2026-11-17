@@ -31,7 +31,7 @@ struct RequestsView: View {
           }
           .width(min: 120, ideal: 220)
           TableColumn("网关") { r in GatewayTag(gateway: r.gateway) }
-            .width(70)
+            .width(min: 60, ideal: 90)
           TableColumn("Key") { r in Text(r.key ?? "未带 key").font(.ui(12)).lineLimit(1).foregroundStyle(r.key == nil ? .secondary : .primary) }
             .width(min: 70, ideal: 110)
           TableColumn("结果") { r in Outcome(record: r) }
@@ -62,23 +62,24 @@ struct RequestsView: View {
   }
 }
 
-/// Which gateway: 公司 / 其他 / 两边 (the merged model list) / 未转发 (turned away here).
+/// Which gateway: 公司 / another's name / 全部 (the merged model list).
 private struct GatewayTag: View {
   let gateway: RequestRecord.Gateway
 
   var body: some View {
     let (text, color): (String, Color) = switch gateway {
     case .company: ("公司", .blue)
-    case .other: ("其他", .purple)
-    case .both: ("两边", .gray)
-    case .refused: ("未转发", .orange)
+    case .other(let name): (name, .purple)
+    case .all: ("全部", .gray)
     }
     Text(text)
       .font(.ui(11, .medium))
+      .lineLimit(1)
       .padding(.horizontal, 7)
       .padding(.vertical, 2)
       .background(color.opacity(0.14), in: Capsule())
       .foregroundStyle(color)
+      .help(text)
   }
 }
 

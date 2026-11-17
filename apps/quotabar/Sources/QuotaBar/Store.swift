@@ -69,7 +69,7 @@ final class Store {
   init() {
     forwarding.onStop = { [weak self] why in self?.forwarderStopped(why) }
     forwarding.onRequest = { [weak self] in self?.heardDesktop() }
-    forwarding.onModels = { [weak self] mine, theirs in self?.setModels(company: mine, other: theirs) }
+    forwarding.onModels = { [weak self] mine, theirs in self?.setModels(company: mine, others: theirs) }
     forwarding.onForbidden = { [weak self] key in self?.forbidden(key) }
     load()
     applyRoutes()
@@ -187,7 +187,7 @@ final class Store {
 
   /// The forwarder runs: Desktop needs it for an http model API, it swaps the keys, or it sends
   /// the other gateway's models there.
-  var forwardWanted: Bool { config.swapKeys || config.forward && forwardNeeded || otherGateway != nil }
+  var forwardWanted: Bool { config.swapKeys || config.forward && forwardNeeded || !otherGateways.isEmpty }
 
   /// The key the forwarder sends in place of Desktop's (see DesktopLink.forwarderKey).
   var forwarderKey: String? { link.forwarderKey }
@@ -528,22 +528,30 @@ final class Store {
   private func saveConfig() {
     write(config, to: configFile)
     forwarding.key = forwarderKey
-    forwarding.second = otherGateway
+    forwarding.gateways = otherGateways
     forwarding.keyNames = keyNames
-    forwarding.fallback = fallbackModelNow
-    if fallbackModelNow == nil { forbiddenKeys = [] }
+    forwarding.fallback = fallbackNow
+    if fallbackNow == nil { forbiddenKeys = [] }
   }
 
-  /// The model the forwarder falls back to on a 403, when that is on and can be done.
-  var fallbackModelNow: String? {
+  /// Where the forwarder falls back to on a 403, when that is on and can be done.
+  var fallbackNow: LocalForwarder.Fallback? {
     let m = config.fallbackModel.trimmingCharacters(in: .whitespaces)
-    return config.autoFallback && otherGateway != nil && !m.isEmpty ? m : nil
+    guard config.autoFallback, !m.isEmpty, otherGateways.contains(where: { $0.id == config.fallbackGateway }) else { return nil }
+    return .init(gateway: config.fallbackGateway, model: m)
   }
 
-  /// Saves the fallback (on or off, and the model).
-  func setFallback(on: Bool, model: String) {
-    guard on != config.autoFallback || model != config.fallbackModel else { return }
+  /// The fallback as said to the user: "DeepSeek 的 deepseek-chat".
+  var fallbackLabel: String? {
+    guard let f = fallbackNow, let g = otherGateways.first(where: { $0.id == f.gateway }) else { return nil }
+    return "\(g.name) 的 \(f.model)"
+  }
+
+  /// Saves the fallback (on or off, the gateway, and the model).
+  func setFallback(on: Bool, gateway: String, model: String) {
+    guard on != config.autoFallback || gateway != config.fallbackGateway || model != config.fallbackModel else { return }
     config.autoFallback = on
+    config.fallbackGateway = gateway
     config.fallbackModel = model
     saveConfig()
   }
@@ -555,7 +563,7 @@ final class Store {
   /// Why requests fall back now, if they do: the key in use has no quota left, or the company's
   /// gateway answered 403 since the last refresh.
   var fallingBack: String? {
-    guard fallbackModelNow != nil else { return nil }
+    guard fallbackNow != nil else { return nil }
     if let k = keyInUse, exhaustedKeys.contains(k) { return (people.first { $0.key == k }?.label ?? "当前 key") + " 的额度已用完" }
     if !forbiddenKeys.isEmpty { return "公司网关回了 403" }
     return nil
@@ -577,7 +585,7 @@ final class Store {
     announceFallback(was: was)
   }
 
-  /// The company's gateway answered 403 and the request went to the other gateway.
+  /// The company's gateway answered 403 and the request went to the fallback's gateway.
   private func forbidden(_ key: String?) {
     let was = fallingBack
     forbiddenKeys.insert(key ?? "")
@@ -585,19 +593,19 @@ final class Store {
   }
 
   private func announceFallback(was: String?) {
-    guard let m = fallbackModelNow else { return }
+    guard let m = fallbackLabel else { return }
     if was == nil, let why = fallingBack {
-      notice = Notice(text: why + ", 已改用其他网关的 \(m); 额度恢复后自动切回", bad: true)
+      notice = Notice(text: why + ", 已改用 \(m); 额度恢复后自动切回", bad: true)
     } else if was != nil, fallingBack == nil {
       notice = Notice(text: "额度已恢复, 切回公司网关")
     }
   }
 
-  /// Who each key is, for the request log: people by name, the other gateway's as such.
+  /// Who each key is, for the request log: people by name, the gateways' by theirs.
   private var keyNames: [String: String] {
     var names: [String: String] = [:]
     for p in people where !p.key.isEmpty { names[p.key] = p.label }
-    if let g = otherGateway { names[g.key] = "其他网关的 key" }
+    for g in otherGateways { names[g.key] = g.name + " 的 key" }
     return names
   }
 
@@ -963,34 +971,38 @@ final class Store {
     announceDesktop(why: "Desktop 改用 \"\(p.label)\" 的 key", text: "已切换到 \"\(p.label)\": " + parts.joined(separator: ", "), changed: desktopChanged)
   }
 
-  // MARK: - The other gateway
+  // MARK: - Other gateways
 
-  /// The other gateway, when its address and key are both set.
-  var otherGateway: LocalForwarder.Gateway? {
-    let u = config.otherURL.trimmingCharacters(in: .whitespaces), k = config.otherKey.trimmingCharacters(in: .whitespaces)
-    guard Self.usable(u), !k.isEmpty, let url = URL(string: u) else { return nil }
-    return try? LocalForwarder.Gateway(url: url, key: k)
+  /// The other gateways whose address and key are both set, in order.
+  var otherGateways: [LocalForwarder.Gateway] {
+    config.gateways.compactMap { g in
+      let u = g.url.trimmingCharacters(in: .whitespaces), k = g.key.trimmingCharacters(in: .whitespaces)
+      guard Self.usable(u), !k.isEmpty, let url = URL(string: u) else { return nil }
+      return try? LocalForwarder.Gateway(id: g.id, name: g.label, url: url, key: k, models: g.typedModels)
+    }
   }
 
-  /// Saves the other gateway as typed: with one set (or none any more) the forwarder starts
-  /// (or stops), and Claude Code and Desktop follow it.
-  func saveOtherGateway(url: String, key: String) {
-    let was = otherGateway
-    config.otherURL = url.trimmingCharacters(in: .whitespaces)
-    config.otherKey = key.trimmingCharacters(in: .whitespaces)
-    guard otherGateway != was else { return saveConfig() }
+  /// Saves the gateways as edited: with one set (or none any more) the forwarder starts (or
+  /// stops), and Claude Code and Desktop follow it.
+  func saveGateways(_ list: [GatewayConfig]) {
+    guard list != config.gateways else { return }
+    let was = otherGateways
+    config.gateways = list
     saveConfig()
-    if (was == nil) != (otherGateway == nil) {
+    let now = otherGateways
+    guard now != was else { return }
+    if was.isEmpty != now.isEmpty {
       Task { await startForwarder() }
     } else {
       Task { await refreshModels() }
     }
   }
 
-  /// Reads both model lists (the model API's with the key in use, the other gateway's with its own),
-  /// so that requests go where their model is listed, and the settings show it.
+  /// Reads the model lists (the model API's with the key in use, each other gateway's with its
+  /// own), so that requests go where their model is listed, and the settings show it.
   func refreshModels() async {
-    guard let g = otherGateway else {
+    let gws = otherGateways
+    guard !gws.isEmpty else {
       gatewayModels = GatewayModels()
       applyRoutes()
       return
@@ -998,45 +1010,70 @@ final class Store {
     let companyKey = forwarderKey ?? activeToken ?? people.first { !$0.key.isEmpty }?.key
     let mineURL = URL(string: config.baseURL.trimmingCharacters(in: .whitespaces)).flatMap(ModelLists.listURL)
     async let mine = Self.ids(mineURL, key: companyKey)
-    async let theirs = Self.ids(ModelLists.listURL(g.url), key: g.key)
-    let (m, t) = await (mine, theirs)
-    // The gateway changed meanwhile: that one's reading counts.
-    guard otherGateway == g else { return }
-    var next = gatewayModels
-    if let m { next.company = m }
-    if let t { next.other = t }
-    next.error = t == nil ? "读不到其他网关的模型列表 (地址或 key 不对, 或连不上)" : nil
+    let theirs = await withTaskGroup(of: (Int, [String]?).self) { group in
+      for (i, g) in gws.enumerated() {
+        group.addTask { (i, await Self.ids(ModelLists.listURL(g.url), key: g.key)) }
+      }
+      var out = [[String]?](repeating: nil, count: gws.count)
+      for await (i, r) in group { out[i] = r }
+      return out
+    }
+    let m = await mine
+    // The gateways changed meanwhile: those readings count.
+    guard otherGateways == gws else { return }
+    var next = GatewayModels(company: m ?? gatewayModels.company)
+    for (g, t) in zip(gws, theirs) {
+      let all = Self.union(t ?? [], g.models)
+      if t == nil && g.models.isEmpty {
+        next.errors[g.id] = "读不到模型列表 (地址或 key 不对, 或连不上); 也可以在下面手动填模型名"
+        if let old = gatewayModels.lists[g.id] { next.lists[g.id] = old }
+      } else {
+        next.lists[g.id] = all
+        if t == nil { next.errors[g.id] = "读不到模型列表, 只用手动填的模型" }
+      }
+    }
     show(next)
+  }
+
+  /// `a`, then those of `b` it doesn't have.
+  private static func union(_ a: [String], _ b: [String]) -> [String] {
+    var seen = Set(a)
+    return a + b.filter { seen.insert($0).inserted }
   }
 
   /// A gateway's model ids; a gateway with no model list (404) lists none; nil if unreadable.
   nonisolated private static func ids(_ url: URL?, key: String?) async -> [String]? {
     guard let url, let r = await ModelLists.get(url, auth: key.map { "Bearer " + $0 }) else { return nil }
-    if r.status == 404 { return [] }
+    if r.status == 404 { return nil }
     return (200..<300).contains(r.status) ? ModelRoutes.ids(in: r.body) : nil
   }
 
-  /// Both lists as the forwarder read them for a client.
-  private func setModels(company: [String], other theirs: [String]) {
-    guard otherGateway != nil else { return }
-    show(GatewayModels(company: company, other: theirs, error: nil))
+  /// The lists as the forwarder read them for a client (those it couldn't read stay as they were).
+  private func setModels(company: [String], others: [String: [String]]) {
+    guard !otherGateways.isEmpty else { return }
+    var next = gatewayModels
+    next.company = company
+    for (id, l) in others {
+      next.lists[id] = l
+      next.errors[id] = nil
+    }
+    show(next)
   }
 
-  /// The lists go to the forwarder (where requests go) and the settings; models both list are
-  /// told once, when they appear.
+  /// The lists go to the forwarder (where requests go) and the settings.
   private func show(_ m: GatewayModels) {
-    let before = gatewayModels.conflicts
     withAnimation(.snappy) { gatewayModels = m }
     applyRoutes()
-    if !m.conflicts.isEmpty && m.conflicts != before {
-      notice = Notice(text: "两个网关都有: " + m.conflicts.joined(separator: ", ") + ", 用这些模型会报错", bad: true)
-    }
   }
 
-  /// Where each model goes: by the lists read, and the mappings set.
+  /// Where each model goes: by the lists read (in the gateways' order), and the mappings set.
   private func applyRoutes() {
-    forwarding.routes = ModelRoutes(company: gatewayModels.company ?? [], second: gatewayModels.other ?? [], renames: config.renames)
+    let lists = otherGateways.map { ModelRoutes.Listed(id: $0.id, models: gatewayModels.lists[$0.id] ?? $0.models) }
+    forwarding.routes = ModelRoutes(company: gatewayModels.company ?? [], lists: lists, renames: config.renames)
   }
+
+  /// Which models gateway `id` lists that go elsewhere (the company's, or a gateway before it, lists them too).
+  func taken(from id: String) -> [String] { forwarding.routes.taken(from: id) }
 
   /// Saves the model mappings as edited; the forwarder uses them at once.
   func saveModelMap(_ list: [ModelMapping]) {
@@ -1051,7 +1088,7 @@ final class Store {
   /// The address Claude Code is to use: the forwarder's while it sends the other gateway's models
   /// there, else the model API.
   var cliWant: String {
-    if otherGateway != nil, let u = forwarderURL { return u }
+    if !otherGateways.isEmpty, let u = forwarderURL { return u }
     return config.baseURL
   }
 

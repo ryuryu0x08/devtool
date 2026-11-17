@@ -203,12 +203,12 @@ struct FallbackBanner: View {
   @Environment(Store.self) private var store
 
   var body: some View {
-    if let why = store.fallingBack, let m = store.fallbackModelNow {
+    if let why = store.fallingBack, let m = store.fallbackLabel {
       HStack(alignment: .firstTextBaseline, spacing: 8) {
         Icon(.swap, size: 12).foregroundStyle(.purple)
         VStack(alignment: .leading, spacing: 2) {
           Text("降级中: \(why)").font(.ui(12, .medium))
-          Text("改用其他网关的 \(m), 额度恢复后自动切回").font(.ui(11)).foregroundStyle(.secondary)
+          Text("改用 \(m), 额度恢复后自动切回").font(.ui(11)).foregroundStyle(.secondary)
         }
         .fixedSize(horizontal: false, vertical: true)
         Spacer(minLength: 0)

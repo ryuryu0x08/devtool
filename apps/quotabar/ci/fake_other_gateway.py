@@ -1,5 +1,6 @@
-"""A stand-in for another gateway for forward_e2e.sh: its API under /other, a key it wants (Bearer
-sk-other), one model of its own. Each request it gets is written to the file given."""
+"""Stand-ins for other gateways for forward_e2e.sh: one with its API under /other, a key it wants
+(Bearer sk-other), one model of its own; and one like DeepSeek's under /ds (Bearer sk-ds) with no
+model list (404). Each request either gets is written to the file given."""
 import http.server
 import json
 import sys
@@ -23,6 +24,8 @@ class H(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         self.record("")
+        if self.path.startswith("/ds/"):
+            return self.answer(404, {"error": {"message": "no model list here"}})
         if self.headers.get("Authorization") != "Bearer sk-other":
             return self.answer(401, {"type": "error", "error": {"type": "authentication_error", "message": "bad key"}})
         if self.path.startswith("/other/v1/models"):
@@ -33,6 +36,10 @@ class H(http.server.BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(n).decode()
         self.record(body)
+        if self.path.startswith("/ds/"):
+            if self.headers.get("Authorization") != "Bearer sk-ds" or not self.path.startswith("/ds/v1/messages"):
+                return self.answer(401, {"type": "error", "error": {"type": "authentication_error", "message": "bad key or path"}})
+            return self.answer(200, {"type": "message", "content": [{"type": "text", "text": "from deepseek"}]})
         if self.headers.get("Authorization") != "Bearer sk-other" or not self.path.startswith("/other/v1/messages"):
             return self.answer(401, {"type": "error", "error": {"type": "authentication_error", "message": "bad key or path"}})
         self.answer(200, {"type": "message", "content": [{"type": "text", "text": "from the other gateway"}]})
