@@ -43,20 +43,20 @@ private struct RequestList: View {
           TableColumn("时间") { r in Text(r.at.formatted(.dateTime.hour().minute().second())).font(.mono(11.5)).foregroundStyle(.secondary) }
             .width(64)
           TableColumn("请求") { r in Text("\(r.method) \(r.path)").font(.mono(11.5)).lineLimit(1).truncationMode(.middle).help("\(r.method) \(r.path)") }
-            .width(min: 140, ideal: 200)
+            .width(min: 120, ideal: 170)
           TableColumn("模型") { r in
             let text = (r.model ?? "—") + (r.mappedTo.map { " → " + $0 } ?? "")
             Text(text).font(.mono(11.5)).lineLimit(1).foregroundStyle(r.model == nil ? .secondary : .primary).help(text)
           }
-          .width(min: 120, ideal: 220)
+          .width(min: 110, ideal: 190)
           TableColumn("网关") { r in GatewayTag(gateway: r.gateway) }
-            .width(min: 60, ideal: 90)
+            .width(min: 56, ideal: 80)
           TableColumn("Key") { r in Text(r.key ?? "未带 key").font(.ui(12)).lineLimit(1).foregroundStyle(r.key == nil ? .secondary : .primary) }
-            .width(min: 70, ideal: 110)
+            .width(min: 70, ideal: 100)
           TableColumn("缓存") { r in CacheCell(usage: r.usage) }
-            .width(min: 60, ideal: 80)
+            .width(min: 56, ideal: 70)
           TableColumn("结果") { r in Outcome(record: r) }
-            .width(min: 80, ideal: 150)
+            .width(min: 80, ideal: 120)
         }
         .tableStyle(.inset(alternatesRowBackgrounds: true))
       }

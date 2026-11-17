@@ -193,7 +193,7 @@ enum WindowPage: Equatable {
     switch self {
     case .dashboard: return NSSize(width: 980, height: 760)
     case .settings: return NSSize(width: 600, height: 640)
-    case .requests: return NSSize(width: 900, height: 480)
+    case .requests: return NSSize(width: 1000, height: 520)
     }
   }
 }
