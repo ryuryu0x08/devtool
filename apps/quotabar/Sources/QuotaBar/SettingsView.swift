@@ -441,10 +441,10 @@ private struct ModelMapRows: View {
           }
           ForEach($rows) { $r in
             GridRow(alignment: .center) {
-              ModelField(text: $r.from, prompt: "填 Desktop 用的模型名", choices: store.gatewayModels.company ?? [])
+              ModelField(text: $r.from, prompt: "填 Desktop 用的模型名", groups: Array(store.modelGroups(company: true).prefix(1)))
               Text("→").font(.ui(13)).foregroundStyle(.secondary)
               GatewayPicker(id: Binding(get: { $r.wrappedValue.gateway ?? "" }, set: { $r.wrappedValue.gateway = $0.isEmpty ? nil : $0 }))
-              ModelField(text: $r.to, prompt: "选择或输入", choices: (r.gateway.map { store.gatewayModels.lists[$0] } ?? store.gatewayModels.company) ?? [])
+              ModelField(text: $r.to, prompt: "选择或输入", groups: store.modelGroups(company: true)) { id in $r.wrappedValue.gateway = id.isEmpty ? nil : id }
               Button { rows.removeAll { $0.id == r.id } } label: { Icon(.trash, size: 12) }
                 .buttonStyle(.borderless)
                 .help("删除这条映射")
@@ -491,12 +491,33 @@ private struct ModelMapRows: View {
   }
 }
 
-/// A model name: typed, or picked from a gateway's list (the menu beside it). Left-aligned, and
-/// as wide as its column.
+/// The models of one gateway ("" the company's), for a model menu.
+struct ModelGroup: Identifiable {
+  var id: String
+  var name: String
+  var models: [String]
+}
+
+extension Store {
+  /// Each gateway's models as last read, for the model menus: the company's first (with
+  /// `company`), then the others in their order; each one's sorted by name ("v4.2" before "v4.10").
+  func modelGroups(company: Bool) -> [ModelGroup] {
+    let sort = { (m: [String]) in m.sorted { $0.localizedStandardCompare($1) == .orderedAscending } }
+    var out: [ModelGroup] = []
+    if company { out.append(ModelGroup(id: "", name: "公司", models: sort(gatewayModels.company ?? []))) }
+    for g in config.gateways { out.append(ModelGroup(id: g.id, name: g.label, models: sort(gatewayModels.lists[g.id] ?? []))) }
+    return out
+  }
+}
+
+/// A model name: typed, or picked from the gateways' lists (the menu beside it, a section for
+/// each gateway, in the same order every time). Picking one from a gateway also picks that
+/// gateway (`onPick`). Left-aligned, and as wide as its column.
 private struct ModelField: View {
   @Binding var text: String
   let prompt: String
-  let choices: [String]
+  let groups: [ModelGroup]
+  var onPick: ((String) -> Void)?
 
   var body: some View {
     HStack(spacing: 4) {
@@ -506,13 +527,26 @@ private struct ModelField: View {
         .multilineTextAlignment(.leading)
         .font(.mono(12))
       Menu {
-        if choices.isEmpty { Text("还没有读到这个网关的模型列表") }
-        ForEach(choices, id: \.self) { m in Button(m) { text = m } }
+        if groups.allSatisfy({ $0.models.isEmpty }) { Text("还没有读到模型列表") }
+        ForEach(groups) { g in
+          if groups.count == 1 {
+            ForEach(g.models, id: \.self) { m in Button(m) { text = m } }
+          } else {
+            Section(g.name + (g.models.isEmpty ? " · 没读到列表" : "")) {
+              ForEach(g.models, id: \.self) { m in
+                Button(m) {
+                  text = m
+                  onPick?(g.id)
+                }
+              }
+            }
+          }
+        }
       } label: { Image(systemName: "chevron.up.chevron.down").font(.system(size: 10)) }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("从模型列表里选")
+        .help("从模型列表里选 (按网关分组, 组内按名称排序)")
     }
     .frame(minWidth: 150, maxWidth: .infinity)
   }
@@ -538,7 +572,7 @@ private struct FallbackRows: View {
         Text("改用").font(.ui(13)).foregroundStyle(on ? .primary : .secondary)
         GatewayPicker(id: $gateway, company: false)
           .disabled(!on)
-        ModelField(text: $model, prompt: "选择或输入模型", choices: store.gatewayModels.lists[gateway] ?? [])
+        ModelField(text: $model, prompt: "选择或输入模型", groups: store.modelGroups(company: false)) { gateway = $0 }
           .disabled(!on)
       }
 
