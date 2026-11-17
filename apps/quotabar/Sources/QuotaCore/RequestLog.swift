@@ -30,6 +30,8 @@ public struct RequestRecord: Identifiable, Equatable, Sendable {
   public internal(set) var ms: Int?
   /// Why it failed here, if it did.
   public internal(set) var note: String?
+  /// The tokens its reply said it used (a Messages reply's, once it ended).
+  public internal(set) var usage: CacheUsage?
 }
 
 public final class RequestLog: @unchecked Sendable {
@@ -69,6 +71,14 @@ public final class RequestLog: @unchecked Sendable {
     records[i].status = status
     records[i].ms = max(0, Int((at.timeIntervalSince(records[i].at) * 1000).rounded()))
     if let note { records[i].note = note }
+  }
+
+  /// The tokens its reply said it used.
+  public func used(_ id: Int, _ usage: CacheUsage) {
+    lock.lock()
+    defer { lock.unlock() }
+    guard let i = records.lastIndex(where: { $0.id == id }) else { return }
+    records[i].usage = usage
   }
 
   /// The requests of the last `keep` seconds, newest first.

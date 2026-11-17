@@ -20,6 +20,9 @@ private final class Upstream: @unchecked Sendable {
   var modelsStatus = 200
   /// The status of the other replies when keeping connections (403: a quota used up).
   var replyStatus = 200
+  /// Their body and type.
+  var replyBody = "{\"ok\":true}"
+  var replyType = "application/json"
 
   func start() async throws {
     let params = NWParameters.tcp
@@ -57,9 +60,9 @@ private final class Upstream: @unchecked Sendable {
         return
       }
       if self.keepAlive {
-        let body = "{\"ok\":true}"
+        let body = self.replyBody
         let close = head.lowercased().contains("\r\nconnection: close")
-        let reply = "HTTP/1.1 \(self.replyStatus) \(self.replyStatus == 200 ? "OK" : "Forbidden")\r\nContent-Type: application/json\r\nContent-Length: \(body.utf8.count)\r\nConnection: keep-alive\r\n\r\n" + body
+        let reply = "HTTP/1.1 \(self.replyStatus) \(self.replyStatus == 200 ? "OK" : "Forbidden")\r\nContent-Type: \(self.replyType)\r\nContent-Length: \(body.utf8.count)\r\nConnection: keep-alive\r\n\r\n" + body
         c.send(content: Data(reply.utf8), completion: .contentProcessed { _ in
           if close { c.cancel() } else { self.read(c, Data(buf[(r.upperBound + length)...])) }
         })
@@ -685,6 +688,36 @@ extension LocalForwarderTests {
     XCTAssertEqual(s2, 403)
     XCTAssertTrue(b.heads.isEmpty)
     XCTAssertTrue(f.forbiddenKeys.isEmpty)
+  }
+
+  func testEachMessagesReplysUsageIsKeptByGatewayAndModelAndTheReplyGoesOnAsItCame() async throws {
+    let (a, b, f, port) = try await twoGateways(["claude-a"], ["glm-b"], port: 48400)
+    defer { f.stop(); withExtendedLifetime((a, b)) {} }
+    let log = RequestLog(), stats = CacheStats()
+    f.requestLog = log
+    f.cacheStats = stats
+    let told = Counter()
+    f.onUsage = { told.add() }
+    let sse = "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":10,\"cache_read_input_tokens\":80,\"cache_creation_input_tokens\":10,\"output_tokens\":1}}}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":42}}\n\n"
+    b.replyBody = sse
+    b.replyType = "text/event-stream"
+    let (status, body) = try await call(port, "POST", "/v1/messages?beta=true", body: #"{"model":"glm-b","stream":true}"#)
+    XCTAssertEqual(status, 200)
+    XCTAssertEqual(body, sse)
+    // count_tokens isn't a turn: not counted.
+    _ = try await call(port, "POST", "/v1/messages/count_tokens", body: #"{"model":"claude-a"}"#)
+    try await Task.sleep(for: .milliseconds(300))
+    XCTAssertEqual(stats.snapshot().map { [$0.gateway, $0.model] }, [["其他网关", "glm-b"]])
+    XCTAssertEqual(stats.snapshot().first?.usage, CacheUsage(input: 10, cacheRead: 80, cacheWrite: 10, output: 42))
+    XCTAssertEqual(told.n, 1)
+    let r = log.recent()
+    XCTAssertEqual(r.last?.usage?.hitRate, 0.8)
+    XCTAssertNil(r.first?.usage)
+    // The company's, a JSON reply: under 公司.
+    a.replyBody = #"{"type":"message","usage":{"input_tokens":5,"output_tokens":2}}"#
+    _ = try await call(port, "POST", "/v1/messages", body: #"{"model":"claude-a"}"#)
+    try await Task.sleep(for: .milliseconds(300))
+    XCTAssertEqual(CacheStats.rows(stats.snapshot()).map(\.gateway).sorted(), ["其他网关", "公司"].sorted())
   }
 
   func testAGatewayMustBeHTTP() {

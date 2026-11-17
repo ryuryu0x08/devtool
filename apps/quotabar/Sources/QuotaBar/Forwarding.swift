@@ -48,6 +48,12 @@ final class Forwarding {
 
   /// The requests of the last 10 minutes, kept across restarts of the forwarder.
   let requests = RequestLog()
+  /// The cache hits of the last 24 hours (the Store reads and writes its file).
+  var cacheStats = CacheStats() {
+    didSet { forwarder?.cacheStats = cacheStats }
+  }
+  /// Told when a reply's usage was added to `cacheStats`.
+  var onUsage: (() -> Void)?
   /// Names for keys in the request log (people's, the gateways').
   var keyNames: [String: String] = [:] {
     didSet { forwarder?.keyNames = keyNames }
@@ -73,6 +79,13 @@ final class Forwarding {
     f.gateways = gateways
     f.routes = routes
     f.requestLog = requests
+    f.cacheStats = cacheStats
+    f.onUsage = { [weak self, weak f] in
+      Task { @MainActor in
+        guard let self, let f, self.forwarder === f else { return }
+        self.onUsage?()
+      }
+    }
     f.keyNames = keyNames
     f.fallback = fallback
     f.exhaustedKeys = exhaustedKeys

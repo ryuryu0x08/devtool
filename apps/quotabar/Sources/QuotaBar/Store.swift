@@ -65,12 +65,17 @@ final class Store {
   }()
   private var configFile: URL { Self.dir.appendingPathComponent("config.json") }
   private var historyFile: URL { Self.dir.appendingPathComponent("history.json") }
+  private var cacheFile: URL { Self.dir.appendingPathComponent("cache-stats.json") }
+  /// The cache stats' version last written (or read).
+  @ObservationIgnored private var cacheWritten = 0
+  @ObservationIgnored private var cacheWrite: Task<Void, Never>?
 
   init() {
     forwarding.onStop = { [weak self] why in self?.forwarderStopped(why) }
     forwarding.onRequest = { [weak self] in self?.heardDesktop() }
     forwarding.onModels = { [weak self] mine, theirs in self?.setModels(company: mine, others: theirs) }
     forwarding.onForbidden = { [weak self] key in self?.forbidden(key) }
+    forwarding.onUsage = { [weak self] in self?.cacheChanged() }
     load()
     applyRoutes()
     findDesktop()
@@ -523,6 +528,7 @@ final class Store {
       }
     }
     if let d = try? Data(contentsOf: historyFile), let h = try? dec.decode([Sample].self, from: d) { history = History.thin(h) }
+    if let d = try? Data(contentsOf: cacheFile), let b = try? dec.decode([CacheBucket].self, from: d) { forwarding.cacheStats = CacheStats(buckets: b) }
   }
 
   private func saveConfig() {
@@ -607,6 +613,24 @@ final class Store {
     for p in people where !p.key.isEmpty { names[p.key] = p.label }
     for g in otherGateways { names[g.key] = g.name + " 的 key" }
     return names
+  }
+
+  /// The cache hits of the last 24 hours, by gateway, model and 10 minutes.
+  func cacheBuckets() -> [CacheBucket] { forwarding.cacheStats.snapshot() }
+
+  /// A reply's usage was added: the file is written a few seconds later (once for many).
+  private func cacheChanged() {
+    guard cacheWrite == nil else { return }
+    cacheWrite = Task { [weak self] in
+      try? await Task.sleep(for: .seconds(5))
+      guard let self else { return }
+      self.cacheWrite = nil
+      let stats = self.forwarding.cacheStats
+      let b = stats.snapshot()
+      guard stats.version != self.cacheWritten else { return }
+      self.cacheWritten = stats.version
+      self.write(b, to: self.cacheFile)
+    }
   }
 
   /// The requests through the forwarder in the last 10 minutes, newest first.

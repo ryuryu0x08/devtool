@@ -6,6 +6,25 @@ import QuotaCore
 import SwiftUI
 
 struct RequestsView: View {
+  @State private var tab = 0
+
+  var body: some View {
+    VStack(spacing: 0) {
+      HStack {
+        Segmented(selection: $tab, options: [(0, "请求"), (1, "缓存命中")])
+        Spacer()
+      }
+      .padding(.horizontal, 14)
+      .padding(.vertical, 8)
+      Divider()
+      if tab == 0 { RequestList() } else { CacheView() }
+    }
+    .frame(minWidth: 760, minHeight: 320)
+  }
+}
+
+/// The requests of the last 10 minutes.
+private struct RequestList: View {
   @Environment(Store.self) private var store
   @State private var records: [RequestRecord] = []
 
@@ -34,6 +53,8 @@ struct RequestsView: View {
             .width(min: 60, ideal: 90)
           TableColumn("Key") { r in Text(r.key ?? "未带 key").font(.ui(12)).lineLimit(1).foregroundStyle(r.key == nil ? .secondary : .primary) }
             .width(min: 70, ideal: 110)
+          TableColumn("缓存") { r in CacheCell(usage: r.usage) }
+            .width(min: 60, ideal: 80)
           TableColumn("结果") { r in Outcome(record: r) }
             .width(min: 80, ideal: 150)
         }
@@ -51,7 +72,6 @@ struct RequestsView: View {
       .padding(.horizontal, 14)
       .padding(.vertical, 8)
     }
-    .frame(minWidth: 760, minHeight: 320)
     .task {
       while !Task.isCancelled {
         let now = store.recentRequests()
@@ -101,6 +121,22 @@ private struct Outcome: View {
         ProgressView().controlSize(.mini)
         Text("进行中").font(.ui(11)).foregroundStyle(.secondary)
       }
+    }
+  }
+}
+
+/// A reply's cache hit: the part of its input read from the cache ("命中 92%"), the tokens in its help.
+private struct CacheCell: View {
+  let usage: CacheUsage?
+
+  var body: some View {
+    if let u = usage, let rate = u.hitRate {
+      Text("命中 \(Int((rate * 100).rounded()))%")
+        .font(.mono(11.5))
+        .foregroundStyle(CacheView.color(rate))
+        .help("缓存读 \(u.cacheRead) · 缓存写 \(u.cacheWrite) · 未缓存输入 \(u.input) · 输出 \(u.output) tokens")
+    } else {
+      Text("—").font(.mono(11.5)).foregroundStyle(.secondary)
     }
   }
 }

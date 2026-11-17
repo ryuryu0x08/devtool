@@ -87,6 +87,10 @@ public final class LocalForwarder: @unchecked Sendable {
   public var onModels: (@Sendable (_ company: [String], _ others: [String: [String]]) -> Void)?
   /// Where each request is recorded (the app keeps one across forwarders); nil: nowhere.
   public var requestLog: RequestLog?
+  /// Where the token usage of each Messages reply is added up (the app keeps one); nil: nowhere.
+  public var cacheStats: CacheStats?
+  /// Told (on the forwarder's queue) when a reply's usage was added to `cacheStats`.
+  public var onUsage: (@Sendable () -> Void)?
   private let company: Upstream
   private let lock = NSLock()
   private var _keyNames: [String: String] = [:]
@@ -465,7 +469,7 @@ public final class LocalForwarder: @unchecked Sendable {
         guard let req = rewrite(head, to: to, key: put, length: renamed.count) else { return reply(c, 400, "bad request") }
         log?("\(method) \(path): 模型 \(model) → \(r.model) (\(dest?.name ?? "公司网关"))")
         let id = requestLog?.add(method: method, path: path, model: model, mappedTo: r.model, gateway: dest.map { RequestRecord.Gateway.other($0.name) } ?? .company, key: label(goes))
-        return forward(c, Data(req.utf8) + renamed, to: to, record: id)
+        return forward(c, Data(req.utf8) + renamed, to: to, record: id, tap: tap(path, dest?.name, r.model))
       } else {
         log?("\(method) \(path): 模型 \(model) 有映射, 但请求体改不了 (" + (chunked ? "分块传输" : "不是 JSON 对象") + "), 原样转发")
       }
@@ -478,7 +482,7 @@ public final class LocalForwarder: @unchecked Sendable {
       if case .gateway(let gid) = routes.route(model), let g = named(gid) {
         guard let req = rewrite(head, to: g.up, key: sent ? g.key : nil) else { return reply(c, 400, "bad request") }
         let id = requestLog?.add(method: method, path: path, model: model, gateway: .other(g.name), key: sent ? label(g.key) : nil)
-        return forward(c, Data(req.utf8) + body, to: g.up, record: id)
+        return forward(c, Data(req.utf8) + body, to: g.up, record: id, tap: tap(path, g.name, model))
       }
     }
     guard let req = rewrite(head) else { return reply(c, 400, "bad request") }
@@ -493,7 +497,7 @@ public final class LocalForwarder: @unchecked Sendable {
         guard let self else { return }
         self.log?("\(method) \(path): \(why), 模型 \(model) → \(fb.model) (\(gw.name))")
         let id = self.requestLog?.add(method: method, path: path, model: model, mappedTo: fb.model, gateway: .other(gw.name), key: sent ? self.label(gw.key) : nil, note: why)
-        self.forward(c, Data(again.utf8) + renamed, to: gw.up, record: id)
+        self.forward(c, Data(again.utf8) + renamed, to: gw.up, record: id, tap: self.tap(path, gw.name, fb.model))
       }
       if let k = companyKey {
         if exhaustedKeys.contains(k) { return toFallback("\(label(k) ?? "") 额度已用完") }
@@ -507,7 +511,24 @@ public final class LocalForwarder: @unchecked Sendable {
       }
     }
     let id = requestLog?.add(method: method, path: path, model: model, gateway: .company, key: label(companyKey))
-    forward(c, Data(req.utf8) + body, to: company, record: id, onForbidden: onForbidden)
+    forward(c, Data(req.utf8) + body, to: company, record: id, onForbidden: onForbidden, tap: tap(path, nil, model))
+  }
+
+  /// What reads a reply's usage, for a Messages request (POST /v1/messages) when the usage is
+  /// kept: by the gateway's name (nil: the company's) and the model it went as.
+  private func tap(_ path: String, _ gateway: String?, _ model: String?) -> UsageTap? {
+    guard cacheStats != nil || requestLog != nil, ModelRoutes.isMessages(path) else { return nil }
+    return UsageTap(gateway: gateway ?? "公司", model: model ?? "未知")
+  }
+
+  /// The reply ended (or was cut off): its usage, if it said one, is kept.
+  private func used(_ tap: UsageTap?, record: Int?) {
+    guard let tap, let u = tap.finish() else { return }
+    if let record { requestLog?.used(record, u) }
+    if let cacheStats {
+      cacheStats.add(gateway: tap.gateway, model: tap.model, usage: u)
+      onUsage?()
+    }
   }
 
   /// GET /v1/models with other gateways: all the lists as one (ModelRoutes.merge), each read with
@@ -612,7 +633,7 @@ public final class LocalForwarder: @unchecked Sendable {
   }
 
   /// `onForbidden`: called instead of passing a 403 back (nothing of it reaches the client).
-  private func forward(_ c: NWConnection, _ request: Data, to target: Upstream, record: Int?, onForbidden: (() -> Void)? = nil) {
+  private func forward(_ c: NWConnection, _ request: Data, to target: Upstream, record: Int?, onForbidden: (() -> Void)? = nil, tap: UsageTap? = nil) {
     // Straight to the API, as curl and the Python forwarder go: Network.framework would otherwise
     // follow the system's proxy (Clash and the like set one), sending this plain-server request
     // to a proxy, which answers it with an empty 400.
@@ -630,7 +651,7 @@ public final class LocalForwarder: @unchecked Sendable {
         self.log?("\(line) → \(target.label) (\(up.currentPath?.remoteEndpoint.map { "\($0)" } ?? "?"))")
         up.send(content: request, completion: .contentProcessed { e in
           if e != nil { return self.close(c, up) }
-          self.replyHead(up, to: c, Data(), record: record, onForbidden: onForbidden)
+          self.replyHead(up, to: c, Data(), record: record, onForbidden: onForbidden, tap: tap)
         })
       case .failed(let e), .waiting(let e):
         // Once connected, the API closing (or failing) is seen while the reply is passed on,
@@ -656,7 +677,7 @@ public final class LocalForwarder: @unchecked Sendable {
   }
 
   /// Reads the reply's head, passes it on rewritten, then the rest as it comes.
-  private func replyHead(_ up: NWConnection, to c: NWConnection, _ got: Data, record: Int?, onForbidden: (() -> Void)? = nil) {
+  private func replyHead(_ up: NWConnection, to c: NWConnection, _ got: Data, record: Int?, onForbidden: (() -> Void)? = nil, tap: UsageTap? = nil) {
     up.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, complete, error in
       guard let self else { return }
       var buf = got
@@ -673,31 +694,39 @@ public final class LocalForwarder: @unchecked Sendable {
           return onForbidden()
         }
         if let record { self.requestLog?.finish(record, status: code) }
+        tap?.head(head)
+        tap?.body(Data(buf[r.upperBound...]))
         self.send(Data(head.utf8) + buf[r.upperBound...], to: c) { ok in
-          guard ok else { return self.close(up, c) }
-          if complete || error != nil { return self.finish(up, c) }
-          self.pipe(up, to: c)
+          guard ok else { self.used(tap, record: record); return self.close(up, c) }
+          if complete || error != nil { self.used(tap, record: record); return self.finish(up, c) }
+          self.pipe(up, to: c, record: record, tap: tap)
         }
       } else if complete || error != nil || buf.count > 64 * 1024 {
         // No reply head: pass on what came, and end.
         if let record { self.requestLog?.finish(record, status: 0, note: "没有收到回复") }
         self.send(buf, to: c) { _ in self.finish(up, c) }
       } else {
-        self.replyHead(up, to: c, buf, record: record, onForbidden: onForbidden)
+        self.replyHead(up, to: c, buf, record: record, onForbidden: onForbidden, tap: tap)
       }
     }
   }
 
-  /// Passes the rest of the reply on as it comes, then ends the exchange.
-  private func pipe(_ up: NWConnection, to c: NWConnection) {
+  /// Passes the rest of the reply on as it comes (its usage read on the side), then ends the exchange.
+  private func pipe(_ up: NWConnection, to c: NWConnection, record: Int? = nil, tap: UsageTap? = nil) {
     up.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, complete, error in
       guard let self else { return }
       if let error { self.log?("reply ended: \(error)") }
+      tap?.body(data)
       // The data first, the end on its own after it: an end sent along with the last data,
       // with the connection closed right after, can lose that data.
       self.send(data, to: c) { ok in
-        guard ok else { return self.close(up, c) }
-        if complete || error != nil { self.finish(up, c) } else { self.pipe(up, to: c) }
+        guard ok else { self.used(tap, record: record); return self.close(up, c) }
+        if complete || error != nil {
+          self.used(tap, record: record)
+          self.finish(up, c)
+        } else {
+          self.pipe(up, to: c, record: record, tap: tap)
+        }
       }
     }
   }

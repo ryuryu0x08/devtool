@@ -153,6 +153,13 @@ public struct ModelRoutes: Equatable, Sendable {
     String(path.prefix { $0 != "?" && $0 != "#" })
   }
 
+  /// POST /v1/messages (a conversation's turn; not count_tokens), with or without a query.
+  public static func isMessages(_ path: String) -> Bool {
+    var p = bare(path)
+    while p.hasSuffix("/") { p.removeLast() }
+    return p == "/v1/messages"
+  }
+
   /// GET /v1/models (the list), with or without a query.
   public static func isList(_ path: String) -> Bool {
     var p = bare(path)
