@@ -1025,7 +1025,7 @@ final class Store {
     for (g, t) in zip(gws, theirs) {
       let all = Self.union(t ?? [], g.models)
       if t == nil && g.models.isEmpty {
-        next.errors[g.id] = "读不到模型列表 (地址或 key 不对, 或连不上); 也可以在下面手动填模型名"
+        next.errors[g.id] = "读不到模型列表 (地址或 key 不对, 或连不上); 也可以在上面「模型」一栏手动填"
         if let old = gatewayModels.lists[g.id] { next.lists[g.id] = old }
       } else {
         next.lists[g.id] = all
