@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('toolboxDesktop', {
     install: () => ipcRenderer.invoke('update', 'install'),
     restart: () => ipcRenderer.invoke('update', 'restart'),
     setAuto: (on) => ipcRenderer.invoke('update', 'auto', on === true),
+    setChannel: (channel) => ipcRenderer.invoke('update', 'channel', channel === 'main' ? 'main' : 'stable'),
     onState: (fn) => {
       const h = (_e, state) => fn(state);
       ipcRenderer.on('update-state', h);

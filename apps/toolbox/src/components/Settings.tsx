@@ -79,6 +79,11 @@ function UpdateRows() {
         {action}
       </div>
       <div className="settings-row">
+        <span className="settings-k">{U.channelK}</span>
+        <Seg value={u.channel ?? 'stable'} onChange={(v) => api.setChannel(v)} opts={[{ value: 'stable', label: U.stable }, { value: 'main', label: U.main }]} />
+        <span className="settings-sub">{u.channel === 'main' ? U.mainSub : U.stableSub}</span>
+      </div>
+      <div className="settings-row">
         <span className="settings-k">{U.autoK}</span>
         <Seg value={u.auto ? 'on' : 'off'} onChange={(v) => api.setAuto(v === 'on')} opts={[{ value: 'off', label: U.off }, { value: 'on', label: U.on }]} />
         <span className="settings-sub">{U.autoSub}</span>

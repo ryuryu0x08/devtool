@@ -1,16 +1,19 @@
 // Updates of the desktop app come from the git clone it was built from: build.sh writes
-// build-info.json (the clone's folder, the commit) into the app. An update fetches the
-// toolbox-stable branch, which CI moves only after the app was built and passed its tests on
-// macOS, Windows and Linux; moves the clone forward to it; builds the app with build.sh; and puts
-// the new app in place of the running one once that has quit (it is in use until then).
+// build-info.json (the clone's folder, the commit) into the app. An update fetches a branch (the
+// channel's: toolbox-stable, which CI moves only after the app was built and passed its tests on
+// macOS, Windows and Linux; or main, as pushed, not waiting for CI); moves the clone forward to
+// it; builds the app with build.sh (a build that fails changes nothing); and puts the new app in
+// place of the running one once that has quit (it is in use until then).
 // macOS only: there build.sh makes a Toolbox.app that can simply replace the old one.
 
 const { execFile, spawn } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const BRANCH = 'toolbox-stable';
-const REMOTE_REF = `refs/remotes/origin/${BRANCH}`;
+/** Where updates come from: the branch CI moves once every test passed, or main as pushed. */
+const CHANNELS = { stable: 'toolbox-stable', main: 'main' };
+const BRANCH = CHANNELS.stable;
+const remoteRef = (branch) => `refs/remotes/origin/${branch}`;
 /** What the app is made of: an update counts only the commits that change these. */
 const PATHS = ['apps/toolbox', 'packages/ui', 'package.json', 'package-lock.json'];
 
@@ -56,7 +59,8 @@ async function run(cmd, args, dir, timeout = 30_000) {
     execFile(cmd, args, { cwd: dir, env, timeout, maxBuffer: 16 * 1024 * 1024 }, (err, out, errOut) => {
       if (!err) return done(String(out));
       const why = String(errOut || out || '').trim().split('\n').slice(-3).join(' ') || err.message;
-      fail(new Error(err.killed ? `${cmd} 超时` : `${cmd} ${args[0]}: ${why}`));
+      // All it printed goes with the error (the update's log keeps it).
+      fail(Object.assign(new Error(err.killed ? `${cmd} 超时` : `${cmd} ${args[0]}: ${why}`), { output: String(out || '') + String(errOut || '') }));
     });
   });
 }
@@ -72,9 +76,9 @@ function httpsFor(remote) {
   return p ? 'https://github.com/' + p : null;
 }
 
-/** Fetches the stable branch from origin; a GitHub ssh address that fails is tried over https (no key needed for a public repository). */
-async function fetchStable(dir) {
-  const spec = `+refs/heads/${BRANCH}:${REMOTE_REF}`;
+/** Fetches `branch` from origin; a GitHub ssh address that fails is tried over https (no key needed for a public repository). */
+async function fetchStable(dir, branch = BRANCH) {
+  const spec = `+refs/heads/${branch}:${remoteRef(branch)}`;
   try {
     await git(dir, ['fetch', '--quiet', '--no-tags', 'origin', spec], 90_000);
   } catch (first) {
@@ -89,22 +93,30 @@ async function fetchStable(dir) {
   }
 }
 
-/** Fetches the stable branch; how many of its commits since `commit` change the app, and the newest one's subject. */
-async function newer(dir, commit) {
-  await fetchStable(dir);
-  const count = Number((await git(dir, ['rev-list', '--count', `${commit}..${REMOTE_REF}`, '--', ...PATHS])).trim()) || 0;
+/** Fetches `branch`; how many of its commits since `commit` change the app, and the newest one's subject. */
+async function newer(dir, commit, branch = BRANCH) {
+  await fetchStable(dir, branch);
+  const ref = remoteRef(branch);
+  const count = Number((await git(dir, ['rev-list', '--count', `${commit}..${ref}`, '--', ...PATHS])).trim()) || 0;
   if (!count) return { count: 0, subject: null };
-  const subject = (await git(dir, ['log', '-1', '--format=%s', REMOTE_REF, '--', ...PATHS])).trim();
+  const subject = (await git(dir, ['log', '-1', '--format=%s', ref, '--', ...PATHS])).trim();
   return { count, subject: subject || null };
 }
 
-/** Moves the clone forward to the fetched stable branch (only forward: local commits or changes in the way stop it, with git's reason). */
-const fastForward = (dir) => git(dir, ['merge', '--ff-only', '--quiet', REMOTE_REF], 60_000);
+/** Moves the clone forward to the fetched `branch` (only forward: local commits or changes in the way stop it, with git's reason). */
+const fastForward = (dir, branch = BRANCH) => git(dir, ['merge', '--ff-only', '--quiet', remoteRef(branch)], 60_000);
 
 /** Builds the app with build.sh (its output to `log`); the Toolbox.app it made. */
 async function build(dir, log) {
   const desktop = path.join(dir, 'apps/toolbox/desktop');
-  const out = await run('bash', ['build.sh'], desktop, 15 * 60_000);
+  let out;
+  try {
+    out = await run('bash', ['build.sh'], desktop, 15 * 60_000);
+  } catch (e) {
+    // A failed build changes nothing; what it printed is kept to see why.
+    if (log) fs.writeFileSync(log, e.output ?? e.message);
+    throw e;
+  }
   if (log) fs.writeFileSync(log, out);
   const release = path.join(desktop, 'release');
   const made = fs.readdirSync(release).filter((d) => d.startsWith('mac')).map((d) => path.join(release, d, 'Toolbox.app')).find((p) => fs.existsSync(p));
@@ -135,4 +147,4 @@ function bundleOf(exe) {
   return p.endsWith('.app') ? p : null;
 }
 
-module.exports = { BRANCH, PATHS, readInfo, shellEnv, httpsFor, fetchStable, newer, fastForward, build, swapAfterQuit, bundleOf, git };
+module.exports = { BRANCH, CHANNELS, PATHS, readInfo, shellEnv, httpsFor, fetchStable, newer, fastForward, build, swapAfterQuit, bundleOf, git };

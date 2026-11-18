@@ -169,11 +169,20 @@ const bundle = isMac ? updater.bundleOf(process.execPath) : null;
 /** Why this app can't update itself; null: it can. */
 const unsupported = !isMac ? 'platform' : !info || !bundle || !fs.existsSync(path.join(info.sourceDir, '.git')) ? 'not-built-here' : null;
 const updateFile = () => path.join(app.getPath('userData'), 'update.json');
-function savedAuto() {
+/** The update settings kept: automatic or not, and the channel (stable: after CI; main: as pushed). */
+function savedSettings() {
   try {
-    return JSON.parse(fs.readFileSync(updateFile(), 'utf8')).auto === true;
+    const s = JSON.parse(fs.readFileSync(updateFile(), 'utf8'));
+    return { auto: s.auto === true, channel: s.channel === 'main' ? 'main' : 'stable' };
   } catch {
-    return false;
+    return { auto: false, channel: 'stable' };
+  }
+}
+function saveSettings() {
+  try {
+    fs.writeFileSync(updateFile(), JSON.stringify({ auto: update.auto, channel: update.channel }));
+  } catch {
+    /* not kept this time */
   }
 }
 
@@ -188,6 +197,8 @@ let update = {
   built: info?.built ?? null,
   sourceDir: info?.sourceDir ?? null,
   auto: false,
+  /** stable: toolbox-stable (moved by CI once every test passed); main: main as pushed. */
+  channel: 'stable',
   count: 0,
   subject: null,
   error: null,
@@ -206,7 +217,7 @@ async function check() {
   if (unsupported || ['checking', 'building', 'ready'].includes(update.state)) return update;
   setUpdate({ state: 'checking', error: null });
   try {
-    const { count, subject } = await updater.newer(info.sourceDir, info.commit);
+    const { count, subject } = await updater.newer(info.sourceDir, info.commit, updater.CHANNELS[update.channel]);
     setUpdate({ state: count ? 'available' : 'none', count, subject, checked: Date.now() });
     if (count && update.auto) install();
   } catch (e) {
@@ -219,7 +230,7 @@ async function install() {
   if (update.state !== 'available') return update;
   setUpdate({ state: 'building', error: null });
   try {
-    await updater.fastForward(info.sourceDir);
+    await updater.fastForward(info.sourceDir, updater.CHANNELS[update.channel]);
     fresh = await updater.build(info.sourceDir, path.join(app.getPath('userData'), 'update-build.log'));
     setUpdate({ state: 'ready' });
   } catch (e) {
@@ -250,14 +261,22 @@ function onUpdate(e, action, arg) {
       app.quit();
       return update;
     case 'auto':
-      try {
-        fs.writeFileSync(updateFile(), JSON.stringify({ auto: arg === true }));
-      } catch {
-        /* not kept this time */
-      }
       setUpdate({ auto: arg === true });
+      saveSettings();
       if (update.auto && update.state === 'available') install();
       return update;
+    case 'channel': {
+      const channel = arg === 'main' ? 'main' : 'stable';
+      if (channel === update.channel) return update;
+      setUpdate({ channel });
+      saveSettings();
+      // What was found was the other branch's: look again (not while one is being built or is ready).
+      if (['idle', 'none', 'available', 'failed'].includes(update.state)) {
+        setUpdate({ state: 'idle', count: 0, subject: null, error: null });
+        return check();
+      }
+      return update;
+    }
     default:
       return null;
   }
@@ -328,7 +347,7 @@ if (!app.requestSingleInstanceLock()) {
     // macOS: the Dock icon clicked (the window hidden, or none).
     app.on('activate', show);
     if (!unsupported) {
-      update.auto = savedAuto();
+      Object.assign(update, savedSettings());
       setTimeout(check, 30_000);
       setInterval(check, 6 * 3600_000);
     }

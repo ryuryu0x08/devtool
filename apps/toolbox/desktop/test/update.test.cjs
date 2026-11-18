@@ -57,6 +57,26 @@ test('only the stable branch commits that change the app count; the clone moves 
   assert.equal(fs.readFileSync(path.join(mine, 'apps/toolbox/a.txt'), 'utf8'), '2');
 });
 
+test('the main channel: main as pushed, ahead of the stable branch, not waiting for it', async () => {
+  const origin = tmp();
+  git(origin, 'init', '-q', '--bare');
+  const dev = tmp();
+  git(dev, 'init', '-q');
+  git(dev, 'remote', 'add', 'origin', origin);
+  const first = commit(dev, 'apps/toolbox/a.txt', '1', 'first');
+  git(dev, 'push', '-q', 'origin', 'HEAD:refs/heads/main', 'HEAD:refs/heads/' + u.BRANCH);
+  const mine = tmp();
+  git(mine, 'clone', '-q', origin, '.');
+  // Pushed to main; CI hasn't moved the stable branch yet.
+  commit(dev, 'apps/toolbox/a.txt', '2', 'toolbox: not through CI yet');
+  git(dev, 'push', '-q', 'origin', 'HEAD:refs/heads/main');
+  assert.deepEqual(await u.newer(mine, first), { count: 0, subject: null });
+  assert.deepEqual(await u.newer(mine, first, u.CHANNELS.main), { count: 1, subject: 'toolbox: not through CI yet' });
+  await u.fastForward(mine, u.CHANNELS.main);
+  assert.equal(fs.readFileSync(path.join(mine, 'apps/toolbox/a.txt'), 'utf8'), '2');
+  assert.deepEqual(u.CHANNELS, { stable: 'toolbox-stable', main: 'main' });
+});
+
 test('a change of its own in the clone stops moving it forward, with git’s reason', async () => {
   const origin = tmp();
   git(origin, 'init', '-q', '--bare');
@@ -94,6 +114,18 @@ test('the new app takes the old one’s place once the old one has quit, then op
   assert.equal(fs.readFileSync(path.join(current, 'v'), 'utf8'), 'new');
   assert.equal(fs.readFileSync(opened, 'utf8').trim(), current);
   assert.ok(!fs.existsSync(current + '.new'));
+});
+
+test('a build that fails: its whole output kept in the log, the error says why', async () => {
+  const dir = tmp();
+  const desktop = path.join(dir, 'apps/toolbox/desktop');
+  fs.mkdirSync(desktop, { recursive: true });
+  fs.writeFileSync(path.join(desktop, 'build.sh'), 'echo step one\necho step two\necho "error TS2322: bad type" >&2\nexit 2\n');
+  const log = path.join(dir, 'build.log');
+  await assert.rejects(u.build(dir, log), /TS2322/);
+  const kept = fs.readFileSync(log, 'utf8');
+  assert.match(kept, /step one/);
+  assert.match(kept, /TS2322/);
 });
 
 test('the bundle the app runs from', () => {

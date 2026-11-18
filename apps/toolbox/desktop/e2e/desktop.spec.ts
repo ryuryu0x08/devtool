@@ -155,7 +155,7 @@ test('no system title bar: the page draws the strip at the top, in the theme’s
   });
   expect(bridge).toEqual({
     keys: ['platform', 'titleBar', 'update'],
-    update: ['check', 'get', 'install', 'onState', 'restart', 'setAuto'],
+    update: ['check', 'get', 'install', 'onState', 'restart', 'setAuto', 'setChannel'],
     node: 'undefined',
   });
   await page.waitForTimeout(300);

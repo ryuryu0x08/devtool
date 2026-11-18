@@ -10,6 +10,8 @@ export interface UpdateState {
   commit: string | null;
   built: string | null;
   auto: boolean;
+  /** stable: toolbox-stable (moved by CI once every test passed); main: main as pushed, not waiting for CI. */
+  channel: 'stable' | 'main';
   /** New commits that change the app; the newest one's subject. */
   count: number;
   subject: string | null;
@@ -22,6 +24,7 @@ interface Updates {
   install(): Promise<UpdateState>;
   restart(): Promise<UpdateState>;
   setAuto(on: boolean): Promise<UpdateState>;
+  setChannel(channel: 'stable' | 'main'): Promise<UpdateState>;
   /** Called on each change; returns the unsubscribe. */
   onState(fn: (s: UpdateState) => void): () => void;
 }

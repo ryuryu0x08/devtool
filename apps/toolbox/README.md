@@ -205,6 +205,7 @@ cd devtool/apps/toolbox/desktop
 - `build.sh` 把仓库目录和当前提交写进 App（`build-info.json`）。设置页「更新」显示当前版本，可以检查更新、更新、立即重启。
 - 更新来自 `toolbox-stable` 分支：main 上的提交在 macOS、Windows、Linux 都编译并通过全部测试后，CI 才把它移过去。只统计改到工具箱的提交（`apps/toolbox`、`packages/ui`、根目录的 `package.json` / `package-lock.json`）。
 - 更新 = 在你的仓库里 fetch 并快进到 `toolbox-stable`（有本地改动或提交挡住时停下并显示 git 的原因），再跑一次 `build.sh`（几分钟），新 App 在退出或「立即重启」时替换 `/Applications` 里的旧 App。编译输出在 App 数据目录的 `update-build.log`。
+- 「更新来源」：默认「稳定版」，即 `toolbox-stable`，等 CI 在三个平台都通过（约半小时）。选「最新 main」则直接拉 main 最新的提交在本机编译，不等 CI；编译（含类型检查）失败就停在「失败」，现在用的 App 不变，完整输出在 `update-build.log`。
 - 「自动更新」开启后：启动 30 秒后和之后每 6 小时检查一次，有新版本就在后台编译，下次退出时换上。默认关闭。
 - 仓库是 ssh 地址且 ssh 失败时，改用 https 拉取（公开仓库不需要密钥）。
 - Windows / Linux 和 CI 出的安装包不能自动更新，设置页会说明；请重新下载安装包或运行 `build.sh`。
