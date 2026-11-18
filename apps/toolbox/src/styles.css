@@ -1,6 +1,6 @@
 .app { display: flex; min-height: 100vh; width: 100%; background: var(--bg); color: var(--ink); font-size: 14px; }
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.content { width: 100%; max-width: 1320px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+.content { position: relative; width: 100%; max-width: 1320px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
 
 .grid { display: grid; gap: 16px; align-items: start; }
 
@@ -450,3 +450,18 @@ html.desktop { --titlebar: 36px; }
   -webkit-app-region: drag;
 }
 .desktop .mbar { top: var(--titlebar); }
+
+/* Find bar (⌘F): matches in the page marked by the Highlight API; in text boxes by a copy laid over them. */
+.find-bar { position: fixed; top: calc(var(--titlebar, 0px) + 10px); right: 20px; z-index: 60; display: flex; align-items: center; gap: 4px; padding: 5px 6px 5px 10px;
+  background: var(--card); border: 1px solid var(--line2); border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.16); }
+.find-q { width: 220px; height: 28px; border: 0; outline: none; background: transparent; color: var(--ink); font: 13px 'Geist Mono', 'PingFang SC', monospace; }
+.find-n { min-width: 56px; text-align: right; font-size: 12px; color: var(--mut); padding-right: 4px; white-space: nowrap; }
+.find-btn { height: 26px; min-width: 26px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; color: var(--mut); font: 600 12px 'Geist', sans-serif; cursor: pointer; }
+.find-btn:hover:not(:disabled) { background: var(--line); color: var(--ink); }
+.find-btn:disabled { opacity: .4; cursor: default; }
+.find-btn.on { background: var(--accRing); color: var(--acc); }
+::highlight(tb-find) { background-color: rgba(255, 200, 0, .38); }
+::highlight(tb-find-cur) { background-color: rgba(255, 140, 0, .75); color: #000; }
+.find-mirror { position: absolute; z-index: 2; pointer-events: none; overflow: hidden; box-sizing: border-box; color: transparent; margin: 0; border: 0; background: transparent; }
+.find-mirror mark { color: transparent; background: rgba(255, 200, 0, .38); border-radius: 2px; }
+.find-mirror mark.cur { background: rgba(255, 140, 0, .55); }

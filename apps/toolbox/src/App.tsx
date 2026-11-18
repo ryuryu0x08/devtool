@@ -30,6 +30,7 @@ import { Palette } from './components/Palette';
 import { Vis } from './components/Vis';
 import { ToolBoundary } from './components/ToolBoundary';
 import { Settings } from './components/Settings';
+import { FindBar } from './components/Find';
 import { tintTitleBar } from './lib/desktop';
 import { ZOOMS } from './components/Zoom';
 import { ErrLine } from './components/Panes';
@@ -567,6 +568,7 @@ export function App() {
             {(framesOn || pluginOfTool(S.tool)) && <Suspense fallback={null}><PluginFrames active={S.settings ? null : pluginOfTool(S.tool)} /></Suspense>}
           </div>
         </main>
+        <FindBar />
         {S.palette && <Palette />}
         {S.dragOver && (
           <div className="drop-overlay">
