@@ -82,7 +82,7 @@ export const COMMON_TZ = ['UTC', 'Asia/Shanghai', 'Asia/Tokyo', 'Asia/Singapore'
 
 const zh = {
   ...zhT,
-  brand: '工具箱', search: '搜索工具…', searchShort: '搜索', collapse: '收起侧栏', expand: '展开侧栏',
+  brand: 'devtool', search: '搜索工具…', searchShort: '搜索', collapse: '收起侧栏', expand: '展开侧栏',
   find: { ph: '查找', none: '无结果', case: '区分大小写', prev: '上一个 (Shift+Enter)', next: '下一个 (Enter)', close: '关闭 (Esc)' },
   settings: '设置', setLang: '语言', setTheme: '外观', setZoom: '字号', setZoomSub: '放大右侧的工具区，侧栏不变',
   up: { k: '更新', channelK: '更新来源', stable: '稳定版', main: '最新 main', stableSub: '三个平台的测试都通过后才更新（CI，约半小时）', mainSub: '直接用 main 最新的提交在本机编译，不等 CI；编译失败就不更新', autoK: '自动更新', off: '关', on: '开', autoSub: '有新版本时在后台编译，退出时换上', version: '当前 {c} · {d} 编译', check: '检查更新', install: '更新', restart: '立即重启', retry: '重试', idle: '还没检查过', checking: '检查中…', none: '已是最新', available: '有 {n} 个新提交：{s}', building: '正在编译新版本（几分钟）…', ready: '新版本已编译好，重启或退出后换上', failed: '失败，现在的 App 不变：{e}', platform: '只有 macOS 上用 build.sh 编译的版本能自动更新；Windows / Linux 请重新下载安装包', notBuiltHere: '这个版本不是用 build.sh 从 git 仓库编译的，不能自动更新；请在仓库里运行 apps/toolbox/desktop/build.sh --install' },
@@ -110,7 +110,7 @@ export type Dict = typeof zh;
 
 const en: Dict = {
   ...enT,
-  brand: 'Toolbox', search: 'Search tools…', searchShort: 'Search', collapse: 'Collapse sidebar', expand: 'Expand sidebar',
+  brand: 'devtool', search: 'Search tools…', searchShort: 'Search', collapse: 'Collapse sidebar', expand: 'Expand sidebar',
   find: { ph: 'Find', none: 'No results', case: 'Match case', prev: 'Previous (Shift+Enter)', next: 'Next (Enter)', close: 'Close (Esc)' },
   settings: 'Settings', setLang: 'Language', setTheme: 'Appearance', setZoom: 'Text size', setZoomSub: 'Scales the tool area; the sidebar stays as it is',
   up: { k: 'Updates', channelK: 'Update from', stable: 'Stable', main: 'Latest main', stableSub: 'Only once the tests passed on all three systems (CI, about half an hour)', mainSub: 'Builds the newest commit on main here, not waiting for CI; a build that fails changes nothing', autoK: 'Auto update', off: 'Off', on: 'On', autoSub: 'Builds a new version in the background; it takes over when the app quits', version: 'Current {c} · built {d}', check: 'Check for updates', install: 'Update', restart: 'Restart now', retry: 'Retry', idle: 'Not checked yet', checking: 'Checking…', none: 'Up to date', available: '{n} new commits: {s}', building: 'Building the new version (a few minutes)…', ready: 'The new version is built; it takes over on restart or quit', failed: 'Failed; this app stays as it is: {e}', platform: 'Only a macOS app built with build.sh updates itself; on Windows / Linux, download the installer again', notBuiltHere: 'This app wasn’t built with build.sh from a git clone, so it can’t update itself; run apps/toolbox/desktop/build.sh --install in the repository' },

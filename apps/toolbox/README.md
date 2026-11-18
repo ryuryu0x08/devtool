@@ -1,6 +1,6 @@
-# 工具箱 · Toolbox
+# devtool
 
-面向开发者的跨端（PC + 移动端）工具箱，按 Claude Design 交付的高保真原型（`design/project/Toolbox.dc.html`，1a 经典侧栏方向）实现。
+devtool 是面向开发者的跨端（PC + 移动端）工具箱（代码目录仍是 `apps/toolbox`），按 Claude Design 交付的高保真原型（`design/project/Toolbox.dc.html`，1a 经典侧栏方向）实现。
 
 ## 产品原则
 
@@ -113,7 +113,7 @@
 - **UUID** 用浏览器的安全随机数生成；生成的值不保存。
 - **查找（⌘F / Ctrl+F）**：在当前工具里查找，范围是所有输入框和结果区里的文字，按页面上的先后顺序排列。所有匹配都高亮，当前那个颜色更深，并显示「3/27」。Enter / ⌘G 跳到下一个，Shift+Enter / ⇧⌘G 跳到上一个，「Aa」切换区分大小写，Esc 关闭；关闭时如果停在输入框里的匹配上，会把它选中。打开时如果已经选中了文字，会自动填进查找框。边改内容边查也行，匹配数会跟着更新。浏览器里会替代浏览器自带的查找（自带的搜不到输入框里的文字）；桌面 App 里原本没有查找，现在也能用了。最多统计 10000 个匹配。
 - **大模型对话测试**的 API key 只在本机浏览器里使用，请求从浏览器直接发到你填写的接口地址，不经过本网站的服务器；默认不保存，勾选"记住 key"后才存到本机浏览器，取消勾选即删除。对话只保存在当前页面，刷新后清空。请求失败时显示接口返回的 HTTP 状态和原始错误信息；连不上时说明可能的原因（地址、网络或接口不允许浏览器跨域访问），不自动重试。
-- **插件**的代码只存在本机浏览器（localStorage），插件自己存的数据也只在本机（IndexedDB，按插件分开，删除插件时一并删除）。插件在没有同源权限的沙箱 iframe 里运行，origin 为 `null`：读不到工具箱页面、它的存储和其他工具的数据（包括大模型工具里记住的 key）；只能通过 `toolbox` 对象请求网络、读写自己的存储、复制和提示。
+- **插件**的代码只存在本机浏览器（localStorage），插件自己存的数据也只在本机（IndexedDB，按插件分开，删除插件时一并删除）。插件在没有同源权限的沙箱 iframe 里运行，origin 为 `null`：读不到 devtool 页面、它的存储和其他工具的数据（包括大模型工具里记住的 key）；只能通过 `toolbox` 对象请求网络、读写自己的存储、复制和提示。
 - **正则**在单独的线程里运行，超过 1.5 秒（灾难性回溯）就停止并说明，页面不会卡死；正则引擎自身放弃（回溯太深）时也会说明原因。
 - **大输入不卡死页面**：
   - YAML 的重复键一次扫描查出（5 万行的文件约 5 秒，原来要 4 分多钟）；URL 解码、Hex 转换按块处理（几 MB 在 1 秒内）。
@@ -153,20 +153,20 @@
 
 ## 我的插件
 
-插件就是一个网页：任意 HTML、CSS、JavaScript，也可以用 `<script src="https://…">` 引入任何库。在左侧"我的插件 → 添加插件"里粘贴代码（或导入 `.html` 文件、从空白模板开始，空白模板说明了全部接口），点"安装"后它成为左侧的一个工具：名字取自网页的 `<title>`，图标用 `<meta name="toolbox-icon" content="¥">` 指定（不写时取名字的前一两个字）。打开插件后，顶部有"编辑代码""导出 .html""删除"（删除要点两次）。工具箱页面打开期间，所有插件都在后台运行（无论当前在哪个工具），打开的那个高度铺满窗口；命令面板也能搜到插件。
+插件就是一个网页：任意 HTML、CSS、JavaScript，也可以用 `<script src="https://…">` 引入任何库。在左侧"我的插件 → 添加插件"里粘贴代码（或导入 `.html` 文件、从空白模板开始，空白模板说明了全部接口），点"安装"后它成为左侧的一个工具：名字取自网页的 `<title>`，图标用 `<meta name="toolbox-icon" content="¥">` 指定（不写时取名字的前一两个字）。打开插件后，顶部有"编辑代码""导出 .html""删除"（删除要点两次）。devtool 页面打开期间，所有插件都在后台运行（无论当前在哪个工具），打开的那个高度铺满窗口；命令面板也能搜到插件。
 
-插件在隔离的环境里运行，通过 `window.toolbox` 与工具箱交互：
+插件在隔离的环境里运行，通过 `window.toolbox` 与 devtool 交互：
 
 | 接口 | 作用 |
 |---|---|
-| `await toolbox.fetch(url, { method, headers, body })` | 由工具箱代发请求，返回 `{ ok, status, headers, text, json() }`；连不上时抛出 `connect: …`，30 秒无响应抛出 `timeout: …` |
+| `await toolbox.fetch(url, { method, headers, body })` | 由 devtool 代发请求，返回 `{ ok, status, headers, text, json() }`；连不上时抛出 `connect: …`，30 秒无响应抛出 `timeout: …` |
 | `await toolbox.storage.get(key)` / `set(key, value)` / `remove(key)` | 这个插件自己的存储（值可以是任意可结构化克隆的数据），保存在本机浏览器 |
 | `toolbox.copy(text)`、`toolbox.toast(text)` | 复制到剪贴板、显示提示 |
-| `await toolbox.proxyCommand(接口地址, 端口 = 8787, 'python3' \| 'python')` | 生成一行本地转发程序的启动命令 `command`（粘贴到终端即可运行，不需要下载文件；Windows 用 `'python'`），以及之后要请求的本机地址 `local`（`http://127.0.0.1:端口` 加上原地址的路径和参数）；命令里的 `--origin` 自动填为当前打开工具箱的地址 |
+| `await toolbox.proxyCommand(接口地址, 端口 = 8787, 'python3' \| 'python')` | 生成一行本地转发程序的启动命令 `command`（粘贴到终端即可运行，不需要下载文件；Windows 用 `'python'`），以及之后要请求的本机地址 `local`（`http://127.0.0.1:端口` 加上原地址的路径和参数）；命令里的 `--origin` 自动填为当前打开 devtool 的地址 |
 
-工具箱的配色以 CSS 变量传入（`--ink`、`--mut`、`--faint`、`--bg`、`--card`、`--sub`、`--line`、`--acc`、`--add`、`--del`、`--chg` 等，切换主题时同步更新，并触发 `toolbox-theme` 事件），`.card`、`.btn`、`.btn.primary`、`input`、`textarea`、`label` 有基础样式。工具箱自带 uPlot 图表库，写 `<script src="toolbox:uplot"></script>` 和 `<link rel="stylesheet" href="toolbox:uplot.css">` 即可使用，不需要联网。
+devtool 的配色以 CSS 变量传入（`--ink`、`--mut`、`--faint`、`--bg`、`--card`、`--sub`、`--line`、`--acc`、`--add`、`--del`、`--chg` 等，切换主题时同步更新，并触发 `toolbox-theme` 事件），`.card`、`.btn`、`.btn.primary`、`input`、`textarea`、`label` 有基础样式。devtool 自带 uPlot 图表库，写 `<script src="toolbox:uplot"></script>` 和 `<link rel="stylesheet" href="toolbox:uplot.css">` 即可使用，不需要联网。
 
-工具箱不内置具体的插件；额度看板这类只给自己用的插件，代码由使用者自己保存和粘贴。
+devtool 不内置具体的插件；额度看板这类只给自己用的插件，代码由使用者自己保存和粘贴。
 
 **接口不允许浏览器直接访问时**（没有 CORS 头、不处理 OPTIONS 预检）：在自己电脑上运行转发程序 `apps/toolbox/scripts/local-proxy.py`（只用 Python 标准库，3.8+）。最简单的是在插件里用 `toolbox.proxyCommand` 生成一行命令，复制后粘贴到终端运行（命令里内嵌了压缩后的脚本，约 2500 字符，bash、zsh、cmd、PowerShell 都可以直接粘贴）；也可以下载脚本运行：
 
@@ -175,11 +175,11 @@ python3 apps/toolbox/scripts/local-proxy.py http://你的接口地址           
 python3 apps/toolbox/scripts/local-proxy.py http://你的接口地址 --port 8787 --origin http://public-pages.ryuryu.fun:8081
 ```
 
-然后把插件里的地址换成 `http://127.0.0.1:8787/...`（路径和查询参数不变）。转发程序只监听 127.0.0.1，只接受 `--origin` 指定的工具箱地址发来的请求（默认 `http://public-pages.ryuryu.fun:8081`，可重复指定；插件的请求由工具箱代发，所以来源就是工具箱的地址），原样转发路径、查询参数、`Authorization` 和请求体，加上浏览器需要的 CORS 头；不保存任何内容，日志里只有方法、路径和状态码，没有 key。连不上目标接口时返回 502 和原因。Chrome 第一次从网页访问本机地址时会询问是否允许访问本地网络，允许一次即可。
+然后把插件里的地址换成 `http://127.0.0.1:8787/...`（路径和查询参数不变）。转发程序只监听 127.0.0.1，只接受 `--origin` 指定的 devtool 地址发来的请求（默认 `http://public-pages.ryuryu.fun:8081`，可重复指定；插件的请求由 devtool 代发，所以来源就是 devtool 的地址），原样转发路径、查询参数、`Authorization` 和请求体，加上浏览器需要的 CORS 头；不保存任何内容，日志里只有方法、路径和状态码，没有 key。连不上目标接口时返回 502 和原因。Chrome 第一次从网页访问本机地址时会询问是否允许访问本地网络，允许一次即可。
 
 ## 桌面版
 
-工具箱也可以作为桌面 App 使用（macOS、Windows、Linux），代码在 `desktop/`。用 Electron 打包：App 自带和测试用的同一个 Chromium，所以各平台表现和网页版一致。
+devtool 也可以作为桌面 App 使用（macOS、Windows、Linux），代码在 `desktop/`。用 Electron 打包：App 自带和测试用的同一个 Chromium，所以各平台表现和网页版一致。
 
 在 Mac 上安装（第一次要下载 Electron，约 100 MB，之后不到一分钟）：
 
@@ -188,22 +188,22 @@ cd devtool/apps/toolbox/desktop
 ./build.sh --install     # 编译，放进「应用程序」并打开；已经开着的会先退出
 ```
 
-只需要 Node 18+。也可以下载 CI 出的安装包：GitHub Actions → toolbox → Artifacts（`.dmg`、`-setup.exe`、`.AppImage`、`.deb`）。没有代码签名：Mac 上第一次打开要右键 →「打开」，从浏览器下载的若提示"已损坏"，运行 `xattr -cr /Applications/Toolbox.app`；Windows 的 SmartScreen 提示时选「仍要运行」。
+只需要 Node 18+。也可以下载 CI 出的安装包：GitHub Actions → toolbox → Artifacts（`.dmg`、`-setup.exe`、`.AppImage`、`.deb`）。没有代码签名：Mac 上第一次打开要右键 →「打开」，从浏览器下载的若提示"已损坏"，运行 `xattr -cr /Applications/devtool.app`；Windows 的 SmartScreen 提示时选「仍要运行」。
 
 和网页版的区别：
 
 - 数据（输入、设置、插件）存在 App 自己的目录里，和浏览器里的网页版互不相通。
-- 其他网站的链接在系统浏览器里打开；窗口只显示工具箱。
+- 其他网站的链接在系统浏览器里打开；窗口只显示 devtool。
 - 窗口大小和位置下次打开时保持；再次打开 App 会显示已经开着的那个。
-- 没有系统标题栏：顶部一条由工具箱自己画，颜色跟主题一致，拖动它移动窗口、双击放大。macOS 的红黄绿按钮在左上角，Windows / Linux 的最小化、最大化、关闭在右上角，颜色同样跟主题。
+- 没有系统标题栏：顶部一条由 devtool 自己画，颜色跟主题一致，拖动它移动窗口、双击放大。macOS 的红黄绿按钮在左上角，Windows / Linux 的最小化、最大化、关闭在右上角，颜色同样跟主题。
 - 页面和网页一样运行在沙盒里，拿不到本机文件和系统命令；只开放复制粘贴需要的权限。
-- 「大模型对话测试」和插件经工具箱发出的请求不受浏览器跨域（CORS）限制：不带浏览器的 Origin，接口没有 CORS 头、拒绝预检也能用，和命令行调用一样。插件自己的框架仍按浏览器规则。
+- 「大模型对话测试」和插件经 devtool 发出的请求不受浏览器跨域（CORS）限制：不带浏览器的 Origin，接口没有 CORS 头、拒绝预检也能用，和命令行调用一样。插件自己的框架仍按浏览器规则。
 - macOS：点关闭（或 ⌘W）只是隐藏窗口，点 Dock 图标立刻回来，页面保持原样、不重新加载；⌘Q 或 Dock 图标右键「退出」才真正退出。
 
 检查更新和自动更新（macOS，用 `build.sh` 编译的版本）：
 
 - `build.sh` 把仓库目录和当前提交写进 App（`build-info.json`）。设置页「更新」显示当前版本，可以检查更新、更新、立即重启。
-- 更新来自 `toolbox-stable` 分支：main 上的提交在 macOS、Windows、Linux 都编译并通过全部测试后，CI 才把它移过去。只统计改到工具箱的提交（`apps/toolbox`、`packages/ui`、根目录的 `package.json` / `package-lock.json`）。
+- 更新来自 `toolbox-stable` 分支：main 上的提交在 macOS、Windows、Linux 都编译并通过全部测试后，CI 才把它移过去。只统计改到 devtool 的提交（`apps/toolbox`、`packages/ui`、根目录的 `package.json` / `package-lock.json`）。
 - 更新 = 在你的仓库里 fetch 并快进到 `toolbox-stable`（有本地改动或提交挡住时停下并显示 git 的原因），再跑一次 `build.sh`（几分钟），新 App 在退出或「立即重启」时替换 `/Applications` 里的旧 App。编译输出在 App 数据目录的 `update-build.log`。
 - 「更新来源」：默认「稳定版」，即 `toolbox-stable`，等 CI 在三个平台都通过（约半小时）。选「最新 main」则直接拉 main 最新的提交在本机编译，不等 CI；编译（含类型检查）失败就停在「失败」，现在用的 App 不变，完整输出在 `update-build.log`。
 - 「自动更新」开启后：启动 30 秒后和之后每 6 小时检查一次，有新版本就在后台编译，下次退出时换上。默认关闭。
@@ -211,12 +211,12 @@ cd devtool/apps/toolbox/desktop
 - Windows / Linux 和 CI 出的安装包不能自动更新，设置页会说明；请重新下载安装包或运行 `build.sh`。
 
 ```bash
-npm run start -w @devtool/toolbox-desktop     # 开发：构建工具箱并在窗口里打开
+npm run start -w @devtool/toolbox-desktop     # 开发：构建 devtool 并在窗口里打开
 npm run pack -w @devtool/toolbox-desktop      # 编译出 App（desktop/release/ 下，不打安装包）
 npm run dist -w @devtool/toolbox-desktop      # 安装包
 npm run test:e2e -w @devtool/toolbox-desktop  # 桌面 App 自身：来源、链接、第二次打开、存储、权限、标题栏、关闭即隐藏、更新
 npm test -w @devtool/toolbox-desktop          # 更新逻辑（临时 git 仓库：统计提交、快进、替换 App）
-npm run test:e2e:desktop -w @devtool/toolbox  # 工具箱的全部端到端测试，在桌面 App 里跑（先 pack；Linux 需要 xvfb-run）
+npm run test:e2e:desktop -w @devtool/toolbox  # devtool 的全部端到端测试，在桌面 App 里跑（先 pack；Linux 需要 xvfb-run）
 ```
 
 测试启动的 App 都带 `--toolbox-background`：窗口照常工作，但透明、点击穿透，不到最前面、不抢键盘，macOS 上也不出现在 Dock 和 ⌘Tab 里，跑测试时不影响用电脑。
@@ -236,7 +236,7 @@ desktop/
 
 ## 开发
 
-工具箱的代码在 `apps/toolbox`。下面的命令在仓库根目录或 `apps/toolbox` 里运行都可以（根目录的同名命令转给工具箱）。
+devtool 的代码在 `apps/toolbox`。下面的命令在仓库根目录或 `apps/toolbox` 里运行都可以（根目录的同名命令转给 devtool）。
 
 ```bash
 npm install            # 在仓库根目录运行一次（npm workspaces，依赖装在根目录）
@@ -275,7 +275,7 @@ npm run test:all       # typecheck + test + test:e2e
   每个测试都会检查：页面无报错，界面上没有未填的占位符、`undefined`、`NaN`。滚动条和 Windows / Linux 上一样占宽度（Playwright 默认隐藏它）。
 
   同一套测试也在桌面版里跑（`npm run test:e2e:desktop`，见「桌面版」）：每个测试启动一次 App，用它自己的存储；手机宽度的 5 个跳过（桌面窗口最窄 720 px）。
-- **植入错误测试**（`scripts/mutation.mjs`）：逐个植入 171 种已知错误，每一个都必须让测试失败。例如数字按双精度比较、漏报新增字段、偏移按分钟取整、哈希常量写错、超过 512 MB 的长度溢出、Base64 混用字符集未报错、焦点被抢走、长提示超出屏幕、结果行点击不复制、粘贴总是填入对比的 A 侧、被替换的文件无法撤销、YAML 数字被改写、JWT 任意签名都通过、Unix cron 的日 / 星期按"同时满足"、对比度向上取整、JWT 密钥被保存、失控的正则不停止、所有工具共用一种排列、改一个进制其余不同步、YAML 键两两比较（大文件要几分钟）、文本对比没有时间上限、Gzip 解压不限大小、英文句子被当成 SQL、取消的拖动保留了中途的排列、放大字号后拖动的结果偏离鼠标、侧栏也跟着缩放、拿着的结果不提示落点、上下排列时结果被挤出屏幕、输入框或结果框高度不记忆、输入框可以拖到没有、结果框调高后内容区不跟着变高、拿着的窗口和落点大小不一致或移出工具区、出现滚动条后拿着的结果不跟着变窄、切换工具后抢走刚点中的按钮的焦点、左右排列比上下排列矮、上下排列时结果框比输入框矮、切换排列时输入框高度改变、格式化结果没有着色或着色时丢了字符、压缩结果仍带换行缩进或把相邻记号连在一起、结果长短改变框的高度、默认高度不铺满窗口或窗口变化后不重新铺满、TOML 的键或注释没有随所在的表缩进、大模型 key 未经同意被保存、多轮对话丢了历史或思考块、失败的回复被当作历史发出、连不上接口时不说明原因、插件拿到工具箱的同源权限、不保存或切到其他工具就停止、不出现在侧栏、插件自己的存储不保存、页面样式盖过插件隐藏的内容、删除只问一次、连不上接口时不说明、转发命令写错工具箱地址或丢了部分脚本。
+- **植入错误测试**（`scripts/mutation.mjs`）：逐个植入 171 种已知错误，每一个都必须让测试失败。例如数字按双精度比较、漏报新增字段、偏移按分钟取整、哈希常量写错、超过 512 MB 的长度溢出、Base64 混用字符集未报错、焦点被抢走、长提示超出屏幕、结果行点击不复制、粘贴总是填入对比的 A 侧、被替换的文件无法撤销、YAML 数字被改写、JWT 任意签名都通过、Unix cron 的日 / 星期按"同时满足"、对比度向上取整、JWT 密钥被保存、失控的正则不停止、所有工具共用一种排列、改一个进制其余不同步、YAML 键两两比较（大文件要几分钟）、文本对比没有时间上限、Gzip 解压不限大小、英文句子被当成 SQL、取消的拖动保留了中途的排列、放大字号后拖动的结果偏离鼠标、侧栏也跟着缩放、拿着的结果不提示落点、上下排列时结果被挤出屏幕、输入框或结果框高度不记忆、输入框可以拖到没有、结果框调高后内容区不跟着变高、拿着的窗口和落点大小不一致或移出工具区、出现滚动条后拿着的结果不跟着变窄、切换工具后抢走刚点中的按钮的焦点、左右排列比上下排列矮、上下排列时结果框比输入框矮、切换排列时输入框高度改变、格式化结果没有着色或着色时丢了字符、压缩结果仍带换行缩进或把相邻记号连在一起、结果长短改变框的高度、默认高度不铺满窗口或窗口变化后不重新铺满、TOML 的键或注释没有随所在的表缩进、大模型 key 未经同意被保存、多轮对话丢了历史或思考块、失败的回复被当作历史发出、连不上接口时不说明原因、插件拿到 devtool 的同源权限、不保存或切到其他工具就停止、不出现在侧栏、插件自己的存储不保存、页面样式盖过插件隐藏的内容、删除只问一次、连不上接口时不说明、转发命令写错 devtool 地址或丢了部分脚本。
 
 ## 目录
 

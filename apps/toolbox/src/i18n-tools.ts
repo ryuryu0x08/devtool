@@ -107,7 +107,7 @@ export const zhT = {
     sample: '示例文字 Sample text 123', alphaNote: '前景有透明度：先叠加到背景上再计算',
   },
   local: {
-    isolation: '插件在隔离的环境里运行，读不到工具箱和其他工具的数据；通过 toolbox 对象发请求、存数据、复制和提示（空白模板里有说明）。',
+    isolation: '插件在隔离的环境里运行，读不到 devtool 和其他工具的数据；通过 toolbox 对象发请求、存数据、复制和提示（空白模板里有说明）。',
     paste: '插件代码', pastePh: '粘贴插件的代码（一个完整的 HTML 网页）', import: '导入 .html', blank: '从空白模板开始', codeLabel: '插件代码（HTML）',
     install: '安装', installAs: '安装「{n}」', edit: '编辑代码', export: '导出 .html', save: '保存', cancel: '取消', remove: '删除', removeAsk: '再点一次确认删除', added: '已安装：{n}',
   },
@@ -233,7 +233,7 @@ export const enT: ToolDict = {
     sample: 'Sample text 示例文字 123', alphaNote: 'The foreground is translucent: laid over the background first',
   },
   local: {
-    isolation: 'A plugin runs isolated: it can’t read the toolbox or other tools’ data; the toolbox object makes requests, stores data, copies and shows toasts for it (the blank template explains it).',
+    isolation: 'A plugin runs isolated: it can’t read devtool’s or other tools’ data; the toolbox object makes requests, stores data, copies and shows toasts for it (the blank template explains it).',
     paste: 'Plugin code', pastePh: 'Paste the plugin’s code (a whole HTML page)', import: 'Import .html', blank: 'Start from the blank template', codeLabel: 'Plugin code (HTML)',
     install: 'Install', installAs: 'Install “{n}”', edit: 'Edit code', export: 'Export .html', save: 'Save', cancel: 'Cancel', remove: 'Delete', removeAsk: 'Click again to delete', added: 'Installed: {n}',
   },

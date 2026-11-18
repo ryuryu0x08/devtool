@@ -27,7 +27,7 @@ async function launch(dir: string): Promise<{ app: ElectronApplication; page: Pa
 test('it opens the toolbox from app://toolbox and serves the build only', async ({}, info) => {
   const { app, page } = await launch(info.outputPath('data'));
   expect(page.url()).toBe('app://toolbox/');
-  await expect(page).toHaveTitle('工具箱 · Toolbox');
+  await expect(page).toHaveTitle('devtool');
   const status = (path: string) => page.evaluate((p) => fetch(p).then((r) => r.status), path);
   expect(await status('/favicon.svg')).toBe(200);
   // Its module workers load (they need a JavaScript type).
@@ -111,8 +111,8 @@ test('a second launch shows the first one and quits', async ({}, info) => {
 test('copying works; permissions the toolbox doesn’t use are refused', async ({}, info) => {
   const { app, page } = await launch(info.outputPath('data'));
   await page.bringToFront();
-  await page.evaluate(() => navigator.clipboard.writeText('从工具箱复制'));
-  expect(await app.evaluate(({ clipboard }) => clipboard.readText())).toBe('从工具箱复制');
+  await page.evaluate(() => navigator.clipboard.writeText('从 devtool 复制'));
+  expect(await app.evaluate(({ clipboard }) => clipboard.readText())).toBe('从 devtool 复制');
   const states = await page.evaluate(async () => {
     const q = (name: string) => navigator.permissions.query({ name: name as PermissionName }).then((s) => s.state, () => 'error');
     return { geolocation: await q('geolocation'), notifications: await Notification.requestPermission(), camera: await q('camera') };

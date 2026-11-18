@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds 工具箱 (Toolbox) as a desktop app on this computer: macOS (Toolbox.app) or Linux (.deb).
+# Builds devtool as a desktop app on this computer: macOS (devtool.app) or Linux (.deb).
 #   ./build.sh             build only; prints where the app is
 #   ./build.sh --install   also put it in place and open it (macOS: /Applications; Linux: the .deb,
 #                          with sudo), quitting a running one first
@@ -42,19 +42,26 @@ fi
 if [[ "$OS" == Darwin ]]; then
   echo "==> 编译"
   (cd "$ROOT" && npm run pack -w @devtool/toolbox-desktop)
-  APP="$(ls -d "$PWD"/release/mac*/Toolbox.app | head -1)"
-  [[ -d "$APP" ]] || { echo "没有编译出 Toolbox.app" >&2; exit 1; }
+  APP="$(ls -d "$PWD"/release/mac*/devtool.app | head -1)"
+  [[ -d "$APP" ]] || { echo "没有编译出 devtool.app" >&2; exit 1; }
+  # The same app as Toolbox.app beside it (an APFS clone: no more room): an app from before it was
+  # renamed looks for that name when it updates itself.
+  rm -rf "$(dirname "$APP")/Toolbox.app"
+  cp -cR "$APP" "$(dirname "$APP")/Toolbox.app" 2>/dev/null || cp -R "$APP" "$(dirname "$APP")/Toolbox.app"
   echo "Built $APP"
   if [[ $INSTALL == 1 ]]; then
-    if pgrep -f "/Applications/Toolbox.app/" >/dev/null; then
-      osascript -e 'tell application "Toolbox" to quit' >/dev/null 2>&1 || true
-      for _ in $(seq 20); do pgrep -f "/Applications/Toolbox.app/" >/dev/null || break; sleep 0.25; done
-      pkill -f "/Applications/Toolbox.app/" 2>/dev/null || true
-    fi
-    rm -rf /Applications/Toolbox.app
+    # The running one quits first, under either name (Toolbox.app before the rename).
+    for name in devtool Toolbox; do
+      if pgrep -f "/Applications/$name.app/" >/dev/null; then
+        osascript -e "tell application \"$name\" to quit" >/dev/null 2>&1 || true
+        for _ in $(seq 20); do pgrep -f "/Applications/$name.app/" >/dev/null || break; sleep 0.25; done
+        pkill -f "/Applications/$name.app/" 2>/dev/null || true
+      fi
+    done
+    rm -rf /Applications/devtool.app /Applications/Toolbox.app
     cp -R "$APP" /Applications/
-    open /Applications/Toolbox.app
-    echo "Installed /Applications/Toolbox.app (已打开)"
+    open /Applications/devtool.app
+    echo "Installed /Applications/devtool.app (已打开)"
   fi
 else
   echo "==> 编译 (.deb)"
@@ -62,9 +69,12 @@ else
   DEB="$(ls -t "$PWD"/release/*.deb | head -1)"
   echo "Built $DEB"
   if [[ $INSTALL == 1 ]]; then
+    pkill -x devtool 2>/dev/null || true
     pkill -x toolbox 2>/dev/null || true
+    # The package was called toolbox before the rename: that one goes.
+    if dpkg -s toolbox >/dev/null 2>&1; then sudo apt-get remove -y toolbox; fi
     sudo apt-get install -y --reinstall "$DEB"
-    (nohup toolbox >/dev/null 2>&1 &)
+    (nohup devtool >/dev/null 2>&1 &)
     echo "Installed $(basename "$DEB") (已打开)"
   fi
 fi

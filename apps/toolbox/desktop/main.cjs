@@ -1,4 +1,4 @@
-// 工具箱 as a desktop app: the toolbox's build (./web, made by `npm run web`) in a window of its
+// devtool as a desktop app: the toolbox's build (./web, made by `npm run web`) in a window of its
 // own Chromium, so it behaves as it does in the browser the toolbox is tested in.
 //
 // The page is served from app://toolbox/ rather than file://: a real origin, so its storage stays
@@ -134,7 +134,7 @@ function open() {
     minWidth: 720,
     minHeight: 480,
     show: false,
-    title: '工具箱',
+    title: 'devtool',
     backgroundColor: dark ? '#121211' : '#f6f6f4',
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
@@ -204,7 +204,7 @@ let update = {
   error: null,
   checked: null,
 };
-/** The Toolbox.app built by an update, to put in place. */
+/** The devtool.app built by an update, to put in place. */
 let fresh = null;
 let swapped = false;
 

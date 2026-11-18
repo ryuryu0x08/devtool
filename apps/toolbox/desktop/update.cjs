@@ -4,7 +4,8 @@
 // macOS, Windows and Linux; or main, as pushed, not waiting for CI); moves the clone forward to
 // it; builds the app with build.sh (a build that fails changes nothing); and puts the new app in
 // place of the running one once that has quit (it is in use until then).
-// macOS only: there build.sh makes a Toolbox.app that can simply replace the old one.
+// macOS only: there build.sh makes a devtool.app that can simply replace the old one (an app from
+// before the rename, Toolbox.app, is replaced by it under the new name).
 
 const { execFile, spawn } = require('node:child_process');
 const fs = require('node:fs');
@@ -106,7 +107,7 @@ async function newer(dir, commit, branch = BRANCH) {
 /** Moves the clone forward to the fetched `branch` (only forward: local commits or changes in the way stop it, with git's reason). */
 const fastForward = (dir, branch = BRANCH) => git(dir, ['merge', '--ff-only', '--quiet', remoteRef(branch)], 60_000);
 
-/** Builds the app with build.sh (its output to `log`); the Toolbox.app it made. */
+/** Builds the app with build.sh (its output to `log`); the devtool.app it made. */
 async function build(dir, log) {
   const desktop = path.join(dir, 'apps/toolbox/desktop');
   let out;
@@ -119,29 +120,35 @@ async function build(dir, log) {
   }
   if (log) fs.writeFileSync(log, out);
   const release = path.join(desktop, 'release');
-  const made = fs.readdirSync(release).filter((d) => d.startsWith('mac')).map((d) => path.join(release, d, 'Toolbox.app')).find((p) => fs.existsSync(p));
-  if (!made) throw new Error('build.sh 没有编译出 Toolbox.app');
+  const dirs = fs.readdirSync(release).filter((d) => d.startsWith('mac'));
+  const made = ['devtool.app', 'Toolbox.app'].flatMap((n) => dirs.map((d) => path.join(release, d, n))).find((p) => fs.existsSync(p));
+  if (!made) throw new Error('build.sh 没有编译出 devtool.app');
   return made;
 }
 
 /**
- * Puts `fresh` in place of `current` once process `pid` (the running app) has quit, and with
+ * Puts `fresh` in place of `current` once process `pid` (the running app) has quit, under fresh's
+ * name in current's folder (Toolbox.app, from before the rename, becomes devtool.app), and with
  * `reopen`, opens it. Runs on by itself (the app quits right after). The old one is removed only
- * once the copy is complete.
+ * once the copy is complete. The path the new app is at.
  */
 function swapAfterQuit(pid, current, fresh, reopen, openCmd = 'open') {
+  const target = path.join(path.dirname(current), path.basename(fresh));
   const script = [
     'while kill -0 "$1" 2>/dev/null; do sleep 0.2; done',
-    'rm -rf "$2.new" && cp -R "$3" "$2.new" && rm -rf "$2" && mv "$2.new" "$2" || exit 1',
-    '[ "$4" = 1 ] && "$5" "$2"',
+    'rm -rf "$6.new" && cp -R "$3" "$6.new" || exit 1',
+    'rm -rf "$2"',
+    '[ "$2" = "$6" ] || rm -rf "$6"',
+    'mv "$6.new" "$6" || exit 1',
+    '[ "$4" = 1 ] && "$5" "$6"',
     'exit 0',
   ].join('\n');
-  const child = spawn('/bin/bash', ['-c', script, 'swap', String(pid), current, fresh, reopen ? '1' : '0', openCmd], { detached: true, stdio: 'ignore' });
+  const child = spawn('/bin/bash', ['-c', script, 'swap', String(pid), current, fresh, reopen ? '1' : '0', openCmd, target], { detached: true, stdio: 'ignore' });
   child.unref();
-  return child;
+  return target;
 }
 
-/** The .app bundle the running executable is in (…/Toolbox.app/Contents/MacOS/Toolbox); null when it isn't in one. */
+/** The .app bundle the running executable is in (…/devtool.app/Contents/MacOS/devtool); null when it isn't in one. */
 function bundleOf(exe) {
   const p = path.resolve(exe, '..', '..', '..');
   return p.endsWith('.app') ? p : null;

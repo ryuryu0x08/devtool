@@ -12,10 +12,10 @@
 <div class="card">
   <p class="muted">
     这是一个完整的网页：写任何 HTML、CSS、JavaScript，也可以用 &lt;script src="https://…"&gt; 引入库。
-    它在隔离的环境里运行，读不到工具箱的数据；需要时通过 <code>toolbox</code>：
+    它在隔离的环境里运行，读不到 devtool 的数据；需要时通过 <code>toolbox</code>：
   </p>
   <ul class="muted">
-    <li><code>await toolbox.fetch(url, { method, headers, body })</code> → <code>{ ok, status, headers, text, json() }</code>，由工具箱代发（连不上时抛出 <code>connect: …</code>）</li>
+    <li><code>await toolbox.fetch(url, { method, headers, body })</code> → <code>{ ok, status, headers, text, json() }</code>，由 devtool代发（连不上时抛出 <code>connect: …</code>）</li>
     <li><code>await toolbox.storage.get(key)</code> / <code>set(key, value)</code> / <code>remove(key)</code>：这个插件自己的存储，保存在本机浏览器</li>
     <li><code>toolbox.copy(text)</code>、<code>toolbox.toast(text)</code></li>
     <li><code>await toolbox.proxyCommand(接口地址, 端口 = 8787, 'python3' | 'python')</code> → <code>{ command, local }</code>：接口不允许浏览器直接访问时，<code>command</code> 是一行可粘贴到终端运行的本地转发程序，<code>local</code> 是之后要请求的 <code>http://127.0.0.1:端口/…</code> 地址</li>

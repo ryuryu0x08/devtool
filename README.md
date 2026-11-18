@@ -4,7 +4,7 @@
 
 | 产品 | 目录 | 是什么 | 技术 |
 |---|---|---|---|
-| 工具箱 | [`apps/toolbox`](apps/toolbox) | 工具箱：格式化、编解码、时间戳、对比、二维码等；网页版 PC 和手机都能用，也有桌面 App（macOS、Windows、Linux） | React + Vite；桌面版 Electron |
+| devtool | [`apps/toolbox`](apps/toolbox) | 开发者工具箱：格式化、编解码、时间戳、对比、二维码等；网页版 PC 和手机都能用，也有桌面 App（macOS、Windows、Linux） | React + Vite；桌面版 Electron |
 | QuotaBar | [`apps/quotabar`](apps/quotabar) | macOS 菜单栏 App：多个 key 的用量，一键切换 Claude Code / Desktop 用的 key | SwiftUI |
 | 接口中继 | [`apps/relay`](apps/relay) | 桌面 App（macOS、Windows、Linux）：给使用者发 token，把 Anthropic / OpenAI 请求转到配置好的上游接口和 key | Tauri（Rust + React） |
 
@@ -12,36 +12,36 @@
 
 ```
 apps/
-  toolbox/          工具箱（说明、产品原则、开发命令见它的 README）
+  toolbox/          devtool（说明、产品原则、开发命令见它的 README）
     desktop/        它的桌面 App（Electron）
   quotabar/         QuotaBar（安装、功能、代码结构见它的 README）
     ci/             它的端到端测试和截图脚本
   relay/            接口中继（core/ 中继本身, src-tauri/ 桌面 App, src/ 窗口, e2e/ 和 ci/ 测试）
 packages/
-  ui/               工具箱和接口中继的窗口共用的外观：颜色、字体、按钮、分段控件、卡片
-brand/              图标：toolbox/mark.mjs 是工具箱的图标，export-toolbox-icon.mjs 由它生成工具箱的网页和桌面图标；nav/ 是 6.2 导航页各应用的图标，选定的记在 nav/apps.mjs，export-nav-icons.mjs 导出候选、review 图和选定的图标；lib/ 是画图和导出的共用部分；导出的母版和 review 图在 out/（生成的，不进 git）
+  ui/               devtool 和接口中继的窗口共用的外观：颜色、字体、按钮、分段控件、卡片
+brand/              图标：toolbox/mark.mjs 是 devtool 的图标，export-toolbox-icon.mjs 由它生成 devtool 的网页和桌面图标；nav/ 是 6.2 导航页各应用的图标，选定的记在 nav/apps.mjs，export-nav-icons.mjs 导出候选、review 图和选定的图标；lib/ 是画图和导出的共用部分；导出的母版和 review 图在 out/（生成的，不进 git）
 .github/workflows/  每个产品一个，只在自己的目录变动时运行
   toolbox.yml       类型检查、单元测试、构建、端到端测试（Linux + Chromium），再在三个平台出桌面 App 并在里面跑端到端测试
   quotabar.yml      编译、测试、端到端、截图，通过后把 quotabar-stable 移到这个提交（Mac）
   relay.yml         测试（Linux），再出 macOS / Windows / Linux 安装包
-package.json        npm workspaces；根目录的 dev / build / test 等命令转给工具箱
+package.json        npm workspaces；根目录的 dev / build / test 等命令转给 devtool
 ```
 
 ## 约定
 
 - 每个产品的代码、测试、CI 脚本和说明都在自己的目录里；只有多个产品共用的东西放在产品目录外面。
 - CI 文件按产品命名，`paths` 只写自己的目录。
-- 名字不混用：工具箱的「本地转发程序」（`apps/toolbox/scripts/local-proxy.py`，给浏览器插件解决跨域）、QuotaBar 的「本地转发」（让 Desktop 连 http 接口、换 key）、「接口中继」（独立的桌面 App）是三样东西。
+- 名字不混用：devtool 的「本地转发程序」（`apps/toolbox/scripts/local-proxy.py`，给浏览器插件解决跨域）、QuotaBar 的「本地转发」（让 Desktop 连 http 接口、换 key）、「接口中继」（独立的桌面 App）是三样东西。
 
 ## 开发
 
 ```bash
 npm install          # 一次，在根目录（JS 项目的依赖都装在这里）
-npm run dev          # 工具箱本地开发
-npm run build        # 工具箱构建到根目录 dist/（和移动前相同，部署照旧）
-npm run test:all     # 工具箱全部测试
+npm run dev          # devtool 本地开发
+npm run build        # devtool 构建到根目录 dist/（和移动前相同，部署照旧）
+npm run test:all     # devtool 全部测试
 
-cd apps/toolbox/desktop && ./build.sh --install   # 工具箱桌面版
+cd apps/toolbox/desktop && ./build.sh --install   # devtool 桌面版
 cd apps/quotabar && ./build.sh --install   # QuotaBar（需要 Xcode 命令行工具）
 npm run build -w @devtool/relay            # 接口中继安装包（需要 Rust）
 ```

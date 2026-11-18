@@ -2,7 +2,7 @@
   "name": "@devtool/toolbox-desktop",
   "private": true,
   "version": "0.1.0",
-  "description": "工具箱 · Toolbox as a desktop app (Electron): the toolbox's build in its own window.",
+  "description": "devtool as a desktop app (Electron): the toolbox's build in its own window.",
   "author": "devtool",
   "homepage": "https://github.com/ryuryu0x08/devtool",
   "type": "commonjs",
@@ -23,7 +23,7 @@
   },
   "build": {
     "appId": "com.devtool.toolbox",
-    "productName": "Toolbox",
+    "productName": "devtool",
     "directories": {
       "output": "release",
       "buildResources": "icons"
@@ -47,7 +47,7 @@
       "identity": null
     },
     "dmg": {
-      "artifactName": "Toolbox-${version}-${arch}.dmg"
+      "artifactName": "devtool-${version}-${arch}.dmg"
     },
     "win": {
       "target": [
@@ -59,7 +59,7 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "Toolbox-${version}-setup.exe"
+      "artifactName": "devtool-${version}-setup.exe"
     },
     "linux": {
       "target": [
@@ -68,15 +68,15 @@
       ],
       "icon": "icons/icon.png",
       "category": "Development",
-      "executableName": "toolbox",
+      "executableName": "devtool",
       "maintainer": "devtool",
-      "synopsis": "工具箱 · Toolbox",
-      "artifactName": "Toolbox-${version}-${arch}.${ext}"
+      "synopsis": "devtool",
+      "artifactName": "devtool-${version}-${arch}.${ext}"
     },
     "publish": null,
     "deb": {
-      "packageName": "toolbox",
-      "artifactName": "Toolbox-${version}-${arch}.${ext}"
+      "packageName": "devtool",
+      "artifactName": "devtool-${version}-${arch}.${ext}"
     },
     "electronDist": "../../../node_modules/electron/dist"
   }

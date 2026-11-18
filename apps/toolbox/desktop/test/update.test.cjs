@@ -128,7 +128,37 @@ test('a build that fails: its whole output kept in the log, the error says why',
   assert.match(kept, /TS2322/);
 });
 
+test('an app from before the rename (Toolbox.app) is replaced by devtool.app, under the new name', async () => {
+  const d = tmp();
+  const current = path.join(d, 'Toolbox.app');
+  const fresh = path.join(d, 'release', 'devtool.app');
+  fs.mkdirSync(current, { recursive: true });
+  fs.mkdirSync(fresh, { recursive: true });
+  fs.writeFileSync(path.join(fresh, 'v'), 'new');
+  const running = spawn('sleep', ['0.3']);
+  const opened = path.join(d, 'opened');
+  const openCmd = path.join(d, 'open.sh');
+  fs.writeFileSync(openCmd, `#!/bin/bash\necho "$1" > ${JSON.stringify(opened)}\n`, { mode: 0o755 });
+  assert.equal(u.swapAfterQuit(running.pid, current, fresh, true, openCmd), path.join(d, 'devtool.app'));
+  for (let i = 0; i < 50 && !fs.existsSync(opened); i++) await new Promise((r) => setTimeout(r, 100));
+  assert.equal(fs.readFileSync(opened, 'utf8').trim(), path.join(d, 'devtool.app'));
+  assert.equal(fs.readFileSync(path.join(d, 'devtool.app', 'v'), 'utf8'), 'new');
+  assert.ok(!fs.existsSync(current));
+});
+
+test('build: the app build.sh made, under its new name (or, from a build before the rename, the old)', async () => {
+  const dir = tmp();
+  const desktop = path.join(dir, 'apps/toolbox/desktop');
+  fs.mkdirSync(path.join(desktop, 'release/mac-arm64/devtool.app'), { recursive: true });
+  fs.mkdirSync(path.join(desktop, 'release/mac-arm64/Toolbox.app'), { recursive: true });
+  fs.writeFileSync(path.join(desktop, 'build.sh'), 'echo built\n');
+  assert.equal(await u.build(dir), path.join(desktop, 'release/mac-arm64/devtool.app'));
+  fs.rmSync(path.join(desktop, 'release/mac-arm64/devtool.app'), { recursive: true });
+  assert.equal(await u.build(dir), path.join(desktop, 'release/mac-arm64/Toolbox.app'));
+});
+
 test('the bundle the app runs from', () => {
+  assert.equal(u.bundleOf('/Applications/devtool.app/Contents/MacOS/devtool'), '/Applications/devtool.app');
   assert.equal(u.bundleOf('/Applications/Toolbox.app/Contents/MacOS/Toolbox'), '/Applications/Toolbox.app');
   assert.equal(u.bundleOf('/opt/toolbox/toolbox'), null);
 });
