@@ -15,6 +15,13 @@ const fromStandIn = (url: string, text: string) => STAND_INS.some((u) => url.sta
  */
 const DESKTOP = process.env.TOOLBOX_APP;
 
+/**
+ * The app kept out of the way (--toolbox-background: see-through, clicked through, never in front)
+ * when the tests run on someone's computer; on CI, a window as usual: an inactive, see-through one
+ * there loses focus and clicks the tests rely on.
+ */
+export const BACKGROUND = process.env.CI ? [] : ['--toolbox-background'];
+
 /** The toolbox's first page: the browser's is the config's baseURL, the desktop app's its own origin. */
 export const HOME = DESKTOP ? 'app://toolbox/' : '/';
 
@@ -36,7 +43,7 @@ async function desktopPage(info: TestInfo, e: Emulated) {
   const app = await _electron.launch({
     executablePath: DESKTOP!,
     // In the background: the window doesn't come in front of, or take the keyboard from, whoever uses the computer
-    args: [`--user-data-dir=${info.outputPath('user-data')}`, `--lang=${e.locale ?? 'zh-CN'}`, '--toolbox-background', ...(process.getuid?.() === 0 ? ['--no-sandbox'] : [])],
+    args: [`--user-data-dir=${info.outputPath('user-data')}`, `--lang=${e.locale ?? 'zh-CN'}`, ...BACKGROUND, ...(process.getuid?.() === 0 ? ['--no-sandbox'] : [])],
     env: { ...process.env, TZ: e.timezoneId ?? 'Asia/Shanghai' },
   });
   const page = await app.firstWindow();

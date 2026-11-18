@@ -10,12 +10,14 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 const APP = process.env.TOOLBOX_APP!;
+/** Kept out of the way on someone's computer; a window as usual on CI (see e2e/helpers.ts BACKGROUND). */
+const BACKGROUND = process.env.CI ? [] : ['--toolbox-background'];
 
 async function launch(dir: string): Promise<{ app: ElectronApplication; page: Page }> {
   const app = await _electron.launch({
     executablePath: APP,
     // In the background: the window doesn't come in front of, or take the keyboard from, whoever uses the computer
-    args: [`--user-data-dir=${dir}`, '--toolbox-background', ...(process.getuid?.() === 0 ? ['--no-sandbox'] : [])],
+    args: [`--user-data-dir=${dir}`, ...BACKGROUND, ...(process.getuid?.() === 0 ? ['--no-sandbox'] : [])],
   });
   const page = await app.firstWindow();
   await page.waitForSelector('.app');
@@ -94,7 +96,7 @@ test('a second launch shows the first one and quits', async ({}, info) => {
   const dir = info.outputPath('data');
   const { app, page } = await launch(dir);
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].minimize());
-  const second = spawn(APP, [`--user-data-dir=${dir}`, '--toolbox-background', ...(process.getuid?.() === 0 ? ['--no-sandbox'] : [])], { stdio: 'ignore' });
+  const second = spawn(APP, [`--user-data-dir=${dir}`, ...BACKGROUND, ...(process.getuid?.() === 0 ? ['--no-sandbox'] : [])], { stdio: 'ignore' });
   const code = await new Promise<number | null>((done) => {
     const t = setTimeout(() => (second.kill(), done(-1)), 15_000);
     second.on('exit', (c) => (clearTimeout(t), done(c)));
