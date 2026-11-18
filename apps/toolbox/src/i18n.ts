@@ -5,8 +5,8 @@ import type { Only } from './lib/desktop';
 /** A built-in tool, or a local plugin ("p:<id>"). */
 export type ToolId = BuiltinId | `p:${string}`;
 export type BuiltinId = 'ts' | 'cron' | 'qrgen' | 'qrscan' | 'json' | 'toml' | 'yaml' | 'xml' | 'sql' | 'schema' | 'diff' | 'tdiff'
-  | 'b64' | 'hash' | 'url' | 'uni' | 'html' | 'hex' | 'base' | 'gzip' | 'esc' | 'urlp' | 'jwt' | 'color' | 'regex' | 'case' | 'count' | 'proc' | 'uuid' | 'llm' | 'local';
-export type CatId = 'time' | 'qr' | 'fmt' | 'diff' | 'enc' | 'web' | 'text' | 'gen' | 'ai' | 'local';
+  | 'b64' | 'hash' | 'url' | 'uni' | 'html' | 'hex' | 'base' | 'gzip' | 'esc' | 'urlp' | 'jwt' | 'color' | 'regex' | 'case' | 'count' | 'proc' | 'uuid' | 'llm' | 'unj' | 'local';
+export type CatId = 'time' | 'qr' | 'fmt' | 'diff' | 'enc' | 'escape' | 'web' | 'text' | 'gen' | 'ai' | 'local';
 export type Lang = 'zh' | 'en';
 
 export interface Tool {
@@ -37,13 +37,14 @@ export const TOOLS: Tool[] = [
   { id: 'tdiff', cat: 'diff', icon: '±', zh: ['文本对比', '文本对比', '逐行对比 · 标出改动的字'], en: ['Text Diff', 'Text Diff', 'Line by line · changed characters marked'], kw: 'text diff compare wenben duibi wbdb 文本 对比 比较 差异' },
   { id: 'b64', cat: 'enc', icon: '64', zh: ['Base64 编解码', 'Base64', '文本 / 文件 ⇄ Base64'], en: ['Base64', 'Base64', 'Text or file ⇄ Base64'], kw: 'base64 b64 encode decode data url 编码 解码 bianma jiema bm jm' },
   { id: 'hash', cat: 'enc', icon: '#', zh: ['哈希', '哈希', 'MD5 · SHA-1 · SHA-256，可核对'], en: ['Hash', 'Hash', 'MD5 · SHA-1 · SHA-256, with a check'], kw: 'hash md5 sha sha1 sha256 checksum digest 哈希 摘要 校验 haxi hx zy jy' },
-  { id: 'url', cat: 'enc', icon: '%', zh: ['URL 编解码', 'URL 编解码', '%XX ⇄ 文本'], en: ['URL Encode', 'URL Encode', '%XX ⇄ text'], kw: 'url urlencode urldecode percent encodeuricomponent 编码 解码 bm jm' },
-  { id: 'uni', cat: 'enc', icon: '\\u', zh: ['Unicode 转义', 'Unicode', '\\uXXXX ⇄ 文本 · 码点明细'], en: ['Unicode Escape', 'Unicode', '\\uXXXX ⇄ text · code points'], kw: 'unicode escape \\u codepoint utf8 utf16 转义 码点 zy' },
-  { id: 'html', cat: 'enc', icon: '&;', zh: ['HTML 实体', 'HTML 实体', '&lt; ⇄ <'], en: ['HTML Entities', 'HTML Entities', '&lt; ⇄ <'], kw: 'html entity entities escape 实体 转义 st' },
   { id: 'hex', cat: 'enc', icon: '0x', zh: ['Hex 编解码', 'Hex', '文本 / 文件 ⇄ 十六进制'], en: ['Hex', 'Hex', 'Text or file ⇄ hex'], kw: 'hex hexadecimal bytes 十六进制 字节 sljz' },
   { id: 'base', cat: 'enc', icon: '0b', zh: ['进制转换', '进制转换', '2 / 8 / 10 / 16 / 任意进制 · 补码'], en: ['Number Base', 'Number Base', 'Binary, octal, hex, any base · two’s complement'], kw: 'base radix binary octal hex decimal 进制 二进制 十六进制 补码 jz jzzh' },
   { id: 'gzip', cat: 'enc', icon: 'gz', zh: ['Gzip 压缩解压', 'Gzip', 'gzip / zlib / deflate'], en: ['Gzip', 'Gzip', 'gzip / zlib / deflate'], kw: 'gzip zlib deflate compress decompress 压缩 解压 ys jy' },
-  { id: 'esc', cat: 'enc', icon: '\\"', zh: ['转义 / 还原', '转义', 'JSON · JS · Java · C · SQL · Shell'], en: ['Escape', 'Escape', 'JSON · JS · Java · C · SQL · Shell'], kw: 'escape unescape string json javascript java c sql shell bash 转义 反转义 zy fzy' },
+  { id: 'url', cat: 'escape', icon: '%', zh: ['URL 编解码', 'URL 编解码', '%XX ⇄ 文本'], en: ['URL Encode', 'URL Encode', '%XX ⇄ text'], kw: 'url urlencode urldecode percent encodeuricomponent 编码 解码 bm jm' },
+  { id: 'uni', cat: 'escape', icon: '\\u', zh: ['Unicode 转义', 'Unicode', '\\uXXXX ⇄ 文本 · 码点明细'], en: ['Unicode Escape', 'Unicode', '\\uXXXX ⇄ text · code points'], kw: 'unicode escape \\u codepoint utf8 utf16 转义 码点 zy' },
+  { id: 'html', cat: 'escape', icon: '&;', zh: ['HTML 实体', 'HTML 实体', '&lt; ⇄ <'], en: ['HTML Entities', 'HTML Entities', '&lt; ⇄ <'], kw: 'html entity entities escape 实体 转义 st' },
+  { id: 'esc', cat: 'escape', icon: '\\"', zh: ['转义 / 还原', '转义', 'JSON · JS · Java · C · SQL · Shell'], en: ['Escape', 'Escape', 'JSON · JS · Java · C · SQL · Shell'], kw: 'escape unescape string json javascript java c sql shell bash 转义 反转义 zy fzy' },
+  { id: 'unj', cat: 'escape', icon: '\\"{', zh: ['JSON 去转义', 'JSON 去转义', '{\\"a\\":1} → JSON · 多层 · 嵌套'], en: ['Unescape JSON', 'Unescape JSON', '{\\"a\\":1} → JSON · any depth · nested'], kw: 'json unescape escaped string stringify nested 去转义 转义 反转义 还原 嵌套 qzy fzy' },
   { id: 'urlp', cat: 'web', icon: '/?', zh: ['URL 解析', 'URL 解析', '拆分链接 · 编辑查询参数'], en: ['URL Parser', 'URL Parser', 'Split a link · edit its query'], kw: 'url parse query params link 链接 解析 参数 jx lj' },
   { id: 'jwt', cat: 'web', icon: 'JWT', zh: ['JWT 解码', 'JWT', '头部 · 载荷 · 过期时间 · 签名校验'], en: ['JWT Decoder', 'JWT', 'Header · payload · expiry · signature'], kw: 'jwt token bearer jws oauth 解码 令牌 jm lp' },
   { id: 'color', cat: 'web', icon: '●', zh: ['颜色转换', '颜色', 'HEX · RGB · HSL · OKLCH · 对比度'], en: ['Color', 'Color', 'HEX · RGB · HSL · OKLCH · contrast'], kw: 'color colour hex rgb hsl oklch contrast wcag 颜色 色值 对比度 ys dbd' },
@@ -62,13 +63,14 @@ export const CATS: Record<CatId, Record<Lang, string>> = {
   fmt: { zh: '格式化', en: 'Format' },
   diff: { zh: '对比', en: 'Compare' },
   enc: { zh: '编码', en: 'Encoding' },
+  escape: { zh: '转义', en: 'Escaping' },
   web: { zh: 'Web', en: 'Web' },
   text: { zh: '文本', en: 'Text' },
   gen: { zh: '生成', en: 'Generate' },
   ai: { zh: 'AI', en: 'AI' },
   local: { zh: '我的插件', en: 'My plugins' },
 };
-export const CAT_ORDER: CatId[] = ['time', 'qr', 'fmt', 'diff', 'enc', 'web', 'text', 'gen', 'ai', 'local'];
+export const CAT_ORDER: CatId[] = ['time', 'qr', 'fmt', 'diff', 'enc', 'escape', 'web', 'text', 'gen', 'ai', 'local'];
 
 export const TZ_ZH: Record<string, string> = {
   UTC: '协调世界时', 'Asia/Shanghai': '北京 / 上海', 'Asia/Hong_Kong': '香港', 'Asia/Taipei': '台北', 'Asia/Tokyo': '东京',

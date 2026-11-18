@@ -6,13 +6,14 @@ import { Pair } from '../components/Split';
 import { useApp, type State } from '../store';
 import { Seg } from '../components/Seg';
 import { useSettled } from '../components/useSettled';
-import { Empty, ErrLine, Grid, OutCard, TextIn, TextOut, Toolbar, errStatus, useOpt } from '../components/Panes';
+import { Empty, ErrLine, Flag, Grid, OutCard, TextIn, TextOut, Toolbar, errStatus, useOpt } from '../components/Panes';
 import { errInfo, type ErrInfo } from '../lib/data';
 import { YamlError, YamlVerifyError, formatYaml } from '../lib/yamlfmt';
 import { XmlError, XmlVerifyError, formatXml } from '../lib/xml';
 import { DIALECTS, SqlError, SqlVerifyError, formatSql, minifySql, type KwCase } from '../lib/sqlfmt';
 import { SchemaError, validateJson, type SchemaResult } from '../lib/schema';
-import { parseJsonAst } from '../lib/json';
+import { parseJsonAst, printJson } from '../lib/json';
+import { unescapeJson } from '../lib/unjson';
 import type { HlLang } from '../lib/highlight';
 
 /** The browser's recursion limit was hit (very deeply nested input); the libraries report it in their own words. */
@@ -48,6 +49,34 @@ function IndentSeg({ id, tab, min }: { id: string; tab?: boolean; min?: boolean 
     ...(tab ? [{ value: 'tab', label: T.ui.tab }] : []), ...(min ? [{ value: 'min', label: T.ui.minify }] : [])]} />;
 }
 const indents = (tab?: boolean, min?: boolean) => ['2', '4', ...(tab ? ['tab'] : []), ...(min ? ['min'] : [])];
+
+/** Escaped JSON ({\"a\":1}, "{\"a\":1}", several levels, levels mixed) back to JSON, formatted. */
+export function UnJson() {
+  const { T } = useApp();
+  const [indent] = useOpt<string>('unj.indent', '2', indents(true, true));
+  const [nested, setNested] = useOpt('unj.nested', true);
+  const run = useMemo(() => (t: string): FmtOut => {
+    try {
+      const r = unescapeJson(t, nested);
+      if (!r.ok) return { err: { msg: f(T.unj.bad, { m: r.message }), info: null } };
+      const levels = r.steps.filter((s) => s !== 'string').length;
+      const parts = [
+        ...(r.steps.includes('string') ? [T.unj.quoted] : []),
+        ...(levels ? [f(T.unj.levels, { n: levels })] : []),
+        ...(r.nested ? [f(T.unj.opened, { n: r.nested })] : []),
+      ];
+      const text = printJson(r.ast, indent === 'min' ? '' : indent === 'tab' ? '\t' : Number(indent));
+      return { text, status: parts.length ? parts.join(' · ') : T.unj.plain, notes: r.mixed ? [T.unj.mixed] : [] };
+    } catch (e) {
+      if (tooDeep(e)) return { err: { msg: T.ui.tooDeep, info: null } };
+      throw e;
+    }
+  }, [indent, nested, T]);
+  return (
+    <FmtPage inKey="unjIn" lang="json" placeholder={T.unj.ph} run={run}
+      options={<><IndentSeg id="unj" tab min /><Flag on={nested} label={T.unj.nested} onClick={() => setNested(!nested)} /></>} />
+  );
+}
 
 export function YamlFmt() {
   const { T } = useApp();

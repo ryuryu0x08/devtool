@@ -99,6 +99,7 @@ export interface State {
   countIn: string;
   procIn: string;
   escIn: string;
+  unjIn: string;
   uuidIn: string;
   cronIn: string;
   colorIn: string;
@@ -134,11 +135,11 @@ export const localTz = (() => {
 })();
 
 type Inputs = Pick<State, 'tsIn' | 'tmIn' | 'qrText' | 'json' | 'toml' | 'diffA' | 'diffB' | 'b64In' | 'hashIn' | 'hashCheck'
-  | 'urlIn' | 'urlpIn' | 'jwtIn' | 'uniIn' | 'htmlIn' | 'hexIn' | 'numIn' | 'gzIn' | 'yamlIn' | 'xmlIn' | 'sqlIn' | 'schemaIn' | 'schemaData' | 'tdA' | 'tdB' | 'reSrc' | 'reText' | 'reRepl' | 'caseIn' | 'countIn' | 'procIn' | 'escIn' | 'uuidIn' | 'cronIn' | 'colorIn' | 'colorFg' | 'colorBg'>;
+  | 'urlIn' | 'urlpIn' | 'jwtIn' | 'uniIn' | 'htmlIn' | 'hexIn' | 'numIn' | 'gzIn' | 'yamlIn' | 'xmlIn' | 'sqlIn' | 'schemaIn' | 'schemaData' | 'tdA' | 'tdB' | 'reSrc' | 'reText' | 'reRepl' | 'caseIn' | 'countIn' | 'procIn' | 'escIn' | 'unjIn' | 'uuidIn' | 'cronIn' | 'colorIn' | 'colorFg' | 'colorBg'>;
 type Prefs = Pick<State, 'side' | 'lang' | 'theme' | 'indent' | 'sortKeys' | 'view' | 'ignoreOrder' | 'onlyDiff' | 'diffView' | 'b64Mode' | 'b64Url' | 'b64Pad' | 'b64DataUrl' | 'hashFmt' | 'o'>;
 
 export const INPUT_KEYS: (keyof Inputs)[] = ['tsIn', 'tmIn', 'qrText', 'json', 'toml', 'diffA', 'diffB', 'b64In', 'hashIn', 'hashCheck',
-  'urlIn', 'urlpIn', 'jwtIn', 'uniIn', 'htmlIn', 'hexIn', 'numIn', 'gzIn', 'yamlIn', 'xmlIn', 'sqlIn', 'schemaIn', 'schemaData', 'tdA', 'tdB', 'reSrc', 'reText', 'reRepl', 'caseIn', 'countIn', 'procIn', 'escIn', 'uuidIn', 'cronIn', 'colorIn', 'colorFg', 'colorBg'];
+  'urlIn', 'urlpIn', 'jwtIn', 'uniIn', 'htmlIn', 'hexIn', 'numIn', 'gzIn', 'yamlIn', 'xmlIn', 'sqlIn', 'schemaIn', 'schemaData', 'tdA', 'tdB', 'reSrc', 'reText', 'reRepl', 'caseIn', 'countIn', 'procIn', 'escIn', 'unjIn', 'uuidIn', 'cronIn', 'colorIn', 'colorFg', 'colorBg'];
 export const pickPrefs = (S: State): Prefs => ({
   side: S.side, lang: S.lang, theme: S.theme, indent: S.indent, sortKeys: S.sortKeys, view: S.view,
   ignoreOrder: S.ignoreOrder, onlyDiff: S.onlyDiff, diffView: S.diffView,
@@ -233,6 +234,7 @@ export function initState(): State {
     countIn: inp.countIn ?? '',
     procIn: inp.procIn ?? '',
     escIn: inp.escIn ?? '',
+    unjIn: inp.unjIn ?? '',
     uuidIn: inp.uuidIn ?? '',
     cronIn: inp.cronIn ?? '',
     colorIn: inp.colorIn ?? '',
@@ -245,7 +247,7 @@ export function initState(): State {
 }
 
 /** What pasted text looks like: a tool, or 'tm' (a date for the timestamp tool's second box). */
-export type Detected = 'ts' | 'tm' | 'json' | 'toml' | 'b64' | 'jwt' | 'uuid' | 'color' | 'cron' | 'xml' | 'sql' | 'yaml' | 'url' | 'uni' | 'html' | null;
+export type Detected = 'ts' | 'tm' | 'json' | 'unj' | 'toml' | 'b64' | 'jwt' | 'uuid' | 'color' | 'cron' | 'xml' | 'sql' | 'yaml' | 'url' | 'uni' | 'html' | null;
 
 export interface Ctx {
   S: State;

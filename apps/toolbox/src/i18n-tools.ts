@@ -67,6 +67,11 @@ export const zhT = {
   caseConv: { ph: '输入标识符或短语，每行一个，如 user_id、XMLHttpRequest', names: { camel: 'camelCase', pascal: 'PascalCase', snake: 'snake_case', constant: 'CONSTANT_CASE', kebab: 'kebab-case', dot: 'dot.case', title: 'Title Case', lower: '全小写', upper: '全大写' } },
   count: { ph: '粘贴文本…', graphemes: '字符（按显示）', codePoints: 'Unicode 码点', utf16: 'UTF-16 长度（JS length）', utf8: 'UTF-8 字节', lines: '行', nonEmptyLines: '非空行', words: '词（按语言分词）', latinWords: '英文单词', cjk: '中日韩字符', spaces: '空白字符', paragraphs: '段落' },
   proc: { ph: '粘贴文本，每行一项…', trim: '去掉首尾空白', dropBlank: '去掉空行', dedupe: '去重', ignoreCase: '忽略大小写', sort: { none: '不排序', asc: '升序', desc: '降序', natural: '自然顺序', length: '按长度' }, reverse: '反转', stats: '{a} 行 → {b} 行', dupes: '去掉 {n} 行重复', blank: '去掉 {n} 个空行' },
+  unj: {
+    ph: '粘贴转义过的 JSON，如 {\\"a\\":1} 或 "{\\"a\\":1}"，几层都行', nested: '展开嵌套的 JSON 字符串',
+    plain: '已经是 JSON，没有转义', levels: '去掉 {n} 层转义', quoted: '去掉外层引号', mixed: '各部分转义层数不一致，已按引号前的反斜杠统一去掉，请核对结果', opened: '展开了 {n} 个嵌套 JSON 字符串',
+    bad: '去掉转义后仍不是 JSON：{m}', empty: '在左侧粘贴转义过的 JSON',
+  },
   esc: {
     ph: '输入文本，或粘贴要还原的转义写法', sqlNote: '按标准 SQL：只把「\'」写成「\'\'」。MySQL 默认还把「\\」当转义字符', shellNote: '按 POSIX shell：整段放进单引号，单引号写成 \'\\\'\'', words: '是 {n} 个参数，每行一个',
     e: { bad: '这里的转义写法 {l} 不支持', nul: 'shell 参数里不能有 NUL 字符', expand: '含有 $ 或 ` 展开，不运行 shell 无法还原', op: '含有 shell 运算符（如 | ; &），这不是单纯的参数', quote: '引号没有配对', utf8: '转义得到的字节不是有效的 UTF-8' },
@@ -188,6 +193,11 @@ export const enT: ToolDict = {
   caseConv: { ph: 'Type identifiers or phrases, one per line: user_id, XMLHttpRequest', names: { camel: 'camelCase', pascal: 'PascalCase', snake: 'snake_case', constant: 'CONSTANT_CASE', kebab: 'kebab-case', dot: 'dot.case', title: 'Title Case', lower: 'lowercase', upper: 'UPPERCASE' } },
   count: { ph: 'Paste text…', graphemes: 'Characters (as shown)', codePoints: 'Unicode code points', utf16: 'UTF-16 length (JS length)', utf8: 'UTF-8 bytes', lines: 'Lines', nonEmptyLines: 'Non-empty lines', words: 'Words (by language)', latinWords: 'English words', cjk: 'CJK characters', spaces: 'Whitespace characters', paragraphs: 'Paragraphs' },
   proc: { ph: 'Paste text, one item per line…', trim: 'Trim each line', dropBlank: 'Remove blank lines', dedupe: 'Remove duplicates', ignoreCase: 'Ignore case', sort: { none: 'No sorting', asc: 'Ascending', desc: 'Descending', natural: 'Natural', length: 'By length' }, reverse: 'Reverse', stats: '{a} lines → {b} lines', dupes: '{n} duplicate lines removed', blank: '{n} blank lines removed' },
+  unj: {
+    ph: 'Paste escaped JSON, e.g. {\\"a\\":1} or "{\\"a\\":1}" — any number of levels', nested: 'Open nested JSON strings',
+    plain: 'Already JSON — nothing escaped', levels: '{n} level(s) of escaping removed', quoted: 'outer quotes removed', mixed: 'Parts were escaped to different depths; backslashes before quotes were all removed — check the result', opened: '{n} nested JSON string(s) opened',
+    bad: 'Still not JSON with the escaping removed: {m}', empty: 'Paste escaped JSON on the left',
+  },
   esc: {
     ph: 'Type text, or paste escaped text to unescape', sqlNote: 'Standard SQL: only “\'” is written “\'\'”. MySQL by default also treats “\\” as an escape', shellNote: 'POSIX shell: the whole text in single quotes, a quote written as \'\\\'\'', words: '{n} arguments, one per line',
     e: { bad: 'Escape {l} doesn’t support this', nul: 'A shell argument can’t contain NUL', expand: 'Contains $ or ` expansion; can’t be undone without running a shell', op: 'Contains shell operators (| ; & …): not just an argument', quote: 'Unbalanced quote', utf8: 'The escaped bytes aren’t valid UTF-8' },

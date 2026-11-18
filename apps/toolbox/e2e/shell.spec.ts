@@ -1,9 +1,9 @@
 // App shell: navigation, sidebar, search palette, themes, languages, layout, offline.
 import { HOME, OWN_HOST, activeTool, expect, nav, open, test } from './helpers';
 
-/** Every tool, in order; 代理抓包 only in the macOS desktop app. */
+/** Every tool, in order. */
 const TOOLS = ['时间戳转换', 'Cron 表达式', '生成二维码', '识别二维码', 'JSON 格式化', 'TOML 格式化', 'YAML 格式化', 'XML 格式化', 'SQL 格式化', 'JSON Schema 校验',
-  'JSON 对比', '文本对比', 'Base64 编解码', '哈希', 'URL 编解码', 'Unicode 转义', 'HTML 实体', 'Hex 编解码', '进制转换', 'Gzip 压缩解压', '转义 / 还原',
+  'JSON 对比', '文本对比', 'Base64 编解码', '哈希', 'Hex 编解码', '进制转换', 'Gzip 压缩解压', 'URL 编解码', 'Unicode 转义', 'HTML 实体', '转义 / 还原', 'JSON 去转义',
   'URL 解析', 'JWT 解码', '颜色转换', '正则表达式', '命名转换', '字数统计', '文本处理', 'UUID', '大模型对话测试', '添加插件'];
 
 test('every tool opens; the page has no title / breadcrumb / smart-paste card', async ({ page }) => {

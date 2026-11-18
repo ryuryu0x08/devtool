@@ -43,7 +43,8 @@ import { Hash } from './tools/Hash';
 import { EscapeTool, HtmlEntities, UnicodeTool, UrlCodec, looksEscaped } from './tools/EncodeTools';
 import { Jwt, UrlParse } from './tools/WebTools';
 import { Gzip, Hex, NumBase, looksZData } from './tools/BytesTools';
-import { Schema, SqlFmt, XmlFmt, YamlFmt } from './tools/FormatTools';
+import { Schema, SqlFmt, UnJson, XmlFmt, YamlFmt } from './tools/FormatTools';
+import { looksEscapedJson } from './lib/unjson';
 import { CaseConv, Count, Regex, TextDiff, TextProc } from './tools/TextTools';
 import { Uuid } from './tools/GenTools';
 import { Color, Cron } from './tools/CronColor';
@@ -64,7 +65,7 @@ const hasPlugins = () => { try { return (localStorage.getItem('tb.plugins') ?? '
 const TOOL_INPUTS: Partial<Record<ToolId, (keyof State)[]>> = {
   ts: ['tsIn', 'tmIn'], qrgen: ['qrText'], qrscan: ['scan'], json: ['json'], toml: ['toml'], diff: ['diffA', 'diffB'],
   b64: ['b64In', 'b64File'], hash: ['hashIn', 'hashFile', 'hashCheck'], url: ['urlIn'], urlp: ['urlpIn'], jwt: ['jwtIn', 'jwtKey'],
-  uni: ['uniIn'], html: ['htmlIn'], esc: ['escIn'], hex: ['hexIn', 'hexFile'], base: ['numIn'], gzip: ['gzIn', 'gzFile'],
+  uni: ['uniIn'], html: ['htmlIn'], esc: ['escIn'], unj: ['unjIn'], hex: ['hexIn', 'hexFile'], base: ['numIn'], gzip: ['gzIn', 'gzFile'],
   yaml: ['yamlIn'], xml: ['xmlIn'], sql: ['sqlIn'], schema: ['schemaIn', 'schemaData'], tdiff: ['tdA', 'tdB'],
   regex: ['reSrc', 'reText', 'reRepl'], case: ['caseIn'], count: ['countIn'], proc: ['procIn'], uuid: ['uuidIn'], cron: ['cronIn'],
   color: ['colorIn', 'colorFg', 'colorBg'],
@@ -156,6 +157,8 @@ export function App() {
     if (!s) return null;
     if (/^-?\d{9,19}(\.\d+)?$/.test(s)) return 'ts';
     if (/^[[{]/.test(s)) { try { JSON.parse(s); return 'json'; } catch { /* not JSON */ } }
+    // JSON put in a string ({\"a\":1}, "{\"a\":1}"): taken back out.
+    if (looksEscapedJson(s)) return 'unj';
     if (/^\s*(\[[^\]\n]+\]|[\w."'-]+\s*=)/m.test(s)) { try { smolParse(s); return 'toml'; } catch { /* not TOML */ } }
     if (looksJwt(s)) return 'jwt';
     if (looksUuid(s)) return 'uuid';
@@ -182,6 +185,7 @@ export function App() {
     if (d === 'ts') { tool = 'ts'; patch = { tsIn: s.trim() }; }
     else if (d === 'tm') { tool = 'ts'; patch = { tmIn: s.trim() }; }
     else if (d === 'json') { tool = 'json'; patch = { json: s, sel: { ...ref.current.sel, json: '' } }; }
+    else if (d === 'unj') { tool = 'unj'; patch = { unjIn: s }; }
     else if (d === 'toml') { tool = 'toml'; patch = { toml: s, sel: { ...ref.current.sel, toml: '' } }; }
     else if (d === 'b64') { const n = normEol(s); tool = 'b64'; patch = { b64In: n.text, b64Cr: n.cr, b64File: null, b64Mode: 'dec' }; }
     else if (d === 'jwt') { tool = 'jwt'; patch = { jwtIn: s.trim() }; }
@@ -304,7 +308,7 @@ export function App() {
       replace({ [tw[0]]: n.text, ...(s.tool === 'hex' ? { hexFile: null } : {}), o: { ...s.o, [s.tool + '.mode']: tw[1] ? 'dec' : 'enc' } }, msg());
       return true;
     }
-    const plain: Partial<Record<ToolId, keyof State>> = { yaml: 'yamlIn', xml: 'xmlIn', sql: 'sqlIn', regex: 'reText', case: 'caseIn', count: 'countIn', proc: 'procIn' };
+    const plain: Partial<Record<ToolId, keyof State>> = { yaml: 'yamlIn', xml: 'xmlIn', sql: 'sqlIn', unj: 'unjIn', regex: 'reText', case: 'caseIn', count: 'countIn', proc: 'procIn' };
     if (plain[s.tool]) { replace({ [plain[s.tool]!]: n.text }, msg()); return true; }
     if (s.tool === 'gzip') { replace({ gzIn: n.text, gzFile: null, o: { ...s.o, 'gz.mode': looksZData(n.text) ? 'unzip' : 'zip' } }, msg()); return true; }
     if (s.tool === 'schema') { replace(looksSchema(n.text) ? { schemaIn: n.text } : { schemaData: n.text }, msg()); return true; }
@@ -545,6 +549,7 @@ export function App() {
             {S.tool === 'uni' && <UnicodeTool />}
             {S.tool === 'html' && <HtmlEntities />}
             {S.tool === 'esc' && <EscapeTool />}
+            {S.tool === 'unj' && <UnJson />}
             {S.tool === 'hex' && <Hex />}
             {S.tool === 'base' && <NumBase />}
             {S.tool === 'gzip' && <Gzip />}
