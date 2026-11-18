@@ -57,7 +57,6 @@ const FILE_KEYS: (keyof State)[] = ['hashFile', 'b64File', 'hexFile', 'gzFile'];
 // Loaded when opened: the API SDKs and Markdown renderer it needs are large.
 const Llm = lazy(() => import('./tools/Llm'));
 const Local = lazy(() => import('./tools/Local'));
-const Proxy = lazy(() => import('./tools/Proxy'));
 const PluginFrames = lazy(() => import('./components/PluginFrames'));
 /** Local plugins exist (they run while the page is open, whichever tool is shown). */
 const hasPlugins = () => { try { return (localStorage.getItem('tb.plugins') ?? '[]') !== '[]'; } catch { return false; } };
@@ -563,7 +562,6 @@ export function App() {
             {S.tool === 'color' && <Color />}
             {S.tool === 'llm' && <Suspense fallback={null}><Llm /></Suspense>}
             {S.tool === 'local' && <Suspense fallback={null}><Local /></Suspense>}
-            {S.tool === 'proxy' && <Suspense fallback={null}><Proxy /></Suspense>}
             </ToolBoundary>}
             {(framesOn || pluginOfTool(S.tool)) && <Suspense fallback={null}><PluginFrames active={S.settings ? null : pluginOfTool(S.tool)} /></Suspense>}
           </div>

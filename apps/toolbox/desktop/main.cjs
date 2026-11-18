@@ -21,16 +21,12 @@
 // Updates (macOS, an app built by build.sh from a git clone): see update.cjs. The page's settings
 // show the state and ask for a check, an update, a restart; with automatic updates on, a newer
 // version is built in the background and put in place when the app quits.
-//
-// Proxy & Capture (macOS): its backend runs as a program this app starts, finds or stops for the
-// page (capture.cjs, with a driver per backend in backends/). Quitting stops one it started.
 
 const { app, BrowserWindow, ipcMain, nativeTheme, net, protocol, session, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const updater = require('./update.cjs');
-const { Capture, register: registerCapture } = require('./capture.cjs');
 
 const ORIGIN = 'app://toolbox';
 const WEB = path.join(__dirname, 'web');
@@ -267,17 +263,6 @@ function onUpdate(e, action, arg) {
   }
 }
 
-// ---- Proxy & Capture ----
-
-const fromOwnPage = (e) => !!e.senderFrame?.url.startsWith(ORIGIN + '/');
-const capture = new Capture({
-  drivers: { bmitmproxy: require('./backends/bmitmproxy.cjs') },
-  origin: ORIGIN,
-  emit: (event) => { for (const w of BrowserWindow.getAllWindows()) w.webContents.send('capture-event', event); },
-});
-/** The backend this app started has been stopped: quitting may go on. */
-let captureStopped = false;
-
 /** Shown in front with the keyboard; in the background (the tests), shown where it can't be seen or clicked. */
 function reveal() {
   if (!background) {
@@ -326,20 +311,10 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   ipcMain.handle('update', onUpdate);
-  registerCapture(capture, ipcMain, fromOwnPage);
 
-  // Quitting: the window closes for real, a backend this app started is stopped first (it puts the
-  // system proxy back), and a built update takes the old app's place.
-  app.on('before-quit', (e) => {
+  // Quitting: the window closes for real, and a built update takes the old app's place.
+  app.on('before-quit', () => {
     quitting = true;
-    if (!captureStopped && capture.quitWork) {
-      e.preventDefault();
-      capture.quit().finally(() => {
-        captureStopped = true;
-        app.quit();
-      });
-      return;
-    }
     if (update.state === 'ready') swap(false);
   });
 

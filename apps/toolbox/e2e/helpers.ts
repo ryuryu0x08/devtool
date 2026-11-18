@@ -5,11 +5,8 @@ import { _electron, expect, test as base, type ElectronApplication, type Locator
 
 /** Host of the stand-in LLM endpoint in e2e/llm.spec.ts. */
 export const STAND_IN_API = 'https://api.test.example/';
-/**
- * Stand-ins whose requests fail on purpose (the browser logs each failure as an error): the LLM
- * endpoint, and the stand-in proxy backend of e2e/proxy.spec.ts on this computer (ended mid-test).
- */
-const STAND_INS = [STAND_IN_API, 'http://127.0.0.1:', 'ws://127.0.0.1:'];
+/** Stand-ins whose requests fail on purpose (the browser logs each failure as an error): the LLM endpoint. */
+const STAND_INS = [STAND_IN_API];
 const fromStandIn = (url: string, text: string) => STAND_INS.some((u) => url.startsWith(u) || text.includes(u));
 
 /**
@@ -24,8 +21,6 @@ export const HOME = DESKTOP ? 'app://toolbox/' : '/';
 /** In the desktop app (rather than the browser). */
 export const IN_DESKTOP = !!DESKTOP;
 
-/** In the macOS desktop app: where the tools offered only there are (i18n.ts TOOLS, `only`). */
-export const IN_MAC_APP = IN_DESKTOP && process.platform === 'darwin';
 
 /** The host the toolbox is served from: a request to any other leaves the page. */
 export const OWN_HOST = DESKTOP ? 'toolbox' : 'localhost';

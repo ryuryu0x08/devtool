@@ -148,13 +148,12 @@ test('no system title bar: the page draws the strip at the top, in the theme’s
   const bridge = await page.evaluate(() => {
     const d = (window as unknown as { toolboxDesktop: { titleBar(a: string, b: string): void } }).toolboxDesktop;
     d.titleBar('red; background: url(x)', '#000000');
-    const { update, capture } = d as unknown as { update: object; capture: object };
-    return { keys: Object.keys(d).sort(), update: Object.keys(update).sort(), capture: Object.keys(capture).sort(), node: typeof (window as unknown as { require?: unknown }).require };
+    const { update } = d as unknown as { update: object };
+    return { keys: Object.keys(d).sort(), update: Object.keys(update).sort(), node: typeof (window as unknown as { require?: unknown }).require };
   });
   expect(bridge).toEqual({
-    keys: ['capture', 'platform', 'titleBar', 'update'],
+    keys: ['platform', 'titleBar', 'update'],
     update: ['check', 'get', 'install', 'onState', 'restart', 'setAuto'],
-    capture: ['backends', 'checkProxy', 'defaultEntry', 'find', 'fix', 'get', 'inspect', 'onEvent', 'start', 'stop'],
     node: 'undefined',
   });
   await page.waitForTimeout(300);
