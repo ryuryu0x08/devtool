@@ -157,6 +157,27 @@ test('build: the app build.sh made, under its new name (or, from a build before 
   assert.equal(await u.build(dir), path.join(desktop, 'release/mac-arm64/Toolbox.app'));
 });
 
+test('quitting from Toolbox.app (from before the rename): it takes the new name once it has quit, not before', async () => {
+  const d = tmp();
+  const current = path.join(d, 'Toolbox.app');
+  fs.mkdirSync(current);
+  fs.writeFileSync(path.join(current, 'v'), 'app');
+  const running = spawn('sleep', ['0.4']);
+  assert.equal(u.renameAfterQuit(running.pid, current), path.join(d, 'devtool.app'));
+  await new Promise((r) => setTimeout(r, 150));
+  assert.ok(fs.existsSync(current));
+  for (let i = 0; i < 50 && fs.existsSync(current); i++) await new Promise((r) => setTimeout(r, 100));
+  assert.ok(!fs.existsSync(current));
+  assert.equal(fs.readFileSync(path.join(d, 'devtool.app', 'v'), 'utf8'), 'app');
+  // Already devtool.app, or one by that name there: nothing.
+  assert.equal(u.renameAfterQuit(process.pid, path.join(d, 'devtool.app')), null);
+  fs.mkdirSync(path.join(d, 'Electron.app'));
+  assert.equal(u.renameAfterQuit(process.pid, path.join(d, 'Electron.app')), null);
+  assert.ok(fs.existsSync(path.join(d, 'Electron.app')));
+  fs.mkdirSync(path.join(d, 'Toolbox.app'));
+  assert.equal(u.renameAfterQuit(process.pid, path.join(d, 'Toolbox.app')), null);
+});
+
 test('the bundle the app runs from', () => {
   assert.equal(u.bundleOf('/Applications/devtool.app/Contents/MacOS/devtool'), '/Applications/devtool.app');
   assert.equal(u.bundleOf('/Applications/Toolbox.app/Contents/MacOS/Toolbox'), '/Applications/Toolbox.app');

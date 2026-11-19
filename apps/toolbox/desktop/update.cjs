@@ -148,10 +148,31 @@ function swapAfterQuit(pid, current, fresh, reopen, openCmd = 'open') {
   return target;
 }
 
+/** The app's bundle name (productName in package.json): what the Dock and Finder show. */
+const BUNDLE = 'devtool.app';
+
+/**
+ * An app from before the rename (…/Toolbox.app): once process `pid` has quit, its bundle takes
+ * the new name in the same folder (the Dock and Finder show a bundle's file name). Not while it
+ * runs: it starts its helpers from inside its bundle. Nothing when there already is one by that
+ * name. The path it will be at, or null.
+ */
+function renameAfterQuit(pid, current) {
+  const target = path.join(path.dirname(current), BUNDLE);
+  // Only the old name: any other bundle (Electron.app when run from the clone with `npm start`) is left alone.
+  if (path.basename(current) !== 'Toolbox.app' || fs.existsSync(target)) return null;
+  const script = [
+    'while kill -0 "$1" 2>/dev/null; do sleep 0.2; done',
+    '[ -e "$3" ] || mv "$2" "$3"',
+  ].join('\n');
+  spawn('/bin/bash', ['-c', script, 'rename', String(pid), current, target], { detached: true, stdio: 'ignore' }).unref();
+  return target;
+}
+
 /** The .app bundle the running executable is in (…/devtool.app/Contents/MacOS/devtool); null when it isn't in one. */
 function bundleOf(exe) {
   const p = path.resolve(exe, '..', '..', '..');
   return p.endsWith('.app') ? p : null;
 }
 
-module.exports = { BRANCH, CHANNELS, PATHS, readInfo, shellEnv, httpsFor, fetchStable, newer, fastForward, build, swapAfterQuit, bundleOf, git };
+module.exports = { BRANCH, BUNDLE, CHANNELS, PATHS, renameAfterQuit, readInfo, shellEnv, httpsFor, fetchStable, newer, fastForward, build, swapAfterQuit, bundleOf, git };

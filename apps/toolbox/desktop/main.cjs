@@ -207,6 +207,7 @@ let update = {
 /** The devtool.app built by an update, to put in place. */
 let fresh = null;
 let swapped = false;
+let renamed = false;
 
 function setUpdate(change) {
   update = { ...update, ...change };
@@ -335,6 +336,12 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', () => {
     quitting = true;
     if (update.state === 'ready') swap(false);
+    // Still at Toolbox.app (updated in place from before the rename): it takes its new name,
+    // which the Dock shows, once it has quit.
+    else if (bundle && !renamed) {
+      renamed = true;
+      updater.renameAfterQuit(process.pid, bundle);
+    }
   });
 
   app.whenReady().then(() => {

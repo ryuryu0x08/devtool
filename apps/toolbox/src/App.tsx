@@ -32,6 +32,7 @@ import { ToolBoundary } from './components/ToolBoundary';
 import { Settings } from './components/Settings';
 import { FindBar } from './components/Find';
 import { tintTitleBar } from './lib/desktop';
+import { applyTab } from './lib/tabKey';
 import { ZOOMS } from './components/Zoom';
 import { ErrLine } from './components/Panes';
 import { Timestamp } from './tools/Timestamp';
@@ -392,11 +393,21 @@ export function App() {
     const onMq = (e: MediaQueryListEvent) => set({ sysDark: e.matches });
     try { mq = matchMedia('(prefers-color-scheme: dark)'); mq.addEventListener('change', onMq); } catch { /* old browser */ }
 
+    // Esc in a text box, then Tab: Tab moves on (the way out by keyboard, as in code editors).
+    let tabLeaves = false;
     const onKey = (e: KeyboardEvent) => {
       // Keys that confirm or cancel an IME composition (pinyin etc.) are not shortcuts.
       if (e.isComposing || e.keyCode === 229) return;
       const s = ref.current;
       const mod = e.metaKey || e.ctrlKey;
+      // Tab in a text box types a tab (Shift+Tab, several lines: indent / outdent), not the next control.
+      const box = e.target instanceof HTMLTextAreaElement && !e.target.readOnly && !e.target.disabled ? e.target : null;
+      if (e.key === 'Tab' && box && !mod && !e.altKey && !tabLeaves) {
+        e.preventDefault();
+        applyTab(box, e.shiftKey);
+        return;
+      }
+      tabLeaves = !!box && e.key === 'Escape';
       const k = e.key.toLowerCase();
       if (mod && k === 'k') { e.preventDefault(); set({ palette: !s.palette, pq: '', pi: 0 }); return; }
       if (mod && k === 'b' && s.wide) { e.preventDefault(); set({ side: !s.side }); return; }

@@ -10,6 +10,8 @@
 }
 .field:focus { border-color: var(--acc); background: var(--card); box-shadow: 0 0 0 3px var(--accRing); }
 .area { width: 100%; border: 0; outline: none; resize: vertical; background: transparent; font: 13px/1.6 'Geist Mono', 'PingFang SC', monospace; }
+/* A tab typed in a text box (Tab types one) shows as 4 columns, not the browser's 8. */
+textarea { tab-size: 4; }
 
 .hero {
   display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 14px; border: 0; border-radius: 10px;
