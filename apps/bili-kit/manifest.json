@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "bili-kit",
+  "version": "1.1.0",
+  "description": "B站内部工具包：知了夜间模式（含时段自动开启、按网页固定日间 / 夜间）+ Mermaid 图表折叠。",
+  "permissions": ["storage", "tabs"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_page": "manage.html",
+  "action": {
+    "default_title": "bili-kit",
+    "default_popup": "popup.html"
+  },
+  "commands": {
+    "toggle-dark": {
+      "suggested_key": { "default": "Alt+Shift+D" },
+      "description": "开关夜间模式"
+    },
+    "fold-hovered-diagram": {
+      "suggested_key": { "default": "Alt+Shift+M" },
+      "description": "折叠 / 展开鼠标所在的那张 Mermaid 图"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://aistudio.bilibili.co/*"],
+      "css": ["src/dark.css"],
+      "js": ["src/night.js", "src/night-page.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    },
+    {
+      "matches": ["https://aistudio.bilibili.co/*"],
+      "js": ["src/defer.js", "src/early.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://aistudio.bilibili.co/*"],
+      "js": ["src/fold.js", "src/layout.js", "src/mermaid.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    }
+  ]
+}

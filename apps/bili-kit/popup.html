@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>bili-kit</title>
+  <style>
+    body { width: 260px; margin: 0; padding: 12px; font: 13px "PingFang SC", system-ui, sans-serif; color: #18191c; }
+    h1 { margin: 0 0 2px; font-size: 14px; font-weight: 600; }
+    .sub { margin: 0 0 10px; color: #9499a0; font-size: 11px; }
+    h2 { margin: 12px 0 4px; font-size: 12px; font-weight: 600; color: #61666d; }
+    label { display: flex; align-items: center; gap: 8px; padding: 5px 4px; border-radius: 6px; cursor: pointer; }
+    label:hover { background: #f1f2f3; }
+    label.on { background: #fff1f0; }
+    .row { display: flex; align-items: center; gap: 6px; padding: 4px; }
+    .row input[type="time"] { font: inherit; padding: 2px 4px; border: 1px solid #c9ccd0; border-radius: 4px; }
+    .hint { margin-top: 8px; color: #9499a0; font-size: 11px; line-height: 1.5; }
+    .status { margin-top: 6px; font-size: 11px; color: #61666d; }
+    .status b { color: #18191c; }
+    kbd { font: 11px ui-monospace, monospace; background: #f1f2f3; padding: 0 4px; border-radius: 3px; }
+    .page-name { margin: 0 0 6px; padding: 0 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #61666d; font-size: 12px; }
+    .page-name:has(+ .page-url:not(:empty)) { margin-bottom: 0; }
+    .page-url { margin: 0 0 6px; padding: 0 4px; color: #9499a0; font: 11px/1.4 ui-monospace, monospace; word-break: break-all; }
+    .page-url:empty { display: none; }
+    .error { margin: 4px 0 0; padding: 0 4px; color: #f85a54; font-size: 11px; }
+    [hidden] { display: none !important; }
+    .page-name.notice { white-space: normal; color: #9499a0; font-size: 11px; line-height: 1.5; }
+    .seg { display: flex; border: 1px solid #c9ccd0; border-radius: 6px; overflow: hidden; }
+    .seg label { flex: 1; justify-content: center; gap: 0; padding: 5px 0; border-radius: 0; }
+    .seg label + label { border-left: 1px solid #c9ccd0; }
+    .seg label.on { color: #fb7299; font-weight: 600; }
+    .seg label:has(input:focus-visible) { outline: 2px solid #fb7299; outline-offset: -2px; }
+    .seg input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+    .seg.disabled { opacity: .45; pointer-events: none; }
+    .link { display: inline-block; margin-top: 6px; padding: 0 4px; color: #00aeec; font-size: 12px; text-decoration: none; }
+    .link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <h1>bili-kit</h1>
+  <p class="sub">B站内部工具包 · 知了夜间模式 + Mermaid 折叠</p>
+
+  <h2>此网页</h2>
+  <p class="page-name" id="page-name"></p>
+  <p class="page-url" id="page-url"></p>
+  <form id="page-form" class="seg">
+    <label><input type="radio" name="page" value=""> 跟随全局</label>
+    <label><input type="radio" name="page" value="off"> 日间</label>
+    <label><input type="radio" name="page" value="night"> 夜间</label>
+    <label><input type="radio" name="page" value="midnight"> 深夜</label>
+  </form>
+  <a href="manage.html" class="link" id="manage">管理固定主题的网页</a>
+  <p class="error" id="manage-error" hidden></p>
+
+  <h2>夜间模式（全部知了页面）</h2>
+  <form id="modes">
+    <label><input type="radio" name="mode" value="system"> 跟随系统</label>
+    <label><input type="radio" name="mode" value="night"> 夜间</label>
+    <label><input type="radio" name="mode" value="midnight"> 深夜（更暗、偏暖）</label>
+    <label><input type="radio" name="mode" value="off"> 关闭</label>
+  </form>
+
+  <h2>自动开启</h2>
+  <div class="row">
+    <label style="padding:0"><input type="checkbox" id="sched-enabled"> 时间段自动开夜间</label>
+  </div>
+  <div class="row">
+    <input type="time" id="sched-start" value="20:00"> 至 <input type="time" id="sched-end" value="08:00">
+  </div>
+
+  <h2>Mermaid 折叠（知了）</h2>
+  <div class="hint">树形图（如域功能图）打开时只显示第一层，节点旁的数字可展开，图左上角有「收起 / 展开」。</div>
+
+  <p class="status" id="status"></p>
+  <div class="hint">快捷键 <kbd>Alt+Shift+D</kbd> 开关当前页面的夜间（固定了主题的网页改它自己的）；<kbd>Alt+Shift+M</kbd> 折叠当前图（先把鼠标移到图上）。</div>
+
+  <script src="src/night.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

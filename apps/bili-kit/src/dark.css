@@ -1,0 +1,41 @@
+/*
+ * 知了页面混用了 CSS 变量、antd、Tailwind 工具类，正文里还有大量用户设置的行内颜色，
+ * 只覆盖设计变量会漏掉大部分元素。所以在根元素上整体反色 + 色相回转（保留原色相），
+ * 再把图片、视频等「本身就是画面」的元素反色回来。
+ * 主题由 content.js 设置在 <html data-bk-dark="night|midnight"> 上。
+ */
+
+html[data-bk-dark] {
+  /* 根元素必须有不透明底色，否则反色后画布仍是白的。 */
+  background-color: #fff !important;
+}
+
+/* 夜间：深灰底、浅灰字。 */
+html[data-bk-dark="night"] {
+  filter: invert(1) hue-rotate(180deg) contrast(0.86) !important;
+}
+
+/* 深夜：更暗，并加一点暖色，减少蓝光。 */
+html[data-bk-dark="midnight"] {
+  filter: invert(1) hue-rotate(180deg) contrast(0.78) brightness(0.85) sepia(0.18) !important;
+}
+
+/* 画面类元素反色回来，保持原图颜色（会随主题轻微变暗）。 */
+html[data-bk-dark] img:not(picture img),
+html[data-bk-dark] picture,
+html[data-bk-dark] video,
+html[data-bk-dark] canvas,
+html[data-bk-dark] iframe,
+html[data-bk-dark] [style*="background-image"]:not([style*="background-image: none"]) {
+  filter: invert(1) hue-rotate(180deg) !important;
+}
+
+/* Mermaid 图保持原有的配色（和原图一致），不跟着反色。 */
+html[data-bk-dark] svg[data-bk-tree] {
+  filter: invert(1) hue-rotate(180deg) !important;
+}
+
+/* 背景图元素里嵌的图片已经随父元素反色回来了，不能再反一次。 */
+html[data-bk-dark] [style*="background-image"]:not([style*="background-image: none"]) img {
+  filter: none !important;
+}

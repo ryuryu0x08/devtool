@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>bili-kit · 固定主题的网页</title>
+  <style>
+    body { max-width: 880px; margin: 32px auto; padding: 0 20px; font: 14px "PingFang SC", system-ui, sans-serif; color: #18191c; }
+    h1 { margin: 0 0 4px; font-size: 18px; font-weight: 600; }
+    .sub { margin: 0 0 16px; color: #9499a0; font-size: 12px; line-height: 1.6; }
+    .bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; color: #61666d; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 9px 8px; border-bottom: 1px solid #e3e5e7; text-align: left; vertical-align: middle; }
+    th { color: #61666d; font-size: 12px; font-weight: 600; }
+    td.page { word-break: break-all; }
+    td.page a { color: #18191c; font-weight: 500; text-decoration: none; }
+    td.page a:hover { color: #00aeec; }
+    td.page .url { margin-top: 2px; color: #9499a0; font: 12px ui-monospace, monospace; }
+    td.page .url:empty { display: none; }
+    td.time { color: #61666d; font-size: 12px; white-space: nowrap; }
+    td.ops { text-align: right; white-space: nowrap; }
+    select, button { font: inherit; font-size: 13px; padding: 3px 8px; border: 1px solid #c9ccd0; border-radius: 4px; background: #fff; cursor: pointer; }
+    button.danger { color: #f85a54; }
+    button.danger:hover { border-color: #f85a54; }
+    [hidden] { display: none !important; }
+    .empty { padding: 40px 0; color: #9499a0; text-align: center; line-height: 1.8; }
+  </style>
+</head>
+<body>
+  <h1>固定主题的网页</h1>
+  <p class="sub">这些知了网页不管全局夜间模式、系统深浅色和时间段，一律用这里的主题。<br>
+    新增：在知了页面点工具栏的 bili-kit 图标，在「此网页」里选日间、夜间或深夜。</p>
+
+  <div class="bar" id="bar">
+    <span id="count"></span>
+    <button type="button" class="danger" id="clear-all">全部删除</button>
+  </div>
+  <table id="table">
+    <thead>
+      <tr><th>网页</th><th>主题</th><th>设置于</th><th></th></tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <p class="empty" id="empty">还没有固定主题的网页。<br>在知了页面点工具栏的 bili-kit 图标，「此网页」里选日间、夜间或深夜，就会记在这里。</p>
+
+  <script src="src/night.js"></script>
+  <script src="manage.js"></script>
+</body>
+</html>

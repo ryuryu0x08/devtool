@@ -1,0 +1,20 @@
+# bili-kit (apps/bili-kit): the night mode's rules and the Mermaid folding, unit-tested.
+name: bili-kit
+on:
+  push:
+    paths: ['apps/bili-kit/**', '.github/workflows/bili-kit.yml']
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test apps/bili-kit/test/*.test.cjs
+      - name: The manifest and every script parse
+        run: |
+          node -e 'JSON.parse(require("fs").readFileSync("apps/bili-kit/manifest.json","utf8"))'
+          for f in apps/bili-kit/src/*.js apps/bili-kit/popup.js apps/bili-kit/manage.js apps/bili-kit/background.js; do node --check "$f"; done
