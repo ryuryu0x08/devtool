@@ -23,6 +23,10 @@ private final class Upstream: @unchecked Sendable {
   /// Their body and type.
   var replyBody = "{\"ok\":true}"
   var replyType = "application/json"
+  /// When keeping connections: instead of `replyBody`, a stream in these parts, `partGap` seconds
+  /// apart (the first with the head), then the end.
+  var replyParts: [String]?
+  var partGap: TimeInterval = 0.3
 
   func start() async throws {
     let params = NWParameters.tcp
@@ -58,6 +62,18 @@ private final class Upstream: @unchecked Sendable {
         let reply = "HTTP/1.1 \(self.modelsStatus) X\r\nContent-Type: application/json\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n" + body
         c.send(content: Data(reply.utf8), contentContext: .finalMessage, isComplete: true, completion: .contentProcessed { _ in c.cancel() })
         return
+      }
+      if self.keepAlive, let parts = self.replyParts {
+        let head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n"
+        func send(_ i: Int) {
+          let last = i == parts.count - 1
+          let d = Data(((i == 0 ? head : "") + parts[i]).utf8)
+          c.send(content: d, contentContext: last ? .finalMessage : .defaultMessage, isComplete: true, completion: .contentProcessed { _ in
+            if last { return c.cancel() }
+            self.queue.asyncAfter(deadline: .now() + self.partGap) { send(i + 1) }
+          })
+        }
+        return send(0)
       }
       if self.keepAlive {
         let body = self.replyBody
@@ -718,6 +734,37 @@ extension LocalForwarderTests {
     _ = try await call(port, "POST", "/v1/messages", body: #"{"model":"claude-a"}"#)
     try await Task.sleep(for: .milliseconds(300))
     XCTAssertEqual(CacheStats.rows(stats.snapshot()).map(\.gateway).sorted(), ["其他网关", "公司"].sorted())
+  }
+
+  func testAStreamsTimeToItsFirstTokenAndItsSpeedAfterItAreKept() async throws {
+    let (a, b, f, port) = try await twoGateways(["claude-a"], ["glm-b"], port: 48420)
+    defer { f.stop(); withExtendedLifetime((a, b)) {} }
+    let log = RequestLog(), stats = CacheStats()
+    f.requestLog = log
+    f.cacheStats = stats
+    let event = { (type: String, json: String) in "event: \(type)\ndata: \(json)\n\n" }
+    let parts = [
+      event("message_start", #"{"type":"message_start","message":{"usage":{"input_tokens":10,"output_tokens":1}}}"#),
+      event("content_block_delta", #"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"a"}}"#),
+      event("content_block_delta", #"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"b"}}"#)
+        + event("message_delta", #"{"type":"message_delta","usage":{"output_tokens":51}}"#),
+    ]
+    a.replyParts = parts
+    a.partGap = 0.3
+    let (status, body) = try await call(port, "POST", "/v1/messages", body: #"{"model":"claude-a","stream":true}"#)
+    XCTAssertEqual(status, 200)
+    XCTAssertEqual(body, parts.joined())
+    try await Task.sleep(for: .milliseconds(300))
+    let s = try XCTUnwrap(stats.snapshot().first)
+    XCTAssertEqual([s.gateway, s.model], ["公司", "claude-a"])
+    // The first delta came 0.3 s after the head, the last 0.3 s after that.
+    XCTAssertEqual(s.firstToken.count, 1)
+    XCTAssertGreaterThanOrEqual(s.firstToken.first ?? 0, 280)
+    XCTAssertLessThan(s.firstToken.first ?? .max, 3000)
+    XCTAssertEqual(s.decodeTokens, 50)
+    XCTAssertGreaterThanOrEqual(s.decodeMs, 250)
+    XCTAssertLessThan(s.decodeMs, 3000)
+    XCTAssertEqual(log.recent().first?.speed, ReplySpeed(firstToken: s.firstToken[0], decodeTokens: 50, decodeMs: s.decodeMs))
   }
 
   func testAGatewayMustBeHTTP() {

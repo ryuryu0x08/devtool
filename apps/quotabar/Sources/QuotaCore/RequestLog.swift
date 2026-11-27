@@ -32,6 +32,8 @@ public struct RequestRecord: Identifiable, Equatable, Sendable {
   public internal(set) var note: String?
   /// The tokens its reply said it used (a Messages reply's, once it ended).
   public internal(set) var usage: CacheUsage?
+  /// How fast its reply streamed (a streamed Messages reply's, once it ended).
+  public internal(set) var speed: ReplySpeed?
 }
 
 public final class RequestLog: @unchecked Sendable {
@@ -73,12 +75,13 @@ public final class RequestLog: @unchecked Sendable {
     if let note { records[i].note = note }
   }
 
-  /// The tokens its reply said it used.
-  public func used(_ id: Int, _ usage: CacheUsage) {
+  /// The tokens its reply said it used, and how fast a streamed one came.
+  public func used(_ id: Int, _ usage: CacheUsage, speed: ReplySpeed? = nil) {
     lock.lock()
     defer { lock.unlock() }
     guard let i = records.lastIndex(where: { $0.id == id }) else { return }
     records[i].usage = usage
+    records[i].speed = speed
   }
 
   /// The requests of the last `keep` seconds, newest first.

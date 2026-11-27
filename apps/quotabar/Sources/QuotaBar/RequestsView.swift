@@ -11,13 +11,17 @@ struct RequestsView: View {
   var body: some View {
     VStack(spacing: 0) {
       HStack {
-        Segmented(selection: $tab, options: [(0, "请求"), (1, "缓存命中")])
+        Segmented(selection: $tab, options: [(0, "请求"), (1, "缓存命中"), (2, "速度")])
         Spacer()
       }
       .padding(.horizontal, 14)
       .padding(.vertical, 8)
       Divider()
-      if tab == 0 { RequestList() } else { CacheView() }
+      switch tab {
+      case 0: RequestList()
+      case 1: CacheView()
+      default: SpeedView()
+      }
     }
     .frame(minWidth: 760, minHeight: 320)
   }
@@ -55,6 +59,8 @@ private struct RequestList: View {
             .width(min: 70, ideal: 100)
           TableColumn("缓存") { r in CacheCell(usage: r.usage) }
             .width(min: 56, ideal: 70)
+          TableColumn("首 token · 速度") { r in SpeedCell(speed: r.speed) }
+            .width(min: 80, ideal: 120)
           TableColumn("结果") { r in Outcome(record: r) }
             .width(min: 80, ideal: 120)
         }
@@ -121,6 +127,23 @@ private struct Outcome: View {
         ProgressView().controlSize(.mini)
         Text("进行中").font(.ui(11)).foregroundStyle(.secondary)
       }
+    }
+  }
+}
+
+/// A streamed reply's time to its first token and its speed after it ("1.23 s · 85.3 tok/s").
+private struct SpeedCell: View {
+  let speed: ReplySpeed?
+
+  var body: some View {
+    if let s = speed {
+      let text = SpeedView.duration(s.firstToken) + (s.tokensPerSecond.map { " · " + SpeedView.rate($0) } ?? "")
+      Text(text)
+        .font(.mono(11.5))
+        .lineLimit(1)
+        .help("首 token \(s.firstToken.formatted()) ms · 之后 \(s.decodeTokens.formatted()) tokens 用了 \(s.decodeMs.formatted()) ms")
+    } else {
+      Text("—").font(.mono(11.5)).foregroundStyle(.secondary)
     }
   }
 }

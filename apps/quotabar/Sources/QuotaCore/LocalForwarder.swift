@@ -515,18 +515,19 @@ public final class LocalForwarder: @unchecked Sendable {
   }
 
   /// What reads a reply's usage, for a Messages request (POST /v1/messages) when the usage is
-  /// kept: by the gateway's name (nil: the company's) and the model it went as.
+  /// kept: by the gateway's name (nil: the company's) and the model it went as. Made as the
+  /// request is sent on to that gateway: a stream's time to its first token counts from here.
   private func tap(_ path: String, _ gateway: String?, _ model: String?) -> UsageTap? {
     guard cacheStats != nil || requestLog != nil, ModelRoutes.isMessages(path) else { return nil }
     return UsageTap(gateway: gateway ?? "公司", model: model ?? "未知")
   }
 
-  /// The reply ended (or was cut off): its usage, if it said one, is kept.
+  /// The reply ended (or was cut off): its usage, if it said one, is kept, and a stream's speed.
   private func used(_ tap: UsageTap?, record: Int?) {
-    guard let tap, let u = tap.finish() else { return }
-    if let record { requestLog?.used(record, u) }
+    guard let tap, let r = tap.finish() else { return }
+    if let record { requestLog?.used(record, r.usage, speed: r.speed) }
     if let cacheStats {
-      cacheStats.add(gateway: tap.gateway, model: tap.model, usage: u)
+      cacheStats.add(gateway: tap.gateway, model: tap.model, usage: r.usage, speed: r.speed)
       onUsage?()
     }
   }
